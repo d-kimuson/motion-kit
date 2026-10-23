@@ -11,11 +11,13 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 | Capture           | `captureFrame`                    | Taking the pixels of the rendered page for one frame.                                                                |
 | Encoder           | `encode`                          | Turning captured frames and audio into the output file with FFmpeg.                                                  |
 
-The following loading term describes the accepted TASK-153 design; it is not implemented yet.
+The following loading terms describe the accepted TASK-153 design; it is not implemented yet.
 
-| Term            | Code                 | Definition                                                                                                                         |
-| --------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Loading session | `src/render/loading` | One supervised Vite/configuration module graph and HTTP service reused for one project/entry/host profile within a CLI invocation. |
+| Term            | Code                              | Definition                                                                                                                                                                      |
+| --------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Loading session | `src/render/loading`              | One supervised Vite/configuration module graph and HTTP service reused for one project/entry/host mode within a CLI invocation.                                                 |
+| Host mode       | `source: 'renderer' \| 'preview'` | The owning host's mode. Sessions and Composition realms are never shared between modes; each capture lease records its source so duplicate or cross-source claims are rejected. |
+| Page settlement | `settleFrame`                     | The page operation that seeks, commits and settles without capturing; returns a discriminated `ready` / `failed` / `aborted` result. It is not `renderer.renderFrame`.          |
 
 ## Invariants
 

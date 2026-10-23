@@ -20,14 +20,15 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 
 The following loading terms describe the accepted TASK-153 API; they are not implemented yet.
 
-| Term                     | Code                  | Definition                                                                                                                                 |
-| ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Composition registry     | `defineCompositions`  | An ordered immutable collection of uniquely identified Composition definitions exported as `compositions` by an entry.                     |
-| Composition definition   | `defineComposition`   | A component, its Zod props schema with defaults, and static id/resolution/rational FPS/frame-count metadata.                               |
-| Composition realm        | `runtime`             | A dedicated page or iframe owning one composition instance's React root, explicit time, frame queue, assets and integration registrations. |
-| Composition revision     | `revision`            | The identity of the loaded entry/configuration version to which an instance and its acknowledgements belong.                               |
-| Capture lease            | `lease`               | A plain generation/version-tagged identity retaining exclusive realm ownership from settlement through capture acceptance.                 |
-| Integration registration | `registerIntegration` | A realm-local, library-neutral registration of capability, absolute-time seek/settle callbacks and disposal for an integration.            |
+| Term                     | Code                  | Definition                                                                                                                                             |
+| ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Composition registry     | `defineCompositions`  | An ordered immutable collection of uniquely identified Composition definitions exported as `compositions` by an entry.                                 |
+| Composition definition   | `defineComposition`   | A component, its Zod props schema with defaults, and static id/resolution/rational FPS/frame-count metadata.                                           |
+| Composition realm        | `compositionRealm`    | A dedicated page or iframe owning one composition instance's React root, explicit time, frame queue, assets and integration registrations.             |
+| Composition runtime      | `compositionRuntime`  | The realm-local explicit-time coordinator passed to the Composition provider; owns time, queue and settlement, not the page/iframe itself.             |
+| Composition revision     | `revision`            | The identity of the loaded entry/configuration version to which an instance and its acknowledgements belong.                                           |
+| Capture lease            | `lease`               | A plain identity tagged with owning source, instance/revision and generation/versions, retaining exclusive realm ownership through capture acceptance. |
+| Integration registration | `registerIntegration` | A realm-local, library-neutral registration of capability, absolute-time seek/settle callbacks and disposal for an integration.                        |
 
 ## Invariants
 
@@ -37,8 +38,8 @@ The following loading terms describe the accepted TASK-153 API; they are not imp
 - The total duration of a `TransitionSeries` is the sum of its scenes minus the sum of its overlaps.
 - A component that cannot be identified is never assumed to be Tier A or B.
 - The [Composition registry contract](adr/20261024-composition-registry.accepted.md) uses schema-owned defaults, not a parallel `defaultProps`; only validated JSON props mount the selected component. Components and schemas remain in the composition realm.
-- The [loading design](../render/design-doc/20261024-composition-loading.md) shares core's browser bootstrap/runtime between preview and rendering, not their host scheduling or mutable realms.
-- core's contract provides one explicit-time runtime for the Browser Renderer and the future preview to consume; it does not assert that a preview exists. Presentation Time stays fixed while registered work settles. Completion belongs to the active frame generation and resource versions, not just a frame number; allocating a queued generation does not invalidate the active one. Resource-version changes re-settle within that generation; cancellation or supersession aborts it without publication. The [readiness barrier contract](../../decisions/20261024-time-control-and-frame-capture.accepted.md#readiness-barrier-contract) defines exclusive ownership, queueing and deadlines.
+- The [loading design](../render/design-doc/20261024-composition-loading.md) shares core's browser bootstrap and Composition runtime implementation between preview and renderer, never their sessions, host scheduling or mutable Composition realms.
+- core's contract provides one Composition runtime implementation for the Browser Renderer and the future preview to consume; it does not assert that a preview exists. Presentation Time stays fixed while registered work settles. Completion belongs to the active frame generation and resource versions, not just a frame number; allocating a queued generation does not invalidate the active one. Resource-version changes re-settle within that generation; cancellation or supersession aborts it without publication. The [readiness barrier contract](../../decisions/20261024-time-control-and-frame-capture.accepted.md#readiness-barrier-contract) defines exclusive ownership, queueing and deadlines.
 
 ## Seekability
 
