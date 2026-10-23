@@ -1,3 +1,12 @@
+export {
+  defineComposition,
+  defineCompositions,
+  type CompositionDefinition,
+  type CompositionDescriptor,
+  type CompositionRegistry,
+  type PreparedComposition,
+  type MountCompositionOptions,
+} from './core/composition/registry.ts';
 export type { Clock } from './lib/clock.ts';
 export type { Result } from './lib/result.ts';
 export {
