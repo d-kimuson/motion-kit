@@ -389,8 +389,30 @@ const runComparison = async (parent: Page) => {
     negative,
     wallMs: wall() - start,
   };
+  return report;
+};
+const runRepetitions = async (parent: Page) => {
+  // Repeat the unchanged comparison serially; do not treat frames as independent runs.
+  const repetitions: Awaited<ReturnType<typeof runComparison>>[] = [];
+  for (let repetition = 0; repetition < 3; repetition++)
+    repetitions.push(await runComparison(parent));
+  const costRanges = (['own', 'raf', 'cdp'] satisfies Mechanism[]).map((mechanism) => {
+    const meansMs = repetitions.map((repetition) => {
+      const result = repetition.results.find((candidate) => candidate.mechanism === mechanism);
+      if (result === undefined) throw new Error(`Missing mechanism: ${mechanism}`);
+      return result.cost.meanMs;
+    });
+    return {
+      mechanism,
+      repetitions: meansMs.length,
+      meansMs,
+      minMeanMs: Math.min(...meansMs),
+      maxMeanMs: Math.max(...meansMs),
+    };
+  });
+  const report = { repetitions, costRanges };
   console.log(JSON.stringify(report));
   return report;
 };
-export type ComparisonReport = Awaited<ReturnType<typeof runComparison>>;
-export const compareClocks = defineBrowserCommand(({ page }) => runComparison(page));
+export type ComparisonReport = Awaited<ReturnType<typeof runRepetitions>>;
+export const compareClocks = defineBrowserCommand(({ page }) => runRepetitions(page));

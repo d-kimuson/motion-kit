@@ -12,6 +12,20 @@ declare module 'vitest/browser' {
 
 test('compare three clock strategies, frame orders and missing-adapter controls', async () => {
   const report = await commands.compareClocks();
-  expect(report.results).toHaveLength(3);
-  expect(report.negative).toHaveLength(4);
+  expect(report.repetitions).toHaveLength(3);
+  for (const repetition of report.repetitions) {
+    expect(repetition.results).toHaveLength(3);
+    expect(repetition.negative).toHaveLength(4);
+  }
+  expect(report.costRanges.map((range) => range.mechanism)).toEqual(['own', 'raf', 'cdp']);
+  for (const range of report.costRanges) {
+    const means = report.repetitions.map(
+      (repetition) =>
+        repetition.results.find((result) => result.mechanism === range.mechanism)?.cost.meanMs,
+    );
+    expect(range.repetitions).toBe(3);
+    expect(range.meansMs).toEqual(means);
+    expect(range.minMeanMs).toBe(Math.min(...range.meansMs));
+    expect(range.maxMeanMs).toBe(Math.max(...range.meansMs));
+  }
 });
