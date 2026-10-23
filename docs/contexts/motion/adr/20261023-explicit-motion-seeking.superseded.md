@@ -1,5 +1,7 @@
 # Drive supported Motion paths explicitly and acknowledge rendering before capture
 
+Status: **superseded** by the [accepted time-control and frame-capture ADR](../../../decisions/20261024-time-control-and-frame-capture.accepted.md). The proposal below is retained as history, not an unresolved decision.
+
 ## Context
 
 [Spike A](../knowledge/spike-a-seekability.md) found 150/150 matching DOM and PNG comparisons across six controlled fixtures with Motion 14.6.0. Five paths still had stale DOM on 30/61 immediate sequential reads, including numeric `motion.div` styles committed with React `flushSync`. A Motion `frame.postRender` acknowledgement preceded successful captures. Four uncontrolled fixtures (live spring, presence, layout, autonomous animation) each differed between sequential and isolated rendering.
@@ -15,6 +17,8 @@ A React commit is not itself the acknowledgement. The tested candidate is a one-
 Keep live springs, AnimatePresence and layout animation at C unless a dedicated explicit-time integration is separately verified. A freshly evaluated fixed-input spring may supply a stateless value; its Motion DOM expression remains B. Do not infer A for unknown library components.
 
 ## Consequences
+
+The [successor ADR](../../../decisions/20261024-time-control-and-frame-capture.accepted.md#seekability-boundary) decides the tier/acknowledgement boundary and the bounded readiness contract. Public Motion API scope remains Phase 2 work, not an unaccepted architecture proposal. Tier C emits `seek.uncontrolled` as a warning using [DiagnosticSchema](../../../../src/lib/diagnostic.ts); no spike-local Diagnostic type becomes public.
 
 - Future integration tests can reuse the committed sequential/random/isolated comparisons and the stale-immediate-read counterexample.
 - Values remain independent of browser elapsed time while the browser can service the render queue.

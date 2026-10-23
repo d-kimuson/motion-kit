@@ -14,6 +14,8 @@ All three candidates run the same React/CSS/rAF/video fixture in separate pages.
 | Controlled rAF only                       | 0/12                      | 0/8                  | 1/1; zero extra callbacks                   | **41.43–44.53 ms**                                    | Keep as an integration scheduler, not the master clock |
 | CDP virtual time                          | 0/12                      | 0/8                  | 0/1; 14 extra callbacks in the original run | **68.08–70.58 ms**                                    | Reject as shared runtime clock                         |
 
+The spike's six repetitions all gave **0/20** order/fresh matches for controlled rAF. An independent QA check of the same commit (PR #8, recorded in TASK-145) observed **1/20** once in six repetitions, matching the fresh 0 ms frame; 0/20 is a typical result, not an invariant. The own clock was **20/20** every time; the decision is unaffected. These independent observations do not replace the spike's table or timing data.
+
 The own/rAF bands overlap and their ordering reverses between repetitions; cost is a **secondary, non-discriminating observation** between them, not a statistical equivalence test. CDP costs about **60% more than own clock and 63% more than controlled rAF** using the six-repetition averages; paired repetition premiums span **54–70%**, so “roughly 60–70%” is not a per-run bound. Correctness and separation of presentation time from asynchronous scheduling decide between own clock and controlled rAF. CDP's additional budget servicing contributes to its cost; this is not a claim about every possible CDP configuration.
 
 ### Capability per integration

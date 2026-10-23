@@ -1,6 +1,6 @@
 # Spike B: React Three Fiber seekability
 
-Run `pnpm spike:three` to compare externally driven R3F frames in Playwright Chromium using SwiftShader. This experiment is not shipped, exported, or part of `pnpm test`. Read the [findings](../../docs/contexts/three/knowledge/spike-b-seekability.md) and [proposed ADR](../../docs/contexts/three/adr/20261023-explicit-r3f-advance.proposed.md) before reusing the technique.
+Run `pnpm spike:three` to compare externally driven R3F frames in Playwright Chromium using SwiftShader. This experiment is not shipped, exported, or part of `pnpm test`. Read the [findings](../../docs/contexts/three/knowledge/spike-b-seekability.md) and [superseded proposal](../../docs/contexts/three/adr/20261023-explicit-r3f-advance.superseded.md) and its accepted successor before reusing the technique.
 
 ## Run
 

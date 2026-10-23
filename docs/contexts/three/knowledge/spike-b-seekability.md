@@ -2,7 +2,7 @@
 
 `frameloop="never"` plus root-local `advance(seconds, false)` reproduced the tested camera, object transforms and shader uniform independently of frame order. **25/25 exact DOM + PNG comparisons passed**, including fresh roots. Four deliberately history-dependent controls failed comparison as intended. Manual Advance alone does not make arbitrary R3F code seekable: the callback must overwrite values from absolute time instead of integrating its delta.
 
-`gl.finish()` followed by Playwright capture worked, with screenshot RGBA equal to WebGL readback. The same captures also worked without an explicit fence in this workload; this is **not evidence that a fence is universally necessary or universally unnecessary**. [Run the experiment](../../../../spikes/b-r3f/README.md). The [proposed ADR](../adr/20261023-explicit-r3f-advance.proposed.md) remains a proposal, not a production readiness contract or an expansion of the [core tiers](../../core/CONTEXT.md).
+`gl.finish()` followed by Playwright capture worked, with screenshot RGBA equal to WebGL readback. The same captures also worked without an explicit fence in this workload; this is **not evidence that a fence is universally necessary or universally unnecessary**. [Run the experiment](../../../../spikes/b-r3f/README.md). The [historical proposal](../adr/20261023-explicit-r3f-advance.superseded.md) is superseded by the [accepted Phase 0 decision](../../../decisions/20261024-time-control-and-frame-capture.accepted.md), which defines the readiness contract and [core feature tiers](../../core/CONTEXT.md#seekability) without certifying arbitrary R3F code.
 
 ## Tier by behavior
 
@@ -124,10 +124,10 @@ Verification: `pnpm fix`, `pnpm lint`, `pnpm typecheck`, and `pnpm test` passed 
 
 ## Open risks and decisions
 
-- **Production readiness:** choose a barrier that composes React commit, scene readiness, assets, shader compilation and frame identity, with bounded timeout/cancellation/diagnostics. This layout-effect acknowledgement and `gl.finish()` do not solve arbitrary async work. Spikes C/D remain necessary.
+- **Production readiness:** choose a barrier that composes React commit, scene readiness, assets, shader compilation and frame identity, with bounded timeout/cancellation/diagnostics. This layout-effect acknowledgement and `gl.finish()` do not solve arbitrary async work. The Phase 0 ADR now composes the C/D findings into that contract; production implementation remains necessary.
 - **Synchronization cost:** finish/readback stalls the GPU; its latency was not isolated. The matching no-fence captures do not justify deleting a production barrier without larger workloads, queue-pressure and driver tests. An explicit render target may avoid relying on preserved default-buffer behavior.
 - **Environment:** no Linux CI run, browser-process isolation comparison, high-DPR/4K capture, antialiasing, transparency, driver upgrade matrix or cross-backend pixel equality test. The hardware and software runs compare against their own baselines, never each other.
 - **Library evolution:** R3F emits three's `THREE.Clock` deprecation warning. This spike does not modify R3F's clock implementation; recheck timestamp/delta and lifecycle behavior on upgrades.
 - **Scope:** no controls, physics, AnimationMixer, feedback effects, WebGPU/XR, shadows, loaded assets, multiple simultaneous canvases, StrictMode, async React updates or context-loss recovery. Finite successful samples cannot certify arbitrary shaders/components.
 - **Lifecycle/security:** fresh roots are explicitly disposed and their contexts lost; long render sessions/resource limits are not stress-tested. Browser Renderer isolation and the unsafe-software/sandbox policy require their own decision.
-- **API:** ThreeCanvas/CameraRig and integration capability diagnostics are not implemented. The ADR is proposed; whether to expose finish/readback strategies or allow user-managed render targets is still open.
+- **API:** ThreeCanvas/CameraRig and integration capability diagnostics are not implemented. The Phase 0 ADR supersedes the proposal; whether to expose finish/readback strategies or allow user-managed render targets remains later-phase API work.

@@ -2,7 +2,7 @@
 
 MotionValue writes, numeric `motion.div` styles, and paused `animate()` controls reproduced the tested frames exactly. Live springs, AnimatePresence, layout projection, and autonomous animation did not. **React commit alone is not DOM completion**: five controlled paths had 30 stale immediate reads out of 61 sequential updates each.
 
-These are findings for the pinned experiment, not certification of every Motion API. [Run the experiment](../../../../spikes/a-motion/README.md). The [proposed ADR](../adr/20261023-explicit-motion-seeking.proposed.md) records the candidate integration boundary; it does not authorize a production API or change the existing Seekability Tier definitions in [core](../../core/CONTEXT.md).
+These are findings for the pinned experiment, not certification of every Motion API. [Run the experiment](../../../../spikes/a-motion/README.md). The [historical proposal](../adr/20261023-explicit-motion-seeking.superseded.md) is superseded by the [accepted Phase 0 decision](../../../decisions/20261024-time-control-and-frame-capture.accepted.md). The measurements below do not authorize a production API; the decision and [core table](../../core/CONTEXT.md#seekability) now define the integration boundary.
 
 ## Tier by feature
 
@@ -75,12 +75,12 @@ Before installation, package registry license metadata was checked against `scri
 | @types/react               | 19.3.0  | MIT        |
 | @types/react-dom           | 19.3.0  | MIT        |
 
-No direct dependency needed a license decision. `pnpm licenses list --json` also reviewed the installed dev tree: Motion's transitive framer-motion/motion-dom/motion-utils are MIT, Playwright Core is Apache-2.0. The pre-existing Vite tooling includes MPL-2.0 lightningcss; this spike does not introduce it or ship it. Production dependencies remain empty; the normal license check checks production only. Playwright downloads browser tooling separately; Chromium is not included in the published package. React peerDependency promotion remains TASK-149.
+No direct dependency needed a license decision. `pnpm licenses list --json` also reviewed the installed dev tree: Motion's transitive framer-motion/motion-dom/motion-utils are MIT, Playwright Core is Apache-2.0. The pre-existing Vite tooling includes MPL-2.0 lightningcss; this spike does not introduce it or ship it. Production dependencies contain `zod:4.6.7`; the spike adds no production dependency, and the normal license check checks production only. Playwright downloads browser tooling separately; Chromium is not included in the published package. React peerDependency promotion remains TASK-149.
 
 ## Open risks and decisions
 
-- **Integration scope is still a product/API decision:** adopt only external values first, or also expose the tested paused playback paths? The proposed ADR is intentionally not accepted here.
-- **Completion contract is not universal:** Spike C must establish how the render queue acknowledgement composes with the master clock; asset readiness and asynchronous React work require their own barriers. Production use needs bounded timeout/diagnostics and frame identity, not this fixture's bare promise.
+- **Integration scope is still a product/API decision:** adopt only external values first, or also expose the tested paused playback paths? The Phase 0 ADR resolves the tier boundary; public API selection remains Phase 2 work.
+- **Completion contract is not universal:** the accepted Phase 0 ADR now specifies clock coordination, asset/React barriers, bounded timeout/diagnostics and frame identity. Production implementation must not reuse this fixture's bare promise.
 - **Spring semantics:** settle thresholds snap to the endpoint; only one parameter set/initial velocity was tested. Validate negative time, other damping regimes, explicit start, retarget position/velocity and reused generator behavior before implementing the full Pure Motion contract.
 - **Coverage:** no variants, gestures, SVG, color interpolation, multi-property timelines, repeat/delay, interruption, callbacks, velocity-driven subscribers, StrictMode, Suspense, multiple concurrent roots or cross-process captures. Explicit keyframes avoid implicit start-value history; that history is not solved.
 - **Environment:** same-browser exact pixels do not promise cross-OS/GPU equality. Linux CI/browser timing and Motion upgrades require reruns. Counterexamples are deliberately real-time and may fail under extreme stalls; they are not put in the default suite.

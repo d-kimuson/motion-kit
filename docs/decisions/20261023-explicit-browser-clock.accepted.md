@@ -4,7 +4,7 @@
 
 Every context consumes time from core; render captures the resulting Composition. The [context map](../CONTEXT-MAP.md) makes clock selection a cross-context decision. The design requires a frame to be independent of traversal order and preview/rendering to use the same Timeline Runtime. Freezing all asynchronous scheduling is not equivalent to freezing Presentation Time: assets and registered work still have to complete before capture.
 
-TASK-145 compares motion-kit's own injected clock, controlled rAF alone, and Chromium CDP virtual time. The [Spike C report](../contexts/core/knowledge/spike-c-clock.md) and [reproducible experiment](../../spikes/c-clock/README.md) record the fixtures, raw-versus-adapted integration measurements, negative controls, environment and limits. TASK-151 will consolidate this accepted decision with the other Phase 0 spikes.
+TASK-145 compares motion-kit's own injected clock, controlled rAF alone, and Chromium CDP virtual time. The [Spike C report](../contexts/core/knowledge/spike-c-clock.md) and [reproducible experiment](../../spikes/c-clock/README.md) record the fixtures, raw-versus-adapted integration measurements, negative controls, environment and limits. The [Phase 0 exit ADR](20261024-time-control-and-frame-capture.accepted.md) consolidates this accepted decision with the other spikes.
 
 The same React/CSS/rAF/video scene is tested with identical CSS/media adapters. The full scene includes both timestamp-only and independent clock-reading consumers. Results on headless Chromium 156.0.8078.4, Playwright 1.64.1, macOS arm64:
 
@@ -13,6 +13,8 @@ The same React/CSS/rAF/video scene is tested with identical CSS/media adapters. 
 | Own clock + controlled rAF + adapters | **20/20**                                          | **1/1**      | **41.66–45.72 ms**                           |
 | Controlled rAF only + adapters        | 0/20                                               | 1/1          | **41.43–44.53 ms**                           |
 | CDP virtual time + adapters           | 0/20                                               | 0/1          | **68.08–70.58 ms**                           |
+
+The spike's six repetitions all gave **0/20** for controlled rAF. An independent QA check of the same commit (PR #8, recorded in TASK-145) observed **1/20** once in six repetitions, matching the fresh 0 ms frame. Zero matches is not an invariant; own clock remained **20/20** every time, so the decision is unchanged.
 
 Cost ranges span six repetitions across two invocations, with 28 captured frames per candidate per repetition, including seeking, readiness, DOM inspection and PNG capture, excluding page setup. Own clock and controlled rAF are **indistinguishable within run-to-run variance**: their bands overlap and their ordering reverses. This is a descriptive range, not a statistical equivalence test. CDP is consistently more expensive, roughly **60–70% overall** (six-repetition averages: 60% over own clock, 63% over rAF; paired repetition premiums span 54–70%). **The decision is correctness-driven; cost is secondary and non-discriminating between own clock and controlled rAF.** These are small-workload end-to-end measurements, not generic throughput promises. All three can inject React state explicitly and seek the tested CSS/video through adapters. Only the own-clock candidate synchronizes every tested clock-reading consumer at the requested time. The controlled-rAF difference is not evidence that timestamp-only animation is non-deterministic.
 

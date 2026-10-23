@@ -1,6 +1,6 @@
 # Spike A: Motion seekability
 
-Run `pnpm spike:motion` to compare sequential, random/repeated, and isolated frame captures in real Chromium. This is an experiment, not shipped code or a public integration API. Findings and limits are in the [report](../../docs/contexts/motion/knowledge/spike-a-seekability.md); the integration proposal is a [proposed ADR](../../docs/contexts/motion/adr/20261023-explicit-motion-seeking.proposed.md).
+Run `pnpm spike:motion` to compare sequential, random/repeated, and isolated frame captures in real Chromium. This is an experiment, not shipped code or a public integration API. Findings and limits are in the [report](../../docs/contexts/motion/knowledge/spike-a-seekability.md); the historical integration proposal is a [superseded ADR](../../docs/contexts/motion/adr/20261023-explicit-motion-seeking.superseded.md).
 
 ## Run
 
@@ -38,4 +38,4 @@ The completion check is `flushSync` for React changes, followed by Motion's publ
 
 This runs **separately from `pnpm test`**. The final measured full suite took 29.38 s locally (10 tests, 218 PNG captures), already near the task's ~30 s CI ceiling. Browser installation, Linux runtime, and negative-control timing are not yet qualified for stable CI use. No browser CI job is added. Lint/typecheck still cover all spike TypeScript, and the package's `files` allowlist excludes the spike.
 
-All seven newly added direct packages are pinned devDependencies; see the report for versions/licenses. React peerDependency promotion remains TASK-149.
+The seven packages listed in the report are pinned devDependencies; see the report for versions/licenses. React peerDependency promotion remains TASK-149.

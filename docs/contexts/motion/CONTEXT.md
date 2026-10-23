@@ -18,4 +18,4 @@ Deterministic values from time. motion provides the pure functions (interpolate,
 
 - Every Pure Motion function returns the same value for the same inputs, and the value at the end of the range equals `to`.
 - A Spring is determined by start time, initial value, target, initial velocity, and physical parameters; nothing else.
-- Motion components are Tier A; a raw motion-library element is not Tier A unless the integration has verified it.
+- Stateless Pure Motion value evaluation is Tier A; Motion DOM bindings are Tier B only within a verified explicit-time integration with render acknowledgement. Animate/Reveal/Stagger are not blanket-certified A before implementation; see the [core feature table](../core/CONTEXT.md#seekability) and [Phase 0 decision](../../decisions/20261024-time-control-and-frame-capture.accepted.md).
