@@ -2,7 +2,7 @@
 
 All four delayed fixtures produced wrong pixels without the Readiness Barrier and matched their settled baselines after it. **32/32 exact DOM + PNG comparisons passed** across reordered/repeated frames, fresh fixtures and Suspense readers. **4/4 asset failures and 4/4 never-settling cases produced named diagnostics**, plus a texture upload/context-loss diagnostic. Suspense alone is insufficient: it holds participating content, but its fallback remains capturable.
 
-TASK-158 should implement a library-neutral registry plus frame/commit/integration settlement, not treat Suspense or `document.fonts.ready` as a complete capture contract. This is a proposal, not an implemented public `useAsset` API. See the [cross-context proposed ADR](../../../decisions/20261023-asset-readiness-registry.proposed.md) and [reproduction instructions](../../../../spikes/d-assets/README.md).
+TASK-158 implements the accepted library-neutral registry plus frame/commit/integration settlement, not Suspense or `document.fonts.ready` as a complete capture contract. The public `useAsset` API is not implemented yet. See the [accepted cross-context ADR](../../../decisions/20261023-asset-readiness-registry.accepted.md) and [reproduction instructions](../../../../spikes/d-assets/README.md).
 
 ## Per-asset result
 
@@ -50,7 +50,7 @@ Registering only in an effect inside a suspended subtree would deadlock discover
 
 ## Failures and timeout behavior
 
-The spike converts loader exceptions at registration into `{ok:false, diagnostics:[{code, asset, message}]}`. `ASSET_LOAD_FAILED` retains the browser/loader cause; `ASSET_TIMEOUT` names every pending registration and the deadline. These local types/codes are diagnostic-like evidence, not additions to the shipped `DiagnosticSchema`. Texture identity includes both the upload gate and actual source-image URL; other identities include kind and request URL. Anonymous `NetworkError`/`EncodingError` becomes actionable through that identity.
+The spike converts loader exceptions at registration into `{ok:false, diagnostics:[{code, asset, message}]}`. Its local result types are evidence, not the shipped `DiagnosticSchema`. The [accepted CLI contract](../../agent/adr/20261024-cli-output-contract.accepted.md) maps font HTTP/load failure, image decode failure, corrupt GLTF parsing, texture-source decode failure and forced context loss before texture upload to `asset.load-failed`. Stalled font/image/GLTF loads and the held texture upload gate map to `asset.not-ready` when the readiness deadline expires; the intentional negative-control waits use the same timeout mapping. `details.assets` carries each failing or pending asset's kind, source URL/path and phase; timeouts include every pending registration and `details.timeoutMs`. Texture entries identify the source image and include the upload gate in `relatedSources`. Known frame/scene goes in `location`. The public `message` is a one-sentence human statement, not an internal code or raw browser/loader exception; `hint` gives a corrective action, such as checking the source URL, repairing the model, restoring the GPU context or investigating the pending phase.
 
 Success waits default to **5 s**. The four never-released cases use **100 ms** and return failure with the pending registration still present, not a successful fallback frame. The 300 ms negative-control waits also fail intentionally. Neither timeout marks the resource ready nor cancels it. Cleanup explicitly releases outstanding requests and disposes the fixture; the test server has a separate **15 s** connection watchdog. Production must add abort/cancellation and a whole-frame deadline covering commit, GPU and browser RPC phases; `gl.finish()` itself is not a cancellable JavaScript promise.
 
@@ -66,19 +66,19 @@ ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), Swi
 
 The **11-test suite takes 54 screenshots**: 13 per type plus the two onload/decode comparisons. A measured full run passed in **9.70 s wall / 9.01 s Vitest duration**; the preceding run passed in **10.07 s wall / 9.23 s Vitest** with identical negative-control counts. These include startup and screenshot overhead, not isolated load/decode/fence timings. Fixtures use sequential `[0,1,2]`, reordered/repeated `[2,0,1,2]`, and fresh React roots/renderers per frame. They share one browser process/module session and are not cross-process cold-cache comparisons.
 
-| Command                                                           | Result                                                                            | Wall time |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------- |
-| `pnpm fix`                                                        | Pass                                                                              | 1.29 s    |
-| `pnpm lint`                                                       | Pass, including production license and tsconfig coverage checks                   | 1.06 s    |
-| `pnpm typecheck`                                                  | Pass                                                                              | 0.45 s    |
-| `pnpm test`                                                       | 86 tests / 6 files pass; spike excluded                                           | 0.90 s    |
-| `pnpm spike:assets`                                               | 11 tests pass, all intended negative controls detected                            | 9.70 s    |
-| `lake build`                                                      | Pass; fresh worktree required provisioning the unchanged differential-test oracle | 5.65 s    |
-| `pnpm pack --out .cache/spike-d/package.tgz` + archive inspection | Pass; no spike code or assets in shipped archive                                  | Not timed |
+| Command                                                           | Result                                                          | Wall time |
+| ----------------------------------------------------------------- | --------------------------------------------------------------- | --------- |
+| `pnpm fix`                                                        | Pass                                                            | 1.29 s    |
+| `pnpm lint`                                                       | Pass, including production license and tsconfig coverage checks | 1.06 s    |
+| `pnpm typecheck`                                                  | Pass                                                            | 0.45 s    |
+| `pnpm test`                                                       | 86 tests / 6 files pass; spike excluded                         | 0.90 s    |
+| `pnpm spike:assets`                                               | 11 tests pass, all intended negative controls detected          | 9.70 s    |
+| `lake build`                                                      | Pass; built the unchanged differential-test oracle              | 5.65 s    |
+| `pnpm pack --out .cache/spike-d/package.tgz` + archive inspection | Pass; no spike code or assets in shipped archive                | Not timed |
 
-No Lean source changed. The fresh worktree had no oracle binary; building it was explicitly authorized rather than borrowing another checkout's artifact. Lean's linker emitted SDK minimum-version warnings (bundled libraries built for macOS 15 versus target 14); build and differential tests passed. No new npm dependency or lockfile change was needed: all tooling reuses existing exact pins. The OFL font's copyright/license and immutable provenance, and the original MIT image/model assets, are documented in the spike README. Only the non-shipped fixture/config receive narrow three/Node lint exceptions; production boundaries and exports stay unchanged.
+No Lean source changed. Lean's linker emitted SDK minimum-version warnings (bundled libraries built for macOS 15 versus target 14); build and differential tests passed. No new npm dependency or lockfile change was needed: all tooling reuses existing exact pins. The OFL font's copyright/license and immutable provenance, and the original MIT image/model assets, are documented in the spike README. Only the non-shipped fixture/config receive narrow three/Node lint exceptions; production boundaries and exports stay unchanged.
 
-**The suite stays outside `pnpm test`** despite its short local runtime. Linux CI stability, required browser system libraries and CI runtime have not been measured; no browser job is added. Spike C was not on `origin/main` at branch creation and was not used as a base or dependency.
+**The suite stays outside `pnpm test`** despite its short local runtime. Linux CI stability, required browser system libraries and CI runtime have not been measured; no browser job is added.
 
 ## Residual risks for TASK-158
 
@@ -87,4 +87,4 @@ No Lean source changed. The fresh worktree had no oracle binary; building it was
 - The image is a small SVG, not a raster decode stress test. GLTF uses one embedded buffer and an unlit triangle: external dependencies, Draco/KTX2, skinning and textured models are unverified.
 - GPU upload errors beyond explicit context loss, asynchronous shader compilation, context recovery, queue pressure, multiple canvases and WebGPU are unverified. No fence cost or minimal fence was established.
 - No Linux, hardware-GPU, high-DPR, cross-browser/OS/process comparisons, sustained resource-leak stress, video or audio. The private Playwright font-wait switch must be revalidated on upgrades.
-- The experiment's trusted local-server/SwiftShader setup is not a security policy for untrusted compositions. The proposed ADR records a direction; TASK-158 still owns a production implementation and accepted contract.
+- The experiment's trusted local-server/SwiftShader setup is not a security policy for untrusted compositions. The accepted ADR fixes the strategy; TASK-158 owns its production implementation.
