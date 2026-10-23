@@ -1,4 +1,36 @@
 export type { Clock } from './lib/clock.ts';
+export type { Result } from './lib/result.ts';
+export {
+  addTime,
+  compareTime,
+  createFrameRate,
+  createTimelineTime,
+  durationFromFrameCount,
+  frameCount,
+  framePosition,
+  frameToTime,
+  subtractTime,
+  timeToFrameCeil,
+  timeToFrameFloor,
+  timeToFrameNearest,
+  toSeconds,
+  validateOutputFrame,
+  type FrameRate,
+  type RationalInput,
+  type TimelineTime,
+} from './core/timeline/time.ts';
+export {
+  createSequence,
+  sequenceContains,
+  sequenceLocalTime,
+  type SequenceInterval,
+} from './core/sequence/interval.ts';
+export {
+  createTransitionSeries,
+  sampleTransition,
+  type TransitionSample,
+  type TransitionSeriesTiming,
+} from './core/transition/overlap.ts';
 
 export {
   createFixedClock,
