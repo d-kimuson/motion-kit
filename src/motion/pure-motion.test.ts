@@ -114,6 +114,21 @@ describe('interpolate', () => {
     ).toBe(11.25);
   });
 
+  it('clamps progress before a non-clamping custom easing, never its output', () => {
+    // Deliberately non-endpoint-preserving to expose which quantity is clamped.
+    const options = { extrapolate: 'clamp', easing: (p: number) => p * 2 } as const;
+    expect(value(interpolate(-1, [0, 1], [10, 20], options))).toBe(10);
+    expect(value(interpolate(0.75, [0, 1], [10, 20], options))).toBe(25);
+    expect(value(interpolate(1, [0, 1], [10, 20], options))).toBe(30);
+    expect(value(interpolate(2, [0, 1], [10, 20], options))).toBe(30);
+  });
+
+  it('extends the eased endpoint by the raw slope without easing unbounded progress', () => {
+    const options = { extrapolate: 'extend', easing: (p: number) => p ** 3 } as const;
+    expect(value(interpolate(-1, [0, 1], [10, 20], options))).toBe(0);
+    expect(value(interpolate(2, [0, 1], [10, 20], options))).toBe(30);
+  });
+
   it('does not re-clamp an overshooting easing', () => {
     expect(value(interpolate(0.7, [0, 1], [0, 1], { easing: easing.easeOutBack }))).toBeGreaterThan(
       1,
@@ -181,13 +196,28 @@ describe('interpolate', () => {
 
   it('returns exact range endpoints under every extrapolate mode', () => {
     fc.assert(
-      fc.property(segment, fc.constantFrom(...modes), ({ start, width, from, to }, extrapolate) => {
-        const options = { extrapolate, easing: easing.easeOutExpo };
-        expect(value(interpolate(start, [start, start + width], [from, to], options))).toBe(from);
-        expect(value(interpolate(start + width, [start, start + width], [from, to], options))).toBe(
-          to,
-        );
-      }),
+      fc.property(
+        scalar,
+        fc.array(fc.record({ width: fc.integer({ min: 1, max: 10000 }), output: scalar }), {
+          minLength: 3,
+          maxLength: 10,
+        }),
+        fc.constantFrom(...modes),
+        (start, stops, extrapolate) => {
+          let time = start;
+          const frames = stops.map(({ width, output }) => {
+            time += width;
+            return { time, value: output };
+          });
+          const inputs = frames.map((frame) => frame.time);
+          const outputs = frames.map((frame) => frame.value);
+          const options = { extrapolate, easing: easing.easeOutExpo };
+          for (const frame of frames) {
+            expect(value(interpolate(frame.time, inputs, outputs, options))).toBe(frame.value);
+            expect(value(keyframes(frame.time, frames, options))).toBe(frame.value);
+          }
+        },
+      ),
     );
   });
 
@@ -234,6 +264,53 @@ describe('interpolate', () => {
       'motion.non-finite-result',
     );
     invalid(interpolate(0.5, [0, 1], [0, 1], { easing: () => NaN }), 'motion.non-finite-result');
+  });
+
+  it('extends large opposite-sign endpoints to a representable finite value', () => {
+    const from = -0.6 * Number.MAX_VALUE;
+    const to = 0.6 * Number.MAX_VALUE;
+    const actual = value(interpolate(-0.1, [0, 1], [from, to], { extrapolate: 'extend' }));
+    expect(actual / Number.MAX_VALUE).toBeCloseTo(-0.72, 14);
+    expect(actual).toBe(from + -0.1 * to - -0.1 * from);
+  });
+
+  it('preserves representable Back overshoot with large opposite-sign endpoints', () => {
+    const from = -0.6 * Number.MAX_VALUE;
+    const to = 0.6 * Number.MAX_VALUE;
+    const p = easing.easeOutBack(0.7);
+    const actual = value(interpolate(0.7, [0, 1], [from, to], { easing: easing.easeOutBack }));
+    expect(actual / Number.MAX_VALUE).toBeCloseTo(0.696239448, 14);
+    expect(actual).toBe(from * (1 - p) + to * p);
+  });
+
+  it('avoids overflow before same-sign cancellation or tiny-width extension', () => {
+    const max = Number.MAX_VALUE;
+    const outputs = [max, 0.25 * max];
+    expect(value(interpolate(2.5, [0, 1], outputs, { extrapolate: 'extend' })) / max).toBeCloseTo(
+      -0.875,
+      14,
+    );
+    expect(
+      value(interpolate(0.5, [0, 1], outputs, { easing: (p) => p + 8 * p * (1 - p) })) / max,
+    ).toBeCloseTo(-0.875, 14);
+    expect(
+      value(
+        interpolate(2, [0, Number.MIN_VALUE], [0, Number.MIN_VALUE], { extrapolate: 'extend' }),
+      ),
+    ).toBe(2);
+  });
+
+  it('diagnoses genuinely overflowing extension and Back overshoot', () => {
+    expect.hasAssertions();
+    const max = Number.MAX_VALUE;
+    invalid(
+      interpolate(-1, [0, 1], [-0.6 * max, 0.6 * max], { extrapolate: 'extend' }),
+      'motion.non-finite-result',
+    );
+    invalid(
+      interpolate(0.7, [0, 1], [-max, max], { easing: easing.easeOutBack }),
+      'motion.non-finite-result',
+    );
   });
 
   it('is total over arbitrary finite data and keeps successful results finite', () => {
@@ -377,9 +454,26 @@ describe('keyframes', () => {
     );
     expect(value(keyframes(2, frames))).toBe(20);
     expect(value(keyframes(3, frames))).toBe(30);
+    expect(value(keyframes(4, frames))).toBe(0);
     expect(value(keyframes(3.5, frames, { easing: easing.easeInCubic }))).toBe(26.25);
     expect(value(keyframes(5, frames, { extrapolate: 'identity' }))).toBe(5);
     expect(value(keyframes(5, frames, { extrapolate: 'extend' }))).toBe(-30);
+  });
+
+  it('returns every exact stop of five frames and clamps beyond the final stop', () => {
+    const frames = [
+      { time: 1, value: 10 },
+      { time: 3, value: 30 },
+      { time: 4, value: 0 },
+      { time: 7, value: -20 },
+      { time: 9, value: 50 },
+    ];
+    expect(value(keyframes(1, frames))).toBe(10);
+    expect(value(keyframes(3, frames))).toBe(30);
+    expect(value(keyframes(4, frames))).toBe(0);
+    expect(value(keyframes(7, frames))).toBe(-20);
+    expect(value(keyframes(9, frames))).toBe(50);
+    expect(value(keyframes(10, frames))).toBe(50);
   });
 
   it.each(
@@ -413,16 +507,17 @@ describe('keyframes', () => {
         fc.constantFrom(easing.linear, easing.easeOutCubic, easing.easeInBack),
         ({ start, width, from, to }, input, extrapolate, ease) => {
           const options: InterpolateOptions = { extrapolate, easing: ease };
-          expect(
-            keyframes(
-              input,
-              [
-                { time: start, value: from },
-                { time: start + width, value: to },
-              ],
-              options,
-            ),
-          ).toEqual(interpolate(input, [start, start + width], [from, to], options));
+          const frames = [
+            { time: start, value: from },
+            { time: start + width, value: to },
+          ];
+          for (const time of [input, start, start + width]) {
+            expect(keyframes(time, frames, options)).toEqual(
+              interpolate(time, [start, start + width], [from, to], options),
+            );
+          }
+          expect(value(keyframes(start, frames, options))).toBe(from);
+          expect(value(keyframes(start + width, frames, options))).toBe(to);
         },
       ),
     );

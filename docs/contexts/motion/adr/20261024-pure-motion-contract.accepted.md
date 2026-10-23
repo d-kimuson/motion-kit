@@ -16,7 +16,7 @@ The user-owned design.md §6.2 lists these APIs and shows `[0, 0.6]` to `[0, 1]`
 - `identity` returns the original input unchanged only outside the whole input range. Inside it uses the same segment easing as the other modes.
 - `Easing = (progress: number) => number`. Custom easings must be stateless, finite and preserve 0 and 1; throwing or history-dependent callbacks violate that caller contract. Built-in direct calls clamp finite progress outside `[0, 1]` and return exact endpoints. Standard cubic, exponential and Back in/out/in-out formulas are provided; Back uses overshoot constants `1.70158` and `1.70158 * 1.525` for in-out.
 - `easing.cubicBezier(x1, y1, x2, y2)` returns the shared `Result<Easing>`. All controls are finite, x controls are in `[0, 1]`, and y controls are unrestricted. CSS curve semantics invert the monotonic x coordinate before evaluating y; x1 need not be less than x2. Direct calls clamp outside progress, rather than implementing CSS tangent extension.
-- Invalid input returns `motion.invalid-input`. A non-finite evaluated output returns `motion.non-finite-result`; neither is thrown or silently saturated. Both codes have error severity and actionable hints, without a details payload.
+- Invalid input returns `motion.invalid-input`. A non-finite easing result or an evaluated output outside the finite number range returns `motion.non-finite-result`; intermediate overflow alone must not reject a representable output. Neither failure is thrown or silently saturated. Both codes have error severity and actionable hints, without a details payload.
 
 ## Consequences
 

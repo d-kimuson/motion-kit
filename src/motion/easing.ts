@@ -43,12 +43,7 @@ const coordinate = (t: number, first: number, second: number): number => {
  * Solve x(t)=progress, then return y(t), not y(progress). Direct progress
  * outside [0,1] is clamped; interpolate's extend mode owns linear extension.
  */
-const cubicBezier = (
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): Result<Easing> => {
+const cubicBezier = (x1: number, y1: number, x2: number, y2: number): Result<Easing> => {
   if (![x1, y1, x2, y2].every(Number.isFinite) || x1 < 0 || x1 > 1 || x2 < 0 || x2 > 1) {
     return invalidInput(
       'Cubic-bezier control points are outside their domain.',
