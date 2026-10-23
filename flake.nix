@@ -29,8 +29,10 @@
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [
-            pkgs.nodejs
+            # Keep in sync with .node-version (even-numbered Node releases).
+            pkgs.nodejs_26
             pkgs.pnpm
+            pkgs.gitleaks
           ];
 
           shellHook = ''
