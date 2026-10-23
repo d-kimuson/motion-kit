@@ -21,10 +21,13 @@
 - `Transition.layout_head`: Each placed scene starts at the exact current offset and ends one duration later.
 - `Transition.overlap_bounds`: Valid overlap is exactly the nonnegative value bounded by both adjacent scenes.
 - `Transition.overlap_membership`: Both scenes are present throughout their overlap, including its start.
+- `Transition.overlap_membership_offset`: At any layout offset, both adjacent scenes contain every time in their overlap.
 - `Transition.zero_overlap`: Zero overlap has no time at which both adjacent scenes are present.
 - `Transition.overlap_equal_scene`: Overlap equal to the outgoing scene starts the incoming scene at zero.
 - `Transition.full_overlap_duration`: Subtracting a full outgoing scene overlap leaves exactly the incoming duration.
 - `Transition.empty_series`: An empty series has zero duration.
 - `Transition.total_duration`: Adding a scene and its overlap increases duration by their difference.
+- `Transition.progress_before`: Progress is zero at every time strictly before the overlap starts.
+- `Transition.progress_after`: A nonnegative overlap has progress one at every time at or after its exclusive end.
 - `Transition.progress_start`: A positive overlap has zero progress at its start.
 - `Transition.progress_end`: Progress is one at the exclusive end, including zero-length overlaps.

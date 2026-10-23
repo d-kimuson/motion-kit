@@ -10,7 +10,7 @@
 ## Theorems
 
 - `Sequence.membership`: Membership is inclusive at the start and exclusive at the end.
-- `Sequence.adjacent_disjoint`: Adjacent sequences never contain the same time or sampled frame.
+- `Sequence.adjacent_disjoint`: Intervals whose endpoints meet, [a, b) and [b, c), share no time.
 - `Sequence.zero_length`: A zero-length sequence is empty at every time.
 - `Sequence.start_included`: A nonempty sequence includes its start.
 - `Sequence.end_excluded`: Every sequence excludes its end.

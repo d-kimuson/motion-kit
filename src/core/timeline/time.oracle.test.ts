@@ -13,6 +13,7 @@ import {
   timeToFrameFloor,
   timeToFrameNearest,
   validateOutputFrame,
+  type RationalInput,
   type TimelineTime,
 } from './time.ts';
 
@@ -38,8 +39,105 @@ const inputs = fc.record({
   arbitraryFrame: fc.integer({ min: -10000, max: 10000 }),
 });
 
+const checkSamples = (
+  cases: readonly {
+    fps: RationalInput;
+    time: RationalInput;
+    duration: RationalInput;
+    frame: number;
+    total: number;
+  }[],
+) => {
+  const expected = evalSpecs(cases.map((args) => ({ fn: 'Timeline.sample', args })));
+  expect(
+    cases.map((args) => {
+      const fps = unwrap(createFrameRate(args.fps));
+      const time = unwrap(createTimelineTime(args.time));
+      return {
+        time: output(frameToTime(BigInt(args.frame), fps)),
+        position: output(framePosition(time, fps)),
+        floor: String(timeToFrameFloor(time, fps)),
+        ceil: String(timeToFrameCeil(time, fps)),
+        nearest: String(timeToFrameNearest(time, fps)),
+        count: String(unwrap(frameCount(unwrap(createTimelineTime(args.duration)), fps))),
+        valid: validateOutputFrame(args.frame, BigInt(args.total)).ok,
+      };
+    }),
+  ).toEqual(expected);
+};
+
+// Convert a rational frame position to exact seconds without floating-point division.
+const positionSample = (position: RationalInput, fps: RationalInput) => ({
+  fps,
+  time: {
+    numerator: position.numerator * fps.denominator,
+    denominator: position.denominator * fps.numerator,
+  },
+  duration: { numerator: 1, denominator: 1 },
+  frame: 0,
+  total: 1,
+});
+
 describe('Timeline rational conversions', () => {
+  it('matches Lean below, at and above rounding thresholds for unit and rational fps', () => {
+    expect.hasAssertions();
+    const rates = [
+      { numerator: 1, denominator: 1 },
+      { numerator: 30000, denominator: 1001 },
+    ];
+    checkSamples(
+      rates.flatMap((fps) => [
+        // Regression: a 3/4 nearest bias incorrectly rounds position 1/3 up to 1.
+        positionSample({ numerator: 1, denominator: 3 }, fps),
+        ...[-2, -1, 0, 1, 2].flatMap((frame) =>
+          // Integer (floor/ceil), half (nearest), and the wrong quarter thresholds.
+          [0, 250000, 500000, 750000].flatMap((threshold) =>
+            [-1, 0, 1].map((epsilon) =>
+              positionSample(
+                { numerator: frame * 1000000 + threshold + epsilon, denominator: 1000000 },
+                fps,
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
+  });
+
+  it('matches Lean at arbitrary rational positions and on both sides of signed half-frame ties', () => {
+    expect.hasAssertions();
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            input: inputs,
+            numerator: fc.integer({ min: -1000000, max: 1000000 }),
+            denominator: fc.integer({ min: 3, max: 1000000 }),
+          }),
+          { minLength: 10, maxLength: 10 },
+        ),
+        (batch) => {
+          checkSamples(
+            batch.flatMap(({ input: { fps, arbitraryFrame }, numerator, denominator }) => [
+              positionSample({ numerator, denominator }, fps),
+              ...[-1, 0, 1].map((epsilon) =>
+                positionSample(
+                  {
+                    numerator: (2 * arbitraryFrame + 1) * denominator + epsilon,
+                    denominator: 2 * denominator,
+                  },
+                  fps,
+                ),
+              ),
+            ]),
+          );
+        },
+      ),
+      { numRuns: 50 },
+    );
+  });
   it('matches Lean around signed frame boundaries, last frames, empty timelines and exact counts', () => {
+    expect.hasAssertions();
     // Batch oracle requests: property shrinking still retains the failing batch and all exact inputs.
     fc.assert(
       fc.property(fc.array(inputs, { minLength: 10, maxLength: 10 }), (batch) => {
@@ -67,22 +165,7 @@ describe('Timeline rational conversions', () => {
           time: { numerator: Number.MAX_SAFE_INTEGER, denominator: 1001 },
           duration: { numerator: Number.MAX_SAFE_INTEGER, denominator: 1001 },
         });
-        const expected = evalSpecs(cases.map((args) => ({ fn: 'Timeline.sample', args })));
-        expect(
-          cases.map((args) => {
-            const fps = unwrap(createFrameRate(args.fps));
-            const time = unwrap(createTimelineTime(args.time));
-            return {
-              time: output(frameToTime(BigInt(args.frame), fps)),
-              position: output(framePosition(time, fps)),
-              floor: String(timeToFrameFloor(time, fps)),
-              ceil: String(timeToFrameCeil(time, fps)),
-              nearest: String(timeToFrameNearest(time, fps)),
-              count: String(unwrap(frameCount(unwrap(createTimelineTime(args.duration)), fps))),
-              valid: validateOutputFrame(args.frame, BigInt(args.total)).ok,
-            };
-          }),
-        ).toEqual(expected);
+        checkSamples(cases);
       }),
       { numRuns: 10 },
     );

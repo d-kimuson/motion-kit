@@ -13,7 +13,7 @@ theorem membership (start finish time : Rat) :
     contains start finish time = true ↔ start ≤ time ∧ time < finish := by
   simp [contains]
 
-/-- Adjacent sequences never contain the same time or sampled frame. -/
+/-- Intervals whose endpoints meet, [a, b) and [b, c), share no time. -/
 theorem adjacent_disjoint (a b c time : Rat) :
     ¬(contains a b time = true ∧ contains b c time = true) := by
   simp only [membership]; grind

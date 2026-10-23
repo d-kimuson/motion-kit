@@ -85,6 +85,17 @@ theorem overlap_membership (left right overlap time : Rat)
   simp only [Sequence.membership, nextStart, pairDuration] at ht ⊢
   grind
 
+/-- At any layout offset, both adjacent scenes contain every time in their overlap. -/
+theorem overlap_membership_offset (start left right overlap time : Rat)
+    (h : validOverlap left right overlap = true)
+    (ht : Sequence.contains (start + nextStart left overlap) (start + left) time = true) :
+    Sequence.contains start (start + left) time = true ∧
+    Sequence.contains (start + nextStart left overlap)
+      (start + pairDuration left right overlap) time = true := by
+  simp only [overlap_bounds] at h
+  simp only [Sequence.membership, nextStart, pairDuration] at ht ⊢
+  grind
+
 /-- Zero overlap has no time at which both adjacent scenes are present. -/
 theorem zero_overlap (left time : Rat) :
     Sequence.contains (nextStart left 0) left time = false := by
@@ -108,6 +119,17 @@ theorem total_duration (scenes overlaps : List Rat) (scene overlap : Rat) :
     totalDuration (scene :: scenes) (overlap :: overlaps) =
     totalDuration scenes overlaps + scene - overlap := by
   simp only [totalDuration, List.sum_cons]; grind
+
+/-- Progress is zero at every time strictly before the overlap starts. -/
+theorem progress_before (start duration time : Rat) (h : time < start) :
+    progress start duration time = 0 := by
+  simp [progress, h]
+
+/-- A nonnegative overlap has progress one at every time at or after its exclusive end. -/
+theorem progress_after (start duration time : Rat) (hd : 0 ≤ duration)
+    (ht : start + duration ≤ time) :
+    progress start duration time = 1 := by
+  simp [progress, show ¬time < start by grind, ht]
 
 /-- A positive overlap has zero progress at its start. -/
 theorem progress_start (start duration : Rat) (h : 0 < duration) :

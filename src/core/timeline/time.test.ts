@@ -101,6 +101,35 @@ describe('Time Module contract', () => {
     expect(validateOutputFrame(0, 0n).ok).toBe(false);
   });
 
+  it('locates rejected safe-integer output frames in a valid Diagnostic', () => {
+    for (const [frame, total] of [
+      [-1, 10n],
+      [10, 10n],
+      [11, 10n],
+      [0, 0n],
+    ] as const) {
+      const result = validateOutputFrame(frame, total);
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'composition.props-invalid', location: { frame } },
+      });
+      if (result.ok) throw new Error('Expected a rejected frame');
+      expect(DiagnosticSchema.safeParse(result.error).success).toBe(true);
+      expect(result.error.details).toBeUndefined();
+    }
+  });
+
+  it('names malformed output frames without an unrepresentable Diagnostic location', () => {
+    for (const frame of [0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      const result = validateOutputFrame(frame, 10n);
+      if (result.ok) throw new Error('Expected a rejected frame');
+      expect(result.error.message).toContain(`"${String(frame)}"`);
+      expect(result.error.location).toBeUndefined();
+      expect(result.error.details).toBeUndefined();
+      expect(DiagnosticSchema.safeParse(result.error).success).toBe(true);
+    }
+  });
+
   it('round-trips signed frame identity and count duration with non-unit rational fps', () => {
     fc.assert(
       fc.property(fc.integer({ min: -1_000_000, max: 1_000_000 }), (frame) => {

@@ -167,13 +167,23 @@ export const durationFromFrameCount = (count: bigint, fps: FrameRate): Result<Ti
       )
     : { ok: true, value: frameToTime(count, fps) };
 
-/** Output requests are safe integer indices in [0, total); signed conversion itself is unrestricted. */
+/** Output requests are safe integer indices in [0, total); signed conversion itself is unrestricted.
+ * Only safe-integer rejections carry location.frame: the Diagnostic schema cannot represent others.
+ */
 export const validateOutputFrame = (frame: number, total: bigint): Result<bigint> => {
   if (!Number.isSafeInteger(frame) || frame < 0 || BigInt(frame) >= total) {
-    return timeFailure(
-      'Output frame is outside the composition frame range.',
-      'Request a safe integer frame greater than or equal to zero and less than the frame count.',
-    );
+    return {
+      ok: false,
+      error: {
+        code: 'composition.props-invalid',
+        severity: 'error',
+        message: Number.isSafeInteger(frame)
+          ? 'Output frame is outside the composition frame range.'
+          : `Output frame "${String(frame)}" must be a finite safe integer.`,
+        hint: 'Request a safe integer frame greater than or equal to zero and less than the frame count.',
+        ...(Number.isSafeInteger(frame) ? { location: { frame } } : {}),
+      },
+    };
   }
   return { ok: true, value: BigInt(frame) };
 };
