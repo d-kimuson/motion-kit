@@ -23,9 +23,10 @@
 
     // transpile
     "noEmit": true,
+    "jsx": "react-jsx",
     "erasableSyntaxOnly": true,
     "target": "es2024",
     "lib": ["dom", "dom.iterable", "esnext"]
   },
-  "include": ["*.ts", "src", "spec", "scripts", "configs", ".agents/**/*.ts"]
+  "include": ["*.ts", "src", "spec", "scripts", "configs", "spikes/b-r3f", ".agents/**/*.ts"]
 }

@@ -6,3 +6,11 @@ allowBuilds:
   lefthook: true
 
 minimumReleaseAge: 1440
+
+# R3F's declarations augment React JSX and import three. Make their type packages
+# resolvable inside pnpm's global virtual store rather than relying on ancestor hoisting.
+packageExtensions:
+  '@react-three/fiber@9.8.2':
+    peerDependencies:
+      '@types/react': '19.3.0'
+      '@types/three': '0.186.0'
