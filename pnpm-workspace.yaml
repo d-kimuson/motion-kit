@@ -2,5 +2,7 @@ catalogMode: manual
 engineStrict: true
 saveExact: true
 enableGlobalVirtualStore: true
+allowBuilds:
+  lefthook: true
 
 minimumReleaseAge: 1440
