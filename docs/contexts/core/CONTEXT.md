@@ -4,27 +4,28 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 
 ## Ubiquitous Language
 
-| Term              | Code                             | Definition                                                                                                                                                     |
-| ----------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Composition       | `Composition`                    | The root of a video: fps, duration, resolution, and a tree of scenes placed in time.                                                                           |
-| Global Frame      | `globalFrame`                    | The integer index of an output frame, counted from 0 over the whole Composition.                                                                               |
-| Timeline Time     | `TimelineTime`                   | A time on the Composition timeline, kept as an exact rational value until the Time Module converts it.                                                         |
-| Local Time        | `time` (from `useTime`)          | Time relative to the start of the enclosing Sequence, in seconds.                                                                                              |
-| Presentation Time | `presentationTime`               | The timeline time at which an output frame is sampled.                                                                                                         |
-| Time Module       | `src/core/timeline`              | The only place that converts seconds, timeline time, and frames, and defines rounding and comparison. Specified in Lean.                                       |
-| Sequence          | `Sequence`                       | A scene's display period on the timeline, the half-open interval `[start, end)`.                                                                               |
-| Transition        | `Transition`                     | A period in which two adjacent scenes of a `TransitionSeries` are mounted at once and share a progress value.                                                  |
-| Seekability Tier  | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.             |
-| Asset Readiness   | `useAsset`                       | Whether every asset a frame needs (font, image, video frame, model, texture) is loaded, reported before capture; a failure is a diagnostic, not a silent skip. |
+| Term              | Code                             | Definition                                                                                                                                                               |
+| ----------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Composition       | `Composition`                    | The root of a video: fps, duration, resolution, and a tree of scenes placed in time.                                                                                     |
+| Global Frame      | `globalFrame`                    | The integer index of an output frame, counted from 0 over the whole Composition.                                                                                         |
+| Timeline Time     | `TimelineTime`                   | A time on the Composition timeline, kept as an exact rational value until the Time Module converts it.                                                                   |
+| Local Time        | `time` (from `useTime`)          | Time relative to the start of the enclosing Sequence, in seconds.                                                                                                        |
+| Presentation Time | `presentationTime`               | The timeline time at which an output frame is sampled.                                                                                                                   |
+| Frame generation  | Not implemented yet              | The monotonically increasing per-realm request identity shared by React, asset and integration acknowledgements, distinct even for repeated requests for the same frame. |
+| Time Module       | `src/core/timeline`              | The only place that converts seconds, timeline time, and frames, and defines rounding and comparison. Specified in Lean.                                                 |
+| Sequence          | `Sequence`                       | A scene's display period on the timeline, the half-open interval `[start, end)`.                                                                                         |
+| Transition        | `Transition`                     | A period in which two adjacent scenes of a `TransitionSeries` are mounted at once and share a progress value.                                                            |
+| Seekability Tier  | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                       |
+| Asset Readiness   | `useAsset`                       | Whether every asset a frame needs (font, image, video frame, model, texture) is loaded, reported before capture; a failure is a diagnostic, not a silent skip.           |
 
 ## Invariants
 
-- Within the supported A/B paths and a fixed environment, a frame is a pure function of its Presentation Time: rendering frame N gives the same output whatever frame was rendered before. Tier C remains usable with `seek.uncontrolled` warnings, not this guarantee.
+- Within the supported A/B paths and a fixed environment, a frame is a pure function of its Presentation Time: rendering frame N gives the same output whatever frame was rendered before. Tier C remains usable, not covered by this guarantee; in Phase 1 the Browser Renderer emits `seek.uncontrolled` when an integration is identified as Tier C.
 - A Sequence contains time `t` exactly when `start <= t < end`; adjacent Sequences share no frame.
 - Frame boundaries are not rounded to integers before the Time Module converts them; fps may be rational (30000/1001).
 - The total duration of a `TransitionSeries` is the sum of its scenes minus the sum of its overlaps.
 - A component that cannot be identified is never assumed to be Tier A or B.
-- Preview and render use the same explicit-time runtime; Presentation Time stays fixed while registered work settles. Completion belongs to a request generation, not just a frame number.
+- core's contract provides one explicit-time runtime for the Browser Renderer and the future preview to consume; it does not assert that a preview exists. Presentation Time stays fixed while registered work settles. Completion belongs to the active frame generation and resource versions, not just a frame number; allocating a queued generation does not invalidate the active one. Resource-version changes re-settle within that generation; cancellation or supersession aborts it without publication. The [readiness barrier contract](../../decisions/20261024-time-control-and-frame-capture.accepted.md#readiness-barrier-contract) defines exclusive ownership, queueing and deadlines.
 
 ## Seekability
 
