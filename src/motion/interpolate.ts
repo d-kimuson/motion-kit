@@ -41,10 +41,17 @@ const mix = (from: number, to: number, p: number): number => {
 // overflowing subtraction. Used only to retry non-finite extension arithmetic.
 const scaledDifference = (a: number, b: number): { fraction: number; exponent: number } => {
   const difference = a - b;
-  const halved = !Number.isFinite(difference);
-  const finite = halved ? a / 2 - b / 2 : difference;
-  const exponent = Math.min(1023, Math.floor(Math.log2(Math.abs(finite))));
-  return { fraction: finite / 2 ** exponent, exponent: exponent + (halved ? 1 : 0) };
+  if (!Number.isFinite(difference)) {
+    // Normalize the halved subtraction relative to 2^1023, which is finite.
+    // The fraction describes that half, so its original scale is 2^1024,
+    // not 2^1023: restore the lost factor two before combining exponents.
+    const halfDifference = a / 2 - b / 2;
+    const halfExponent = 1023;
+    const originalExponent = halfExponent + 1;
+    return { fraction: halfDifference / 2 ** halfExponent, exponent: originalExponent };
+  }
+  const exponent = Math.min(1023, Math.floor(Math.log2(Math.abs(difference))));
+  return { fraction: difference / 2 ** exponent, exponent };
 };
 
 const scaledExtension = (
@@ -77,6 +84,7 @@ const scaledExtension = (
 /**
  * Pure numeric interpolation, with plain seconds (or any consistent numeric unit).
  * Ranges need matching lengths >=2, finite values and strictly ascending inputs.
+ * Exact stops return their values without easing; easing shapes segment interiors.
  * Default clamp/linear. Clamp affects progress, not an easing's overshooting value.
  * Extend continues the first/last segment's raw linear slope outside the range;
  * identity returns the original input outside the whole range only.
@@ -132,6 +140,11 @@ export const interpolate = (
     }
     previous = current;
   }
+
+  // Exact interior stops belong to the segment ending there (input > end above).
+  // Validate the entire range first, then bypass easing at every exact stop.
+  if (input === first) return finiteResult(firstOutput);
+  if (input === end) return finiteResult(to);
 
   const mode = options.extrapolate ?? 'clamp';
   const ease = options.easing ?? easing.linear;

@@ -119,7 +119,7 @@ describe('interpolate', () => {
     const options = { extrapolate: 'clamp', easing: (p: number) => p * 2 } as const;
     expect(value(interpolate(-1, [0, 1], [10, 20], options))).toBe(10);
     expect(value(interpolate(0.75, [0, 1], [10, 20], options))).toBe(25);
-    expect(value(interpolate(1, [0, 1], [10, 20], options))).toBe(30);
+    expect(value(interpolate(1, [0, 1], [10, 20], options))).toBe(20);
     expect(value(interpolate(2, [0, 1], [10, 20], options))).toBe(30);
   });
 
@@ -313,6 +313,66 @@ describe('interpolate', () => {
     );
   });
 
+  it.each([
+    [-Number.MAX_VALUE, [-0.6 * Number.MAX_VALUE, 0.6 * Number.MAX_VALUE]],
+    [Number.MAX_VALUE, [-0.6 * Number.MAX_VALUE, 0.6 * Number.MAX_VALUE]],
+    [Number.MAX_VALUE, [Number.MAX_VALUE, -0.5 * Number.MAX_VALUE]],
+  ])('retains genuine overflow after halving an output difference: %s / %j', (input, outputs) => {
+    expect.hasAssertions();
+    invalid(
+      interpolate(input, [-Number.MAX_VALUE / 2, Number.MAX_VALUE / 2], outputs, {
+        extrapolate: 'extend',
+      }),
+      'motion.non-finite-result',
+    );
+  });
+
+  it.each([
+    {
+      input: -1.5,
+      inputs: [0, 1],
+      outputs: [-0.1 * Number.MAX_VALUE, Number.MAX_VALUE],
+      ease: () => 1,
+      expected: -1.1685005376605052e308,
+    },
+    {
+      input: 2.5,
+      inputs: [0, 1],
+      outputs: [Number.MAX_VALUE, -0.1 * Number.MAX_VALUE],
+      ease: () => 0,
+      expected: -1.1685005376605052e308,
+    },
+    {
+      input: Number.MAX_VALUE,
+      inputs: [-Number.MAX_VALUE, -0.75 * Number.MAX_VALUE],
+      outputs: [Number.MAX_VALUE, 0.8 * Number.MAX_VALUE],
+      ease: easing.linear,
+      expected: -1.0786158809173887e308,
+    },
+    {
+      input: -Number.MAX_VALUE,
+      inputs: [0.75 * Number.MAX_VALUE, Number.MAX_VALUE],
+      outputs: [0.8 * Number.MAX_VALUE, Number.MAX_VALUE],
+      ease: easing.linear,
+      expected: -1.0786158809173887e308,
+    },
+  ])('restores the halved scale for a representable retry: $input / $inputs', (test) => {
+    // References evaluate base + (input-endpoint)*(to-from)/(end-start) as an
+    // exact rational of the supplied binary64 operands, then round once to
+    // nearest, ties-to-even (not decimal 0.1/0.8 arithmetic). The first pair
+    // halves the output difference; the second pair halves the input distance.
+    // Each reference is in the 2^1023 binade (ULP = 2^971). Allow two ULPs:
+    // the scaled implementation rounds its quotient/product and cancellation
+    // separately, rather than promising a single correctly rounded operation.
+    const actual = value(
+      interpolate(test.input, test.inputs, test.outputs, {
+        extrapolate: 'extend',
+        easing: test.ease,
+      }),
+    );
+    expect(Math.abs(actual - test.expected)).toBeLessThanOrEqual(2 * 2 ** 971);
+  });
+
   it('is total over arbitrary finite data and keeps successful results finite', () => {
     fc.assert(
       fc.property(
@@ -458,6 +518,34 @@ describe('keyframes', () => {
     expect(value(keyframes(3.5, frames, { easing: easing.easeInCubic }))).toBe(26.25);
     expect(value(keyframes(5, frames, { extrapolate: 'identity' }))).toBe(5);
     expect(value(keyframes(5, frames, { extrapolate: 'extend' }))).toBe(-30);
+  });
+
+  it('pins every exact stop independently of easing and selects the segment immediately after it', () => {
+    const frames = [
+      { time: 1, value: 10 },
+      { time: 2, value: 30 },
+      { time: 3, value: -20 },
+      { time: 4, value: 50 },
+    ];
+    // Neither endpoint is preserved: distinguish ending vs starting segments
+    // even at progress zero, where p => p * 2 would mask the >= mutation.
+    const ease = (p: number): number => p * 2 + 1;
+    for (const extrapolate of modes) {
+      const options = { extrapolate, easing: ease };
+      for (const frame of frames) {
+        expect(value(keyframes(frame.time, frames, options))).toBe(frame.value);
+      }
+      for (const [start, from, to] of [
+        [1, 10, 30],
+        [2, 30, -20],
+        [3, -20, 50],
+      ] as const) {
+        // This is the very next representable binary64 time after each stop.
+        const after = start + (start === 1 ? Number.EPSILON : 2 * Number.EPSILON);
+        const expected = from + (to - from) * ease(after - start);
+        expect(value(keyframes(after, frames, options))).toBe(expected);
+      }
+    }
   });
 
   it('returns every exact stop of five frames and clamps beyond the final stop', () => {

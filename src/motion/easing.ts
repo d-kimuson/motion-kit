@@ -2,7 +2,7 @@ import type { Result } from '../lib/result.ts';
 
 import { invalidInput } from './diagnostic.ts';
 
-/** Stateless progress mapping. Custom functions must be pure, finite and endpoint-preserving. */
+/** Stateless progress mapping. Custom functions must be pure and finite; preserve endpoints for continuity. */
 export type Easing = (progress: number) => number;
 
 // Built-ins clamp direct calls too: no polynomial/exponential overflow for finite progress.
