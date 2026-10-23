@@ -16,7 +16,11 @@ Where to send questions and reports to the user or the team, and how to write th
 
 ## Questions on the Backlog
 
-- Before asking a question with no task, file it as a user task by `docs/guidelines/backlog.md`, then ask. Include the task key (for example, `TASK-143`) in every question sent to the team channel.
-- When a question is sent, the auto-pilot appends a paragraph beginning `Waiting on the user:` to the end of that task's description, with the question in one sentence, the recommendation with its reason, and the Slack message link. Keep every unanswered question there, not only in local state or Slack.
-- While waiting, keep the task `In Progress` (even if a PR is open), or `Backlog` if it has never started.
-- When the user replies on the task or in Slack, the auto-pilot removes the corresponding `Waiting on the user:` paragraph, records the answer in the description as `DECIDED:`, and updates the task's status to reflect the work's state.
+- Before asking a question with no task, file it as a user task by `docs/guidelines/backlog.md`, then ask. Include the task key in the form `TASK-<number>` (for example, `TASK-143`, not the UUID `id`) in every question sent to the team channel.
+- When a question is sent, the auto-pilot appends a paragraph to the end of that task's description: the exact prefix `Waiting on the user:`, then the question and options, then the recommendation and its reason, all copied from the Slack message, then the Slack permalink. Build the permalink as `https://<workspace>.slack.com/archives/<channel_id>/p<ts-without-dot>` using the `ts` saved from `slack_send_message`. Keep every unanswered question there, not only in local state or Slack.
+- When a question is sent, a task in `In Progress` or `In Review` becomes `In Progress` for the duration of the wait; a task that has never started stays `Backlog`.
+- When the user answers in the task description or the Slack thread, the auto-pilot deletes the corresponding waiting paragraph and inserts a `DECIDED: <answer>` line at that location in the task description in the same edit. If other waiting paragraphs remain, keep the waiting status; otherwise, return the task to the status of the work: `In Review` if a PR is open for review, or `In Progress` if work continues (a task that has not started remains `Backlog`).
+
+Example paragraph (illustrative workspace and timestamp):
+
+> Waiting on the user: Should TASK-143 use option A or option B (I recommend option A because it avoids a new dependency)? https://example.slack.com/archives/C0C8K9DTTL4/p1770000000000000
