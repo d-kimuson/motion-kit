@@ -39,16 +39,16 @@ Each turn picks one action and runs prepare → action → feedback → clean-up
 1. Follow the remote with `git pull --ff-only`.
 2. Read `.agents/auto-pilot/context.md`.
 3. Check which maintenance tasks are due with `node .agents/auto-pilot/scripts/maintenance.ts due`.
-4. Check the state of the tasks in progress (Independent Agent, above). Discover user replies by checking the `Waiting on the user:` paragraphs in task descriptions on the board together with the Slack threads, including tasks not yet started; reflect the findings in `tasks/`.
+4. Check the state of the tasks in progress (Independent Agent, above). Discover user replies by checking the `Waiting on the user:` paragraphs in task descriptions on the board together with the Slack threads, including tasks not yet started; use the answer-matching rule in Questions on the Backlog in `docs/guidelines/team-channel.md` and reflect the findings in `tasks/`.
 
 ### action
 
-Do the first of the following that applies. When picking a task in 3 and 4, take first the ones that block other tasks or a user decision (the more they block, the earlier), and within those follow the Backlog priority.
+Do the first of the following that applies. When picking a task in 3 and 4, apply that step's skip rule first, then take first the ones that block other tasks or a user decision (the more they block, the earlier), and within those follow the Backlog priority.
 
 1. **Respond**: if the user replied, or a task in progress reported a question or a failure, respond to it by `docs/guidelines/team-channel.md`.
 2. **Maintenance task**: if a maintenance task is due and not already in progress, start the first such one `due` lists (in `manifest.json` order) by its `index.md`. Track it in `tasks/maintenance-<name>.md` with the commit HEAD was at when it started. Record it only after its delegate has finished and its output is handled, with `node .agents/auto-pilot/scripts/maintenance.ts done <name> <that commit>`, so that a failed or abandoned run stays due and the commits that landed during the run are covered next time.
 3. **Delegate implementation**: if a task is Ready and the tasks in progress are below the limit, delegate it to an Independent Agent. Skip tasks carrying a `Waiting on the user:` paragraph, as required by Ready in `docs/guidelines/backlog.md`. Have the delegate update the task's state.
-4. **Clarify**: bring a task that is not Ready closer to Ready.
+4. **Clarify**: bring a task that is not Ready closer to Ready. A task carrying a `Waiting on the user:` paragraph is already being clarified; skip it rather than ask the same question again.
    - The requirement is unclear and the question is small (answerable by options, reversible if wrong): ask the user.
    - The requirement is unclear and the decision is heavy (direction, cost, external impact, hard-to-reverse change): have a SubAgent investigate and gather the material, and file it as a user task.
    - The requirement is clear but needs a design before building: ask an Independent Agent for the design, and have it produce a Design Doc and ADRs.

@@ -11,7 +11,7 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 
 ## State and priority
 
-- `status`: `Idea` (not yet agreed), `Backlog` (agreed, not started), `In Progress`, `In Review` (PR open), `Done`.
+- `status`: `Idea` (not yet agreed), `Backlog` (agreed, not started), `In Progress`, `In Review`, `Done`.
 - `priority`: `P0` (blocks everything), `P1` (next), `P2` (planned), `P3` (someday), or empty.
 - `blocks`: ids of the tasks this one blocks. `links`: PR, ADR, or spike report URLs.
 - `assignId`: the actor holding the task. Set it when moving to `In Progress`. A user task (`docs/CONTEXT-MAP.md`) is assigned to the user's actor: the actor with `kind: user` and `name: kaito` in `taskroom_list_actors`. Look the id up there; do not assume it.
@@ -25,4 +25,4 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 
 ## Ready
 
-A task is Ready to be picked up when its status is `Backlog`, every task that blocks it is `Done`, and its description says how the result is verified, except that a task carrying a `Waiting on the user:` paragraph is never Ready. Pick by priority, then by the roadmap order in `docs/tmp/design.md` (Phase 0 spikes before Foundation).
+A task is Ready to be picked up when its status is `Backlog`, every task that blocks it is `Done`, and its description says how the result is verified, except that a task carrying a `Waiting on the user:` paragraph is never Ready. Pick Ready tasks by priority, then by the roadmap order in `docs/tmp/design.md` (Phase 0 spikes before Foundation). For tasks that are not Ready, follow the Clarify step and its skip rule in `docs/guidelines/auto-pilot.md`.
