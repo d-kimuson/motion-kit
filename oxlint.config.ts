@@ -287,7 +287,7 @@ export default defineConfig({
     },
     {
       // The three context and its non-shipped experiment own the Three.js / R3F integration.
-      files: ['src/three/**', 'spikes/b-r3f/fixture.tsx'],
+      files: ['src/three/**', 'spikes/b-r3f/fixture.tsx', 'spikes/d-assets/fixture.tsx'],
       rules: {
         'no-restricted-imports': ['error', NODE_RESTRICTION],
       },
@@ -301,6 +301,7 @@ export default defineConfig({
         'spec/**',
         'configs/**',
         'spikes/b-r3f/run-flags.ts',
+        'spikes/d-assets/vitest.config.ts',
         '.agents/**/scripts/**',
       ],
       rules: {

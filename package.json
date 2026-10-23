@@ -31,6 +31,7 @@
     "spike:three": "vitest run --config spikes/b-r3f/vitest.config.ts --reporter=verbose --silent=false",
     "spike:three:flags": "node spikes/b-r3f/run-flags.ts",
     "spike:clock": "vitest run --config spikes/c-clock/vitest.config.ts --reporter=verbose --silent=false",
+    "spike:assets": "vitest run --config spikes/d-assets/vitest.config.ts --reporter=verbose --silent=false",
     "schema:cli-output": "node scripts/generate-cli-output-schema.ts",
     "lean:build": "lake build",
     "lean:doc": "node scripts/lean-spec.ts doc src/core",

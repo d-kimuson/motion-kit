@@ -37,6 +37,7 @@
     "spikes/a-motion",
     "spikes/b-r3f",
     "spikes/c-clock",
+    "spikes/d-assets",
     ".agents/**/*.ts"
   ]
 }
