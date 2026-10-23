@@ -8,3 +8,11 @@ export {
   systemClock,
 } from './lib/clock.ts';
 export { typedIncludes } from './lib/typedIncludes.ts';
+export {
+  DiagnosticCodeSchema,
+  DiagnosticSchema,
+  LocationSchema,
+  type DiagnosticCode,
+  type Diagnostic,
+  type Location,
+} from './lib/diagnostic.ts';

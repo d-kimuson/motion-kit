@@ -14,7 +14,7 @@ Principles that apply to all code. Rules enforced statically by lint and types a
 
 ## Failures and exceptions
 
-- Recoverable failures (invalid composition, a preset that does not fit a theme, an asset that cannot become ready, a CLI input that fails validation) are returned as a `Result` discriminated union with a `Diagnostic` payload: `code`, `message`, and the location (`sceneId`, `elementId`, time) when known. The `Result` type lives in `src/lib/result.ts`; create it with its first use, without a library. Callers branch on it; they do not throw it.
+- Recoverable failures (invalid composition, a preset that does not fit a theme, an asset that cannot become ready, a CLI input that fails validation) are returned as a `Result` discriminated union with a `Diagnostic` payload defined by [`DiagnosticSchema`](../../../src/lib/diagnostic.ts) and the [accepted CLI output contract](../../contexts/agent/adr/20261024-cli-output-contract.accepted.md). The `Result` type lives in `src/lib/result.ts`; create it with its first use, without a library. Callers branch on it; they do not throw it.
 - Exceptions are for programmer errors and contract violations only (a hook used outside its provider, an impossible state). Do not catch them to continue.
 - External exceptions (Playwright, FFmpeg, the file system) are converted to `Result` at the boundary where they occur, in `src/render` and `src/cli`. Nothing above those boundaries sees a raw exception.
 
