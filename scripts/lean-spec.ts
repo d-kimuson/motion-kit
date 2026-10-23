@@ -12,26 +12,26 @@
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-export type DeclarationKind = 'definition' | 'constraint' | 'theorem';
-export type Declaration = {
+type DeclarationKind = 'definition' | 'constraint' | 'theorem';
+type Declaration = {
   readonly kind: DeclarationKind;
   readonly name: string;
   readonly doc: string;
   readonly line: number;
 };
 
-export type Issue =
+type Issue =
   | { readonly kind: 'missing-doc'; readonly name: string; readonly line: number }
   | { readonly kind: 'sorry'; readonly line: number }
   | { readonly kind: 'axiom'; readonly name: string; readonly line: number };
 
-export type ParsedLean = {
+type ParsedLean = {
   readonly moduleDoc: string;
   readonly declarations: readonly Declaration[];
   readonly issues: readonly Issue[];
 };
 
-export type Problem = { readonly path: string; readonly line?: number; readonly message: string };
+type Problem = { readonly path: string; readonly line?: number; readonly message: string };
 
 const GENERATOR = 'scripts/lean-spec.ts';
 const marker = (leanName: string): string =>
@@ -39,8 +39,7 @@ const marker = (leanName: string): string =>
 const isGenerated = (content: string): boolean =>
   content.startsWith('<!-- Generated from ') && content.includes(` by ${GENERATOR}.`);
 
-export const docPath = (leanPath: string): string =>
-  `${leanPath.slice(0, -'.lean'.length)}.lean.md`;
+const docPath = (leanPath: string): string => `${leanPath.slice(0, -'.lean'.length)}.lean.md`;
 const leanPathOf = (docPath: string): string => docPath.slice(0, -'.md'.length);
 
 // Comments and strings blanked out with spaces (newlines kept, so offsets and lines stay), and the doc comments found.
@@ -153,7 +152,7 @@ const kindOf = (keyword: string, header: string): DeclarationKind | 'axiom' => {
   return /\bProp$/.test(header.trimEnd()) ? 'constraint' : 'definition';
 };
 
-export const parseLean = (source: string): ParsedLean => {
+const parseLean = (source: string): ParsedLean => {
   const { code, docs, moduleDocs } = scan(source);
   const scopes: { readonly kind: string; readonly name: string }[] = [];
   const declarations: Declaration[] = [];
@@ -223,7 +222,7 @@ const bullet = (declaration: Declaration): string =>
     .map((line, index) => (index === 0 || line === '' ? line : `  ${line}`))
     .join('\n')}`;
 
-export const renderDoc = (leanPath: string, parsed: ParsedLean): string => {
+const renderDoc = (leanPath: string, parsed: ParsedLean): string => {
   const leanName = basename(leanPath);
   const blocks = [marker(leanName), `# ${leanName.slice(0, -'.lean'.length)}`];
   if (parsed.moduleDoc !== '') blocks.push(parsed.moduleDoc);
@@ -237,7 +236,7 @@ export const renderDoc = (leanPath: string, parsed: ParsedLean): string => {
 type Files = Readonly<Record<string, string>>;
 
 // What `doc` changes: every Lean file's doc, and the generated docs whose Lean file is gone
-export const planDocs = (
+const planDocs = (
   lean: Files,
   docs: Files,
 ): { readonly write: Files; readonly remove: readonly string[] } => ({
@@ -258,7 +257,7 @@ const describeIssue = (issue: Issue): string => {
   return `\`${issue.name}\` is an axiom; prove it or state it as a hypothesis`;
 };
 
-export const checkTree = (lean: Files, docs: Files): Problem[] => {
+const checkTree = (lean: Files, docs: Files): Problem[] => {
   const problems: Problem[] = [];
   const { write, remove } = planDocs(lean, docs);
   for (const [path, source] of Object.entries(lean)) {

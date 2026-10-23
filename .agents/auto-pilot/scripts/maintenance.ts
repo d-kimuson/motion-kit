@@ -13,17 +13,17 @@ import { join } from 'node:path';
 
 import { currentDate, currentTimestamp, dateFromIsoString } from '../../../src/lib/clock.ts';
 
-export type Trigger = { readonly every?: number; readonly afterCommits?: number };
+type Trigger = { readonly every?: number; readonly afterCommits?: number };
 export type Manifest = { readonly tasks: Readonly<Record<string, Trigger>> };
-export type LastRun = Readonly<Record<string, { readonly at: string; readonly commit: string }>>;
+type LastRun = Readonly<Record<string, { readonly at: string; readonly commit: string }>>;
 
-export type Reason =
+type Reason =
   | { readonly kind: 'never-run' }
   | { readonly kind: 'elapsed'; readonly since: string }
   | { readonly kind: 'commits'; readonly count: number }
   | { readonly kind: 'commit-unknown'; readonly commit: string };
 
-export type Due = { readonly name: string; readonly reasons: readonly Reason[] };
+type Due = { readonly name: string; readonly reasons: readonly Reason[] };
 
 // Commits on HEAD's first-parent line since `commit`, or null when `commit` is not in the history
 export type CountCommits = (commit: string) => number | null;

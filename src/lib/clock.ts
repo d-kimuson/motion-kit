@@ -26,7 +26,7 @@ export const createFixedClock = (fixedDate: Date): Clock => {
   };
 };
 
-export const defaultFixedTestDate = (): Date => dateFromIsoString(defaultFixedTestDateIso);
+const defaultFixedTestDate = (): Date => dateFromIsoString(defaultFixedTestDateIso);
 
 let activeClock: Clock = systemClock;
 
@@ -48,8 +48,4 @@ export const setFixedDateForTest = (fixedDate: Date): (() => void) =>
 
 export const resetClockForTest = (): void => {
   activeClock = createFixedClock(defaultFixedTestDate());
-};
-
-export const restoreSystemClock = (): void => {
-  activeClock = systemClock;
 };
