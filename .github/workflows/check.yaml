@@ -30,6 +30,14 @@ jobs:
       - name: Run type checking
         run: pnpm typecheck
 
+      # lean-action caches .lake, but otherwise downloads and installs Lean on every runner.
+      # Cache only toolchains, not elan settings or project build outputs; lake build still runs.
+      - name: Cache Lean toolchain
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.elan/toolchains
+          key: lean-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain') }}
+
       # Checks the Lean proofs and builds .lake/build/bin/spec-oracle, which the differential tests need.
       - name: Build Lean specs
         uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1.6.2
