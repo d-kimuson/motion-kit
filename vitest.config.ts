@@ -6,7 +6,7 @@ export default defineConfig({
   },
   test: {
     isolate: false,
-    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', '.agents/**/*.test.ts'],
     setupFiles: ['configs/vitest/time.setup.ts'],
   },
 });

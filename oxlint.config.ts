@@ -308,13 +308,6 @@ export default defineConfig({
       },
     },
     {
-      // auto-pilot tooling reads the wall clock to tell which maintenance tasks are due; it is not part of rendering.
-      files: ['.agents/**/scripts/**'],
-      rules: {
-        'no-restricted-globals': 'off',
-      },
-    },
-    {
       // Tests may use Node.js and whatever the module under test uses; they are not shipped.
       files: ['**/*.{test,spec}.?([mc])[jt]s?(x)'],
       rules: {

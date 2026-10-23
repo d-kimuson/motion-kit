@@ -12,6 +12,17 @@
 
 `src/lib` holds utilities with no domain meaning (`Result`, clock abstractions) that any context may import.
 
+## Development process terms
+
+Terms of how agents work on this repository, used by `docs/guidelines/`.
+
+| Term              | Meaning                                                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SubAgent          | An agent started from the current agent for a bounded piece of work (an investigation, a review, a QA Check). It returns its result to the agent that started it |
+| Independent Agent | A SubAgent that takes a delegated task to the definition of done (`docs/guidelines/delegate.md`) in its own worktree and context                                 |
+| User task         | A Backlog task waiting for the user's decision or action, assigned to the user's actor (`docs/guidelines/backlog.md`)                                            |
+| Maintenance task  | A recurring task auto-pilot starts when its trigger is reached: `.agents/auto-pilot/maintenance-tasks/<name>/` (`docs/guidelines/auto-pilot.md`)                 |
+
 ## Relations
 
 - Every context depends on `core` for time. `core` depends on nothing but React and `src/lib`.

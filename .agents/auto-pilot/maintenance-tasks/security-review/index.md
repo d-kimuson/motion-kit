@@ -10,6 +10,6 @@ Ask a SubAgent:
 
 ## Output
 
-- In a public repository (`gh repo view --json visibility`; private when there is no remote), do not write findings in public issues. Make critical and medium findings GitHub draft security advisories and tell the user by `docs/guidelines/team-channel.md`.
+- In a public repository (`gh repo view --json visibility`; private when there is no remote), do not write findings in public issues. Make critical and medium findings GitHub draft security advisories and tell the user by `docs/guidelines/team-channel.md`. File minor findings in the Backlog by `docs/guidelines/backlog.md` (it is not public).
 - In a private repository, file the findings in the Backlog by `docs/guidelines/backlog.md`, and also tell the user about critical ones by `docs/guidelines/team-channel.md`.
 - When there are no findings, file nothing.

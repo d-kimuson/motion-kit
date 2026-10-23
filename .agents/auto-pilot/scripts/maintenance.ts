@@ -1,7 +1,7 @@
 // Tells which maintenance tasks are due. Run with Node.js 24.2+ from the repository root:
 //
-//   node .agents/auto-pilot/scripts/maintenance.ts due           the due tasks, each with why and its procedure
-//   node .agents/auto-pilot/scripts/maintenance.ts done <name>   record that <name> ran now, at HEAD
+//   node .agents/auto-pilot/scripts/maintenance.ts due                      the due tasks, each with why and its procedure
+//   node .agents/auto-pilot/scripts/maintenance.ts done <name> [<commit>]   record that <name> ran now, at <commit> (default HEAD)
 //
 // Triggers live in maintenance-tasks/manifest.json (tracked): `every` ("6h", "7d") and `afterCommits`
 // (first-parent commits on HEAD since the last run). A task is due when it never ran or any trigger is reached.
@@ -10,6 +10,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { currentDate, currentTimestamp, dateFromIsoString } from '../../../src/lib/clock.ts';
 
 export type Trigger = { readonly every?: number; readonly afterCommits?: number };
 export type Manifest = { readonly tasks: Readonly<Record<string, Trigger>> };
@@ -80,6 +82,28 @@ export const parseManifest = (
   return errors.length > 0 ? { kind: 'error', errors } : { kind: 'ok', manifest: { tasks } };
 };
 
+const isIsoDate = (text: string): boolean => {
+  try {
+    dateFromIsoString(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const isLastRun = (value: unknown): value is LastRun =>
+  isRecord(value) &&
+  Object.values(value).every(
+    (entry) =>
+      isRecord(entry) &&
+      typeof entry['at'] === 'string' &&
+      isIsoDate(entry['at']) &&
+      typeof entry['commit'] === 'string',
+  );
+
+export const isTaskName = (manifest: Manifest, name: string): boolean =>
+  Object.hasOwn(manifest.tasks, name);
+
 const reasonsFor = (
   trigger: Trigger,
   last: LastRun[string] | undefined,
@@ -89,7 +113,10 @@ const reasonsFor = (
   if (last === undefined) return [{ kind: 'never-run' }];
 
   const reasons: Reason[] = [];
-  if (trigger.every !== undefined && now.getTime() - new Date(last.at).getTime() >= trigger.every) {
+  if (
+    trigger.every !== undefined &&
+    now.getTime() - dateFromIsoString(last.at).getTime() >= trigger.every
+  ) {
     reasons.push({ kind: 'elapsed', since: last.at });
   }
   if (trigger.afterCommits !== undefined) {
@@ -109,7 +136,12 @@ export const dueTasks = (
   Object.entries(manifest.tasks)
     .map(([name, trigger]) => ({
       name,
-      reasons: reasonsFor(trigger, lastRun[name], now, countCommits),
+      reasons: reasonsFor(
+        trigger,
+        Object.hasOwn(lastRun, name) ? lastRun[name] : undefined,
+        now,
+        countCommits,
+      ),
     }))
     .filter((due) => due.reasons.length > 0);
 
@@ -134,7 +166,9 @@ const DIRECTORY = join('.agents', 'auto-pilot', 'maintenance-tasks');
 const MANIFEST = join(DIRECTORY, 'manifest.json');
 const LAST_RUN = join(DIRECTORY, 'last-run.json');
 
-const git = (...args: string[]): string => execFileSync('git', args, { encoding: 'utf8' }).trim();
+// stderr is captured so that an expected failure (an unknown commit) does not print git's message
+const git = (...args: string[]): string =>
+  execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 const countCommits: CountCommits = (commit) => {
   try {
@@ -145,39 +179,47 @@ const countCommits: CountCommits = (commit) => {
   }
 };
 
-const readManifest = (): Manifest => {
-  const parsed = parseManifest(JSON.parse(readFileSync(MANIFEST, 'utf8')));
-  if (parsed.kind === 'error') {
-    process.stderr.write(
-      `${MANIFEST}:\n${parsed.errors.map((error) => `  ${error}`).join('\n')}\n`,
-    );
-    process.exit(1);
+const resolveCommit = (revision: string): string | null => {
+  try {
+    return git('rev-parse', '--verify', `${revision}^{commit}`);
+  } catch {
+    return null;
   }
+};
+
+const fail = (message: string, code: number): never => {
+  process.stderr.write(`${message}\n`);
+  process.exit(code);
+};
+
+const readJson = (path: string): unknown => {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
+    return fail(`${path}: ${error instanceof Error ? error.message : String(error)}`, 1);
+  }
+};
+
+const readManifest = (): Manifest => {
+  const parsed = parseManifest(readJson(MANIFEST));
+  if (parsed.kind === 'error')
+    return fail(`${MANIFEST}:\n${parsed.errors.map((error) => `  ${error}`).join('\n')}`, 1);
   return parsed.manifest;
 };
 
-const isLastRun = (value: unknown): value is LastRun =>
-  isRecord(value) &&
-  Object.values(value).every(
-    (entry) =>
-      isRecord(entry) && typeof entry['at'] === 'string' && typeof entry['commit'] === 'string',
-  );
-
 const readLastRun = (): LastRun => {
   if (!existsSync(LAST_RUN)) return {};
-  const parsed: unknown = JSON.parse(readFileSync(LAST_RUN, 'utf8'));
-  if (!isLastRun(parsed)) {
-    process.stderr.write(`${LAST_RUN}: each task must have string \`at\` and \`commit\`\n`);
-    process.exit(1);
-  }
+  const parsed = readJson(LAST_RUN);
+  if (!isLastRun(parsed))
+    return fail(`${LAST_RUN}: each task must have an ISO date \`at\` and a string \`commit\``, 1);
   return parsed;
 };
 
 const main = (args: readonly string[]): void => {
-  const [command, name] = args;
+  const [command, name, revision = 'HEAD'] = args;
   switch (command) {
     case 'due': {
-      const due = dueTasks(readManifest(), readLastRun(), new Date(), countCommits);
+      const due = dueTasks(readManifest(), readLastRun(), currentDate(), countCommits);
       if (due.length === 0) process.stdout.write('no maintenance task is due\n');
       for (const task of due) {
         const reasons = task.reasons.map(describeReason).join(', ');
@@ -188,23 +230,19 @@ const main = (args: readonly string[]): void => {
       return;
     }
     case 'done': {
-      if (name === undefined || !(name in readManifest().tasks)) {
-        process.stderr.write(`unknown task: ${name ?? '(none)'}\n`);
-        process.exit(2);
-      }
-      const lastRun = {
-        ...readLastRun(),
-        [name]: { at: new Date().toISOString(), commit: git('rev-parse', 'HEAD') },
-      };
+      if (name === undefined || !isTaskName(readManifest(), name))
+        return fail(`unknown task: ${name ?? '(none)'}`, 2);
+      const commit = resolveCommit(revision) ?? fail(`unknown commit: ${revision}`, 2);
+      const lastRun = { ...readLastRun(), [name]: { at: currentTimestamp(), commit } };
       writeFileSync(LAST_RUN, `${JSON.stringify(lastRun, null, 2)}\n`);
       return;
     }
     case undefined:
     default:
-      process.stderr.write(
-        'usage: node .agents/auto-pilot/scripts/maintenance.ts due | done <name>\n',
+      return fail(
+        'usage: node .agents/auto-pilot/scripts/maintenance.ts due | done <name> [<commit>]',
+        2,
       );
-      process.exit(2);
   }
 };
 

@@ -26,7 +26,7 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
 
 ## Independent Agent
 
-An agent that takes a delegated task to the definition of done in its own workspace and context, separate from yours. Run at most 3 at a time.
+Independent Agent, SubAgent, user task, and maintenance task are defined in `docs/CONTEXT-MAP.md`. Run at most 3 Independent Agents at a time.
 
 Start it as a SubAgent that uses a worktree (in Claude Code, the Agent tool with `isolation: "worktree"`). Check its state by the SubAgent's completion notification and by the PR's state and checks (`gh pr list`, `gh pr checks <number>`).
 
@@ -46,7 +46,7 @@ Each turn picks one action and runs prepare → action → feedback → clean-up
 Do the first of the following that applies. When picking a task in 3 and 4, take first the ones that block other tasks or a user decision (the more they block, the earlier), and within those follow the Backlog priority.
 
 1. **Respond**: if the user replied, or a task in progress reported a question or a failure, respond to it. Reflect the reply in the Backlog task.
-2. **Maintenance task**: if a maintenance task is due, start the first one `due` lists (in `manifest.json` order) by its `index.md`, and record it with `node .agents/auto-pilot/scripts/maintenance.ts done <name>`.
+2. **Maintenance task**: if a maintenance task is due and not already in progress, start the first such one `due` lists (in `manifest.json` order) by its `index.md`. Track it in `tasks/maintenance-<name>.md` with the commit HEAD was at when it started. Record it only after its delegate has finished and its output is handled, with `node .agents/auto-pilot/scripts/maintenance.ts done <name> <that commit>`, so that a failed or abandoned run stays due and the commits that landed during the run are covered next time.
 3. **Delegate implementation**: if a task is Ready and the tasks in progress are below the limit, delegate it to an Independent Agent. Have the delegate update the task's state.
 4. **Clarify**: bring a task that is not Ready closer to Ready.
    - The requirement is unclear and the question is small (answerable by options, reversible if wrong): ask the user.
@@ -90,5 +90,5 @@ In a turn whose action did nothing, wait before clean-up with whatever waiting m
   - Critical: reaches other people's data, secrets, or server files, or executes code, without authentication or with an ordinary user's privileges
   - Medium: needs a precondition (a specific privilege, a user's action), or can stop the service
   - Minor: not reachable now, or affects only oneself
-- Write each task's trigger in `tasks.<name>` of `maintenance-tasks/manifest.json`. List the tasks in the order they should run: tasks that find production problems first, and tasks that shrink the target (dead-code-removal) before the tasks that update or check it. `every` (`6h`, `7d`) is the time since the last run; `afterCommits` is the number of first-parent commits on main since the last run. A task runs when either is reached or it has never run.
+- Write each task's trigger in `tasks.<name>` of `maintenance-tasks/manifest.json`. List the tasks in the order they should run: tasks that find production problems first, and tasks that shrink the target (dead-code-removal) before the tasks that update or check it. `every` (`6h`, `7d`) is the time since the last run; `afterCommits` is the number of first-parent commits on HEAD (main, after prepare) since the last run. A task runs when either is reached or it has never run.
 - Add or change a maintenance task only after asking the user and agreeing.
