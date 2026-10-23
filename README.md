@@ -36,6 +36,16 @@ pnpm typecheck
 pnpm test
 ```
 
+## Phase 0 spikes
+
+These browser experiments are separate from `pnpm test`; each README records setup,
+measurements, and limits.
+
+- [Spike A: Motion seekability](spikes/a-motion/README.md) — `pnpm spike:motion`
+- [Spike B: React Three Fiber seekability](spikes/b-r3f/README.md) — `pnpm spike:three` and `pnpm spike:three:flags`
+- [Spike C: browser clock](spikes/c-clock/README.md) — `pnpm spike:clock`
+- [Spike D: asset readiness](spikes/d-assets/README.md) — `pnpm spike:assets`
+
 ## License
 
 MIT
