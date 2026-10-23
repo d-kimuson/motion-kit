@@ -1,6 +1,6 @@
 # Spike D: explicit asset readiness before capture
 
-Run `pnpm spike:assets` to reproduce font, image, GLTF and texture readiness controls in Playwright Chromium. The experiment is **not shipped or exported and is deliberately outside `pnpm test`**: Linux CI stability/runtime and browser provisioning have not been qualified. See the [report](../../docs/contexts/render/knowledge/spike-d-assets.md) and [proposed cross-context ADR](../../docs/decisions/20261023-asset-readiness-registry.proposed.md).
+Run `pnpm spike:assets` to reproduce font, image, GLTF and texture readiness controls in Playwright Chromium. The experiment is **not shipped or exported and is deliberately outside `pnpm test`**: Linux CI stability/runtime and browser provisioning have not been qualified. See the [report](../../docs/contexts/render/knowledge/spike-d-assets.md) and [accepted cross-context ADR](../../docs/decisions/20261023-asset-readiness-registry.accepted.md).
 
 ## Run
 
