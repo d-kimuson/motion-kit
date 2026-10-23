@@ -28,7 +28,7 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
 
 Independent Agent, SubAgent, user task, and maintenance task are defined in `docs/CONTEXT-MAP.md`. Run at most 3 Independent Agents at a time.
 
-Start it as a SubAgent that uses a worktree (in Claude Code, the Agent tool with `isolation: "worktree"`). Check its state by the SubAgent's completion notification and by the PR's state and checks (`gh pr list`, `gh pr checks <number>`).
+Start it as a SubAgent that uses a worktree. In this harness (pi), worktree isolation needs a workflow script, so: keep the git tree clean; write the script to `/tmp/auto-pilot-launch/<task>.js` (outside the repository) containing `runs.run("<key>", { agent: "delegate", model: "openai-codex/gpt-6-astra:high", task, worktree: true })`; then call `subagent({ workflow: "/tmp/auto-pilot-launch/<task>.js", async: true })`. In Claude Code, start it with the Agent tool and `isolation: "worktree"` instead. Use `delegate` with an explicit model: the builtin `worker` agent is disabled by a user settings override. A builtin SubAgent cannot start SubAgents, so run the Review and QA Check of the definition of done yourself with your own SubAgents and hand the findings back to the Independent Agent, which then fixes and merges. Check its state by the SubAgent's completion notification and by the PR's state and checks (`gh pr list`, `gh pr checks <number>`). On a launch failure, see `.agents/auto-pilot/troubleshots/independent-agent-launch.md`.
 
 ## Turn
 
