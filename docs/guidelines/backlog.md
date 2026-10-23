@@ -7,7 +7,7 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 - List: `taskroom_list_projects` to find the project, `taskroom_list_tasks` filtered by its `projectId`; `taskroom_get_task` for one task.
 - Create: `taskroom_create_task` with a new UUID as `id` and `projectId` set to the project.
 - Update: `taskroom_update_task` with the task's current `revision` (read it right before updating; a stale revision is rejected).
-- There are no comments on tasks; progress and findings go in the task `description`.
+- There are no comments on tasks; progress and findings go in the task `description`. For questions awaiting the user, follow Questions on the Backlog in `docs/guidelines/team-channel.md` for the description paragraphs and the waiting status, including when a PR is open.
 
 ## State and priority
 
