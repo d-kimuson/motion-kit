@@ -19,6 +19,7 @@
     "lint:oxlint": "oxlint --ignore-path .gitignore --no-error-on-unmatched-pattern",
     "lint:oxfmt": "pnpm fix:oxfmt --check",
     "lint:licenses": "node scripts/check-licenses.ts",
+    "lint:tsconfig": "node scripts/check-tsconfig-coverage.ts",
     "lint:lean-spec": "node scripts/lean-spec.ts check src/core",
     "fix": "run-p fix:*",
     "fix:oxlint": "pnpm lint:oxlint --fix",
