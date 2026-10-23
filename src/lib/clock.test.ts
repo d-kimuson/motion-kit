@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFixedClock, currentDate, currentTimestamp, dateFromIsoString } from '../index.ts';
-import { resetClockForTest } from './clock.ts';
+import { resetClockForTest, setFixedDateForTest } from './clock.ts';
 
 describe('clock boundary', () => {
   it('uses the fixed default date installed by the test setup', () => {
@@ -11,6 +11,9 @@ describe('clock boundary', () => {
   it('resets to the default date without exposing mutable clock state', () => {
     currentDate().setUTCFullYear(2030);
     expect(currentTimestamp()).toBe('2026-01-01T00:00:00.000Z');
+
+    setFixedDateForTest(dateFromIsoString('2000-01-01T00:00:00.000Z'));
+    expect(currentTimestamp()).toBe('2000-01-01T00:00:00.000Z');
 
     resetClockForTest();
 
