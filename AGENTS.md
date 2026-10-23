@@ -40,7 +40,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 └── .github/                   # CI (check.yaml) and composite setup actions
 ```
 
-Only `src/lib` and `src/core` exist today; the other `src/` directories are created when their context gets its first code.
+Only `src/lib`, `src/core`, and `src/agent` exist today; the other `src/` directories are created when their context gets its first code.
 
 ## Feedback Loop
 
