@@ -146,3 +146,12 @@ vite.config.ts.timestamp-*
 .direnv/
 .env.secret
 .env.overrides
+
+# docs
+docs/tmp
+
+# Lean (lake build output)
+.lake/
+
+# scratch files for exploratory testing (docs/guidelines/quality-assurance/exploratory-testing.md)
+dev/

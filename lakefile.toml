@@ -1,0 +1,15 @@
+name = "spec"
+defaultTargets = ["Spec", "spec-oracle"]
+
+# Lean specs live next to the code they specify, under the directories `globs` names
+# (`src.core.+`: every module under src/core/, the Time Module and its composition rules).
+# Keep `globs` in sync with the directories passed to scripts/lean-spec.ts (package.json `lint:lean-spec`, `lean:doc`).
+[[lean_lib]]
+name = "Spec"
+srcDir = "."
+globs = ["src.core.+"]
+
+# Evaluates the spec's definitions for differential tests against the implementation
+[[lean_exe]]
+name = "spec-oracle"
+root = "spec.Oracle"

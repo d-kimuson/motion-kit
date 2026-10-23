@@ -33,6 +33,8 @@
             pkgs.nodejs_26
             pkgs.pnpm
             pkgs.gitleaks
+            # Lean toolchain manager; `lake build` fetches the version in lean-toolchain on first run.
+            pkgs.elan
           ];
 
           shellHook = ''

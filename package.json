@@ -5,7 +5,9 @@
   "license": "MIT",
   "files": [
     "src",
-    "!src/**/*.test.ts"
+    "!src/**/*.test.ts",
+    "!src/**/*.lean",
+    "!src/**/*.lean.md"
   ],
   "type": "module",
   "sideEffects": false,
@@ -16,16 +18,22 @@
     "lint": "run-p lint:*",
     "lint:oxlint": "oxlint --ignore-path .gitignore --no-error-on-unmatched-pattern",
     "lint:oxfmt": "pnpm fix:oxfmt --check",
+    "lint:licenses": "node scripts/check-licenses.ts",
+    "lint:lean-spec": "node scripts/lean-spec.ts check src/core",
     "fix": "run-p fix:*",
     "fix:oxlint": "pnpm lint:oxlint --fix",
     "fix:oxfmt": "oxfmt --ignore-path .gitignore --no-error-on-unmatched-pattern",
     "typecheck": "tsc -p . --noEmit",
     "test": "vitest run",
+    "lean:build": "lake build",
+    "lean:doc": "node scripts/lean-spec.ts doc src/core",
     "prepare": "lefthook install"
   },
   "dependencies": {},
   "devDependencies": {
     "@tsconfig/strictest": "2.0.8",
+    "@types/node": "26.6.5",
+    "fast-check": "4.10.2",
     "lefthook": "2.2.2",
     "npm-run-all2": "9.0.4",
     "oxfmt": "0.74.0",

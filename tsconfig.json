@@ -18,6 +18,8 @@
     // TypeChecking
     "exactOptionalPropertyTypes": false,
     "allowJs": true,
+    // TypeScript 7 does not pick up @types/* automatically; scripts/ and spec/ use Node.js APIs.
+    "types": ["node"],
 
     // transpile
     "noEmit": true,
@@ -25,5 +27,5 @@
     "target": "es2024",
     "lib": ["dom", "dom.iterable", "esnext"]
   },
-  "include": ["src"]
+  "include": ["src", "spec", "scripts", "configs"]
 }

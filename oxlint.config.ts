@@ -1,5 +1,31 @@
 import { defineConfig } from 'oxlint';
 
+// Dependency boundaries (docs/CONTEXT-MAP.md): Three.js only in the three context, Node.js only in render and cli.
+// Composed per directory in `overrides` below, because `no-restricted-imports` replaces the whole option list.
+const THREE_RESTRICTION = {
+  paths: [{ name: 'three', message: 'Three.js is used only in src/three (the /three subpath).' }],
+  patterns: [
+    {
+      group: ['three/*', '@react-three/*'],
+      message: 'Three.js is used only in src/three (the /three subpath).',
+    },
+  ],
+};
+const NODE_RESTRICTION = {
+  paths: [],
+  patterns: [
+    {
+      group: ['node:*'],
+      message:
+        'Node.js APIs are used only in src/render and src/cli; the rest runs in the browser.',
+    },
+  ],
+};
+const mergeRestrictions = (...restrictions: (typeof THREE_RESTRICTION)[]) => ({
+  paths: restrictions.flatMap((r) => r.paths),
+  patterns: restrictions.flatMap((r) => r.patterns),
+});
+
 export default defineConfig({
   plugins: ['unicorn', 'typescript', 'oxc', 'import', 'jsdoc', 'promise', 'node', 'jest'],
   categories: {},
@@ -145,7 +171,36 @@ export default defineConfig({
         message:
           '現在時刻は src/lib/clock.ts の currentDate/currentTimestamp を使用してください。固定日時の生成も dateFromIsoString を使用してください。',
       },
+      // Determinism: every frame is a pure function of time. Rendering drives time explicitly (design.md §4).
+      {
+        name: 'requestAnimationFrame',
+        message:
+          'Do not drive time from the browser; read time from useTime/useFrame or take it as an argument.',
+      },
+      {
+        name: 'cancelAnimationFrame',
+        message:
+          'Do not drive time from the browser; read time from useTime/useFrame or take it as an argument.',
+      },
     ],
+    'no-restricted-properties': [
+      'error',
+      {
+        object: 'Math',
+        property: 'random',
+        message:
+          'Randomness breaks seekability; take a seed as an input and use a seeded generator.',
+      },
+      {
+        object: 'performance',
+        property: 'now',
+        message:
+          'Wall-clock time breaks seekability; read time from useTime/useFrame or take it as an argument.',
+      },
+    ],
+    'no-restricted-imports': ['error', mergeRestrictions(THREE_RESTRICTION, NODE_RESTRICTION)],
+    'import/no-nodejs-modules': 'error', // Node.js built-ins only where no-restricted-imports allows them (overrides below)
+    'import/no-cycle': 'error', // Contexts depend in one direction (docs/CONTEXT-MAP.md); cycles hide ordering bugs
 
     'typescript/no-explicit-any': 'error', // any 型の使用を禁止
     'typescript/no-non-null-assertion': 'error', // non-null assertion operator の使用を禁止
@@ -228,6 +283,29 @@ export default defineConfig({
       files: ['src/lib/clock.ts'],
       rules: {
         'no-restricted-globals': 'off', // clock 境界だけ Date 直接利用を許可
+      },
+    },
+    {
+      // The three context owns the Three.js / R3F integration.
+      files: ['src/three/**'],
+      rules: {
+        'no-restricted-imports': ['error', NODE_RESTRICTION],
+      },
+    },
+    {
+      // Node-only contexts (render pipeline and CLI) and repository tooling.
+      files: ['src/render/**', 'src/cli/**', 'scripts/**', 'spec/**', 'configs/**'],
+      rules: {
+        'no-restricted-imports': ['error', THREE_RESTRICTION],
+        'import/no-nodejs-modules': 'off',
+      },
+    },
+    {
+      // Tests may use Node.js and whatever the module under test uses; they are not shipped.
+      files: ['**/*.{test,spec}.?([mc])[jt]s?(x)'],
+      rules: {
+        'no-restricted-imports': 'off',
+        'import/no-nodejs-modules': 'off',
       },
     },
   ],
