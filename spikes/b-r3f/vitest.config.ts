@@ -11,6 +11,9 @@ const ignoreDefaultArgs =
 console.log(JSON.stringify({ profile, flags: flagProfiles[profile], ignoreDefaultArgs }));
 
 export default defineConfig({
+  // pnpm's global virtual store must share the renderer's React instance.
+  resolve: { dedupe: ['react', 'react-dom'] },
+  optimizeDeps: { include: ['@react-three/fiber', 'react', 'three'] },
   test: {
     include: ['spikes/b-r3f/**/*.browser.test.ts'],
     testTimeout: 120_000,
