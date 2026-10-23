@@ -22,6 +22,7 @@ Where the things agents read (AGENTS.md, guidelines, skills, troubleshots) live,
 | ADR                  | Cross-context: `docs/decisions/`. Per context: `docs/contexts/<context>/adr/` (`docs/guidelines/writing/adr.md`)                            |
 | Design Doc           | Cross-context: `docs/design-doc/`. Per context: `docs/contexts/<context>/design-doc/` (`docs/guidelines/writing/design-doc.md`)             |
 | Lean spec            | Next to the implementation under `src/core` (`docs/guidelines/quality-assurance/lean-spec.md`)                                              |
+| auto-pilot           | State, maintenance tasks, and workarounds of auto-pilot: `.agents/auto-pilot/` (`docs/guidelines/auto-pilot.md`)                            |
 
 ## Updating
 

@@ -26,7 +26,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 │   ├── agent/                 # agent context: inspect/validate for coding agents
 │   └── cli/                   # agent context: `motion-kit` CLI (Node only)
 ├── spec/                      # Lean oracle (Oracle.lean) and the differential-test helper (oracle.ts)
-├── scripts/                   # Repository tooling run by package.json scripts (lean-spec, check-licenses)
+├── scripts/                   # Repository tooling run by package.json scripts (lean-spec, check-licenses, check-tsconfig-coverage)
 ├── configs/                   # Test setup files
 ├── docs/
 │   ├── CONTEXT-MAP.md         # Bounded contexts and their dependencies
@@ -35,6 +35,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 │   ├── design-doc/            # Cross-context Design Docs
 │   └── guidelines/            # Guidelines referenced from the table below
 ├── .agents/troubleshots/      # Workarounds for tooling problems
+├── .agents/auto-pilot/        # auto-pilot state, maintenance tasks, and its own workarounds
 ├── lakefile.toml, lean-toolchain  # Lean project (specs under src/core)
 └── .github/                   # CI (check.yaml) and composite setup actions
 ```
@@ -43,14 +44,14 @@ Only `src/lib` and `src/core` exist today; the other `src/` directories are crea
 
 ## Feedback Loop
 
-| Command                                  | Checks                                                                                                                                                                                                                         | When to run                                                                       |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `pnpm fix`                               | Auto-fixes oxlint findings and formatting                                                                                                                                                                                      | Always, before the checks below                                                   |
-| `pnpm lint`                              | oxlint (correctness, determinism and dependency-boundary restrictions, import cycles), oxfmt formatting, dependency license allowlist (`scripts/check-licenses.ts`), Lean spec hygiene (`scripts/lean-spec.ts check src/core`) | Always                                                                            |
-| `pnpm typecheck`                         | TypeScript (`tsconfig.json`, strictest)                                                                                                                                                                                        | Always                                                                            |
-| `lake build`                             | Lean proofs under `src/core` and the `spec-oracle` binary the differential tests need                                                                                                                                          | A `*.lean` file changed, or `.lake/` is missing (fresh clone); before `pnpm test` |
-| `node scripts/lean-spec.ts doc src/core` | Regenerates `<name>.lean.md` next to each Lean spec                                                                                                                                                                            | A `*.lean` file changed; commit the regenerated docs                              |
-| `pnpm test`                              | vitest unit tests, property-based tests, and Lean differential tests (`*.oracle.test.ts`)                                                                                                                                      | Always                                                                            |
+| Command                                  | Checks                                                                                                                                                                                                                                                                                                               | When to run                                                                       |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm fix`                               | Auto-fixes oxlint findings and formatting                                                                                                                                                                                                                                                                            | Always, before the checks below                                                   |
+| `pnpm lint`                              | oxlint (correctness, determinism and dependency-boundary restrictions, import cycles), oxfmt formatting, dependency license allowlist (`scripts/check-licenses.ts`), every TypeScript file in the tsconfig program (`scripts/check-tsconfig-coverage.ts`), Lean spec hygiene (`scripts/lean-spec.ts check src/core`) | Always                                                                            |
+| `pnpm typecheck`                         | TypeScript (`tsconfig.json`, strictest)                                                                                                                                                                                                                                                                              | Always                                                                            |
+| `lake build`                             | Lean proofs under `src/core` and the `spec-oracle` binary the differential tests need                                                                                                                                                                                                                                | A `*.lean` file changed, or `.lake/` is missing (fresh clone); before `pnpm test` |
+| `node scripts/lean-spec.ts doc src/core` | Regenerates `<name>.lean.md` next to each Lean spec                                                                                                                                                                                                                                                                  | A `*.lean` file changed; commit the regenerated docs                              |
+| `pnpm test`                              | vitest unit tests, property-based tests, and Lean differential tests (`*.oracle.test.ts`)                                                                                                                                                                                                                            | Always                                                                            |
 
 CI (`.github/workflows/check.yaml`) runs `pnpm lint`, `pnpm typecheck`, `lake build` (via `leanprover/lean-action`), and `pnpm test` on pushes to `main` and on pull requests, plus a gitleaks scan of the history. The pre-commit hook (`lefthook.yml`) fixes staged files with oxlint/oxfmt and runs gitleaks on the staged changes.
 
@@ -71,6 +72,8 @@ Always read every reference relevant to the task before making changes.
 | Writing or changing a Lean spec, writing a differential test                                                  | `docs/guidelines/quality-assurance/lean-spec.md`                       |
 | Adding tools or dependencies                                                                                  | `docs/guidelines/local-dev.md`                                         |
 | Checking, filing, or updating tasks                                                                           | `docs/guidelines/backlog.md`                                           |
+| Asking the user or the team a question, or reporting to them                                                  | `docs/guidelines/team-channel.md`                                      |
+| Leading the progress of the project (when started as auto-pilot)                                              | `docs/guidelines/auto-pilot.md`                                        |
 | A command or tool fails unexpectedly                                                                          | `.agents/troubleshots/`                                                |
 
 ## Code Review Rules

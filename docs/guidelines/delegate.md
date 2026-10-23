@@ -13,6 +13,9 @@ The boundary of responsibility between the user and the agent, and how far an im
 
 When given an implementation task, take it to the target below without being told, and report completion only after every verification below passes. When the instruction or a command (skill, prompt) names its own target or verification, follow that instead.
 
+- This applies to every change to the repository, harness and documentation changes included. A command whose steps end before committing (a report, a review) does not name a narrower target; take its change to the target as well.
+- Being told to commit or to go ahead is not a narrower target either. The target is the user's standing instruction: do not ask again before the push, PR, or merge it includes.
+
 ### Target
 
 Target: **Merge PR**.

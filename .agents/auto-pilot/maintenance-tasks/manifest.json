@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "dead-code-removal": { "afterCommits": 100 },
+    "dependency-update": { "every": "7d" },
+    "security-review": { "every": "7d", "afterCommits": 50 },
+    "ci-performance": { "every": "30d" }
+  }
+}

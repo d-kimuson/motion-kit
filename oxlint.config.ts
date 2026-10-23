@@ -294,7 +294,14 @@ export default defineConfig({
     },
     {
       // Node-only contexts (render pipeline and CLI) and repository tooling.
-      files: ['src/render/**', 'src/cli/**', 'scripts/**', 'spec/**', 'configs/**'],
+      files: [
+        'src/render/**',
+        'src/cli/**',
+        'scripts/**',
+        'spec/**',
+        'configs/**',
+        '.agents/**/scripts/**',
+      ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
         'import/no-nodejs-modules': 'off',
