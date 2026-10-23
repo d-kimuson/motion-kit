@@ -65,6 +65,65 @@ theorem layout_empty (start : Rat) : layout start [] [] = [] := by rfl
 theorem layout_head (start scene : Rat) (rest overlaps : List Rat) :
     (layout start (scene :: rest) overlaps).head? = some (start, start + scene) := by rfl
 
+/-- Entry i starts at the initial offset plus the durations before i minus the overlaps before i,
+and ends one scene duration later. This holds for all rational lists, hence in particular for
+validated nonnegative durations with exactly one bounded overlap per adjacent pair. -/
+theorem layout_entry (start : Rat) (scenes overlaps : List Rat) (i : Nat) (scene : Rat)
+    (hi : scenes[i]? = some scene) :
+    (layout start scenes overlaps)[i]? = some
+      (start + (scenes.take i).sum - (overlaps.take i).sum,
+       start + (scenes.take i).sum - (overlaps.take i).sum + scene) := by
+  induction i generalizing start scenes overlaps with
+  | zero =>
+    cases scenes with
+    | nil => simp at hi
+    | cons first rest =>
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at hi
+      subst first
+      simp only [layout, List.getElem?_cons_zero, List.take_zero, List.sum_nil]
+      congr 2 <;> grind
+  | succ i ih =>
+    cases scenes with
+    | nil => simp at hi
+    | cons first rest =>
+      simp only [List.getElem?_cons_succ] at hi
+      cases overlaps with
+      | nil =>
+        simp only [layout, List.getElem?_cons_succ, List.headD_nil, List.drop_nil]
+        rw [ih _ _ _ hi]
+        simp only [List.take_succ_cons, List.take_nil, List.sum_nil, List.sum_cons]
+        congr 2 <;> grind
+      | cons overlap remaining =>
+        simp only [layout, List.getElem?_cons_succ, List.headD_cons,
+          List.drop_succ_cons, List.drop_zero]
+        rw [ih _ _ _ hi]
+        simp only [List.take_succ_cons, List.sum_cons]
+        congr 2 <;> grind
+
+/-- At every adjacent pair of layout entries, the incoming start is the outgoing end minus
+that pair's overlap. Both ends are their respective starts plus their scene durations. -/
+theorem layout_adjacent (start : Rat) (scenes overlaps : List Rat) (i : Nat)
+    (left right overlap : Rat) (hl : scenes[i]? = some left)
+    (hr : scenes[i + 1]? = some right) (ho : overlaps[i]? = some overlap) :
+    let offset := start + (scenes.take i).sum - (overlaps.take i).sum
+    (layout start scenes overlaps)[i]? = some (offset, offset + left) ∧
+    (layout start scenes overlaps)[i + 1]? =
+      some (offset + left - overlap, offset + left - overlap + right) := by
+  dsimp only
+  constructor
+  · exact layout_entry start scenes overlaps i left hl
+  · have h := layout_entry start scenes overlaps (i + 1) right hr
+    simp only [List.take_add_one, hl, ho, Option.toList_some,
+      List.sum_append, List.sum_cons, List.sum_nil] at h
+    rw [h]
+    congr 2 <;> grind
+
+/-- Three ten-unit scenes with overlaps two and three occupy [0,10), [8,18), [15,25). -/
+theorem layout_three_scenes :
+    layout 0 [10, 10, 10] [2, 3] = [(0, 10), (8, 18), (15, 25)] := by
+  simp only [layout, List.headD_cons, List.drop_succ_cons, List.drop_zero]
+  congr 2 <;> grind
+
 /-- Progress is clamped to zero before the overlap and one at its exclusive end.
 A zero overlap switches directly from zero to one at its start. -/
 def progress (start duration time : Rat) : Rat :=
@@ -95,6 +154,33 @@ theorem overlap_membership_offset (start left right overlap time : Rat)
   simp only [overlap_bounds] at h
   simp only [Sequence.membership, nextStart, pairDuration] at ht ⊢
   grind
+
+/-- Every adjacent pair actually returned by layout contains every time in its half-open
+overlap, at any index and initial offset, provided that pair's overlap is valid. -/
+theorem layout_overlap_membership (start : Rat) (scenes overlaps : List Rat) (i : Nat)
+    (left right overlap time : Rat) (outgoing incoming : Rat × Rat)
+    (hl : scenes[i]? = some left) (hr : scenes[i + 1]? = some right)
+    (ho : overlaps[i]? = some overlap)
+    (hout : (layout start scenes overlaps)[i]? = some outgoing)
+    (hin : (layout start scenes overlaps)[i + 1]? = some incoming)
+    (h : validOverlap left right overlap = true)
+    (ht : Sequence.contains incoming.1 outgoing.2 time = true) :
+    Sequence.contains outgoing.1 outgoing.2 time = true ∧
+    Sequence.contains incoming.1 incoming.2 time = true := by
+  let offset := start + (scenes.take i).sum - (overlaps.take i).sum
+  obtain ⟨hleft, hright⟩ := layout_adjacent start scenes overlaps i left right overlap hl hr ho
+  have houtgoing : outgoing = (offset, offset + left) := Option.some.inj (hout.symm.trans hleft)
+  have hincoming : incoming = (offset + left - overlap, offset + left - overlap + right) :=
+    Option.some.inj (hin.symm.trans hright)
+  subst outgoing incoming
+  have hs : offset + nextStart left overlap = offset + left - overlap := by
+    unfold nextStart; grind
+  have he : offset + pairDuration left right overlap = offset + left - overlap + right := by
+    unfold pairDuration; grind
+  have ht' : Sequence.contains (offset + nextStart left overlap) (offset + left) time = true := by
+    rw [hs]; exact ht
+  have hm := overlap_membership_offset offset left right overlap time h ht'
+  simpa only [hs, he] using hm
 
 /-- Zero overlap has no time at which both adjacent scenes are present. -/
 theorem zero_overlap (left time : Rat) :

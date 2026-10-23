@@ -19,9 +19,17 @@
 - `Transition.placement_total`: For one overlap per adjacent pair, accumulated placement equals the sum-minus-overlaps rule.
 - `Transition.layout_empty`: An empty series places no scene, regardless of its offset.
 - `Transition.layout_head`: Each placed scene starts at the exact current offset and ends one duration later.
+- `Transition.layout_entry`: Entry i starts at the initial offset plus the durations before i minus the overlaps before i,
+  and ends one scene duration later. This holds for all rational lists, hence in particular for
+  validated nonnegative durations with exactly one bounded overlap per adjacent pair.
+- `Transition.layout_adjacent`: At every adjacent pair of layout entries, the incoming start is the outgoing end minus
+  that pair's overlap. Both ends are their respective starts plus their scene durations.
+- `Transition.layout_three_scenes`: Three ten-unit scenes with overlaps two and three occupy [0,10), [8,18), [15,25).
 - `Transition.overlap_bounds`: Valid overlap is exactly the nonnegative value bounded by both adjacent scenes.
 - `Transition.overlap_membership`: Both scenes are present throughout their overlap, including its start.
 - `Transition.overlap_membership_offset`: At any layout offset, both adjacent scenes contain every time in their overlap.
+- `Transition.layout_overlap_membership`: Every adjacent pair actually returned by layout contains every time in its half-open
+  overlap, at any index and initial offset, provided that pair's overlap is valid.
 - `Transition.zero_overlap`: Zero overlap has no time at which both adjacent scenes are present.
 - `Transition.overlap_equal_scene`: Overlap equal to the outgoing scene starts the incoming scene at zero.
 - `Transition.full_overlap_duration`: Subtracting a full outgoing scene overlap leaves exactly the incoming duration.

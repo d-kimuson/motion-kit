@@ -104,6 +104,30 @@ describe('Timeline rational conversions', () => {
     );
   });
 
+  it('matches Lean at exact signed half-frame ties and one billionth of a frame on either side', () => {
+    expect.hasAssertions();
+    checkSamples(
+      [
+        { numerator: 1, denominator: 1 },
+        { numerator: 30000, denominator: 1001 },
+      ].flatMap((fps) =>
+        [-2, -1, 0, 1, 2].flatMap((frame) =>
+          [-1, 0, 1].map((epsilon) =>
+            // Exact rational positions: ties go toward +infinity. Products in positionSample
+            // remain safe integers, including at 30000/1001 fps; no decimal seconds are used.
+            positionSample(
+              {
+                numerator: frame * 1_000_000_000 + 500_000_000 + epsilon,
+                denominator: 1_000_000_000,
+              },
+              fps,
+            ),
+          ),
+        ),
+      ),
+    );
+  });
+
   it('matches Lean at arbitrary rational positions and on both sides of signed half-frame ties', () => {
     expect.hasAssertions();
     fc.assert(
