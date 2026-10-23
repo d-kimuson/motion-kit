@@ -17,9 +17,16 @@ export const findUncoveredFiles = (
   programFiles: readonly string[],
   projectRoot: string,
 ): string[] => {
-  const root = realpathSync(projectRoot);
-  const canonicalPath = (file: string): string => realpathSync(resolve(root, file));
-  const covered = new Set(programFiles.map(canonicalPath));
+  const root = realpathSync.native(projectRoot);
+  const canonicalPath = (file: string): string => realpathSync.native(resolve(root, file));
+  const covered = new Set<string>();
+  for (const file of programFiles) {
+    try {
+      covered.add(canonicalPath(file));
+    } catch {
+      // A stale or inaccessible program entry cannot cover any repository file.
+    }
+  }
   return repositoryFiles.filter((file) => TS_FILE.test(file) && !covered.has(canonicalPath(file)));
 };
 

@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
@@ -42,6 +50,53 @@ describe('findUncoveredFiles', () => {
     const files = ['src/a.ts', 'scripts/b.ts'];
     const { root } = project(files);
     expect(findUncoveredFiles(files, ['scripts/b.ts', 'src/a.ts'], root)).toEqual([]);
+  });
+
+  it.for([
+    { spelling: 'case', directory: 'MyProj', alternate: 'myproj', file: 'Foo.ts', alias: 'foo.ts' },
+    {
+      spelling: 'Unicode normalization',
+      directory: 'Café',
+      alternate: 'Cafe\u0301',
+      file: 'Fóo.ts',
+      alias: 'Fo\u0301o.ts',
+    },
+  ])(
+    'matches alternate $spelling in roots and both file sets',
+    ({ directory, alternate, file, alias }, context) => {
+      const { root } = project([`${directory}/${file}`]);
+      const canonicalRoot = join(root, directory);
+      const alternateRoot = join(root, alternate);
+      if (!existsSync(join(alternateRoot, alias))) {
+        context.skip();
+        return;
+      }
+      const programFile = join(canonicalRoot, file);
+      expect(findUncoveredFiles([file], [programFile], alternateRoot)).toEqual([]);
+      expect(findUncoveredFiles([alias], [programFile], canonicalRoot)).toEqual([]);
+      expect(findUncoveredFiles([file], [join(alternateRoot, alias)], canonicalRoot)).toEqual([]);
+      const link = join(root, 'alternate-project');
+      symlinkSync(alternateRoot, link, 'dir');
+      expect(findUncoveredFiles([file], [programFile], link)).toEqual([]);
+    },
+  );
+
+  it.each(['missing.ts', 'broken.ts'])(
+    'ignores a stale program entry (%s) and still reports uncovered files',
+    (stale) => {
+      const files = ['src/a.ts', 'tools/uncovered.ts'];
+      const { root } = project(files);
+      const missing = join(root, '..', 'external.ts');
+      symlinkSync(missing, join(root, 'broken.ts'));
+      const programFiles = ['src/a.ts', stale === 'missing.ts' ? missing : join(root, stale)];
+      expect(() => findUncoveredFiles(files, programFiles, root)).not.toThrow();
+      expect(findUncoveredFiles(files, programFiles, root)).toEqual(['tools/uncovered.ts']);
+    },
+  );
+
+  it('does not swallow repository-file canonicalization errors', () => {
+    const { root } = project([]);
+    expect(() => findUncoveredFiles(['missing.ts'], [], root)).toThrow(/ENOENT/);
   });
 
   it('matches real program paths against a symlinked project root', () => {
