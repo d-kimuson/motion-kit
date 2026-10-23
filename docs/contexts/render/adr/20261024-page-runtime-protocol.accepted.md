@@ -1,0 +1,34 @@
+# Drive the shared page runtime with promise RPC and retain ownership through capture
+
+## Context
+
+[Phase 0](../../../decisions/20261024-time-control-and-frame-capture.accepted.md) already selects explicit Presentation Time, a single per-realm frame generation shared with assets, per-realm queueing, layout-effect content acknowledgements, re-settlement on resource changes, and aborted control flow on cancellation. TASK-153 must connect these rules to Node and ordinary browser preview without re-deciding them.
+
+Returning a resolved seek promise and immediately releasing the page would allow the next request to change pixels before Playwright captures them. A raw CDP readiness binding would also make preview depend on Chromium automation privileges.
+
+## Decision
+
+core exposes an internal version-1 page API with registry enumeration, mount, **`renderFrame(n)`**, capture validation/completion, cancel and dispose operations. Node invokes it through `page.evaluate`; page-to-host lifecycle/ownership/Diagnostic events use a Playwright `page.exposeFunction` installed before navigation. Preview uses equivalent promise RPC over a `MessageChannel` to its composition iframe. Do not require raw CDP bindings, CDP virtual time, or preview host clock patches.
+
+Only plain validated protocol data crosses the host boundary. An operation has a transport correlation id, not a second frame counter. core allocates the frame generation; every acknowledgement/lease belongs to that generation and the composition instance/revision and resource versions. A disposed/replaced realm has a new instance identity. A ready lease includes frame, rational FPS and derived Presentation Time, but the Time Module remains the arithmetic authority.
+
+A ready result **retains exclusive realm ownership**. Node validates the lease/resource versions before screenshot and completes it afterward; completion atomically rechecks identity/versions and releases ownership only on accepted publication. Changed versions discard bytes and re-settle under the same generation/original deadline. Cancellation/supersession instead aborts without output or a fabricated Diagnostic. Renderer requests never supersede; preview supersedes older preview work only and queues behind surviving renderer work. These are Phase 0's rules, not new scheduling policy.
+
+Ownership acquisition is an external-host grant at dequeue, before any page mutation. The host starts its monotonic deadline when granting and keeps it active through capture/final validation. A request awaiting a grant remains queued under its caller timeout. This avoids starting the deadline only after a delayed page event and avoids charging queue residence as frame work. Node can close/recycle an unresponsive page/context and terminate the browser; preview's separate UI host can replace an iframe but cannot claim an equivalent hard process-kill guarantee.
+
+Use the [Design Doc's protocol sequence](../design-doc/20261024-composition-loading.md#runtime-protocol-and-capture-lease). A resolved ready result, not a lifecycle event, network idle, React flush, fallback commit, or screenshot completion alone, proves settlement. Adapter registration is realm-local and library-neutral; motion/three retain their own library work and never export scene objects to core/render. Phase 1 implements the neutral contract and React/asset support, not later public integration APIs.
+
+Diagnostics follow [Phase 0's failure table](../../../decisions/20261024-time-control-and-frame-capture.accepted.md#failure-diagnostics) and the [CLI contract](../../agent/adr/20261024-cli-output-contract.accepted.md). For loading, `render.page-error` also covers config/module/registry initialization failure and loading timeout before a frame exists; it is not `render.frame-timeout`. This extends the documented producer scope without a new code, payload, severity, or envelope. Validate/sanitize data and deduplicate results/events. Route Vite, child-process and browser logs to stderr; the CLI alone writes its JSON envelope.
+
+## Consequences
+
+Preview and rendering share one page-side seek/settle implementation, while their scheduling and supervision differ. An internal protocol-version mismatch fails loading rather than guessing compatibility. Transport cancellation, stale messages, disposal and late screenshot results need tests alongside the successful seek path.
+
+`Result`/Diagnostic failures and a distinct aborted outcome must remain distinguishable in TASK-157's renderer API; no new CLI cancellation envelope is designed here. Host classification must not fabricate a pending-asset list for an unresponsive page. A healthy Vite service may be reused after a page fails, but old page work must never mutate a new request.
+
+## Alternatives
+
+- Raw CDP binding or virtual-time clock: unnecessary browser-specific transport and unavailable to ordinary preview; virtual time was already rejected as the master clock.
+- Release on seek resolution: allows another generation to mutate the page between settlement and capture.
+- Capture inside the browser function: screenshot supervision and uninterruptible GPU/RPC deadlines belong to the external renderer host.
+- Separate preview clock/runtime: violates the accepted shared-runtime decision and risks different frame semantics.

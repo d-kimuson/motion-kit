@@ -18,6 +18,17 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 | Seekability Tier  | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                       |
 | Asset Readiness   | `useAsset`                       | Whether every asset a frame needs (font, image, video frame, model, texture) is loaded, reported before capture; a failure is a diagnostic, not a silent skip.           |
 
+The following loading terms describe the accepted TASK-153 API; they are not implemented yet.
+
+| Term                     | Code                  | Definition                                                                                                                                 |
+| ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Composition registry     | `defineCompositions`  | An ordered immutable collection of uniquely identified Composition definitions exported as `compositions` by an entry.                     |
+| Composition definition   | `defineComposition`   | A component, its Zod props schema with defaults, and static id/resolution/rational FPS/frame-count metadata.                               |
+| Composition realm        | `runtime`             | A dedicated page or iframe owning one composition instance's React root, explicit time, frame queue, assets and integration registrations. |
+| Composition revision     | `revision`            | The identity of the loaded entry/configuration version to which an instance and its acknowledgements belong.                               |
+| Capture lease            | `lease`               | A plain generation/version-tagged identity retaining exclusive realm ownership from settlement through capture acceptance.                 |
+| Integration registration | `registerIntegration` | A realm-local, library-neutral registration of capability, absolute-time seek/settle callbacks and disposal for an integration.            |
+
 ## Invariants
 
 - Within the supported A/B paths and a fixed environment, a frame is a pure function of its Presentation Time: rendering frame N gives the same output whatever frame was rendered before. Tier C remains usable, not covered by this guarantee; in Phase 1 the Browser Renderer emits `seek.uncontrolled` when an integration is identified as Tier C.
@@ -25,6 +36,8 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 - Frame boundaries are not rounded to integers before the Time Module converts them; fps may be rational (30000/1001).
 - The total duration of a `TransitionSeries` is the sum of its scenes minus the sum of its overlaps.
 - A component that cannot be identified is never assumed to be Tier A or B.
+- The [Composition registry contract](adr/20261024-composition-registry.accepted.md) uses schema-owned defaults, not a parallel `defaultProps`; only validated JSON props mount the selected component. Components and schemas remain in the composition realm.
+- The [loading design](../render/design-doc/20261024-composition-loading.md) shares core's browser bootstrap/runtime between preview and rendering, not their host scheduling or mutable realms.
 - core's contract provides one explicit-time runtime for the Browser Renderer and the future preview to consume; it does not assert that a preview exists. Presentation Time stays fixed while registered work settles. Completion belongs to the active frame generation and resource versions, not just a frame number; allocating a queued generation does not invalidate the active one. Resource-version changes re-settle within that generation; cancellation or supersession aborts it without publication. The [readiness barrier contract](../../decisions/20261024-time-control-and-frame-capture.accepted.md#readiness-barrier-contract) defines exclusive ownership, queueing and deadlines.
 
 ## Seekability

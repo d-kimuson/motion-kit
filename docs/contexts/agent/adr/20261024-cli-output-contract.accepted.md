@@ -44,18 +44,20 @@ A Diagnostic contains `code`, `severity`, and a nonempty `message`: one sentence
 
 `details` is an optional JSON object with code-specific contents. For `composition.props-invalid`, use `{ "issues": [...] }`, the JSON-serialized Zod issues (including `code`, `path`, `message`, and issue-specific properties). For `asset.load-failed` and `asset.not-ready`, use `{ "assets": [{ "kind": "image", "source": "/assets/checker.svg", "phase": "decode" }] }`: each entry identifies the asset kind, source URL/path and failing or pending phase. An entry may include `relatedSources`, an array of associated URLs/paths such as a texture's upload gate; for textures, `source` identifies the actual source image. For `asset.not-ready`, `assets` lists every pending registration and `timeoutMs` records the finite, nonnegative readiness deadline duration in milliseconds. Redact credentials and other secrets from source identities. Known scene/frame information belongs in `location`; raw exceptions and internal spike identifiers do not belong in `message`, which remains a one-sentence human statement, and `hint` gives a corrective action. The remaining initial codes do not yet define a details payload; do not invent one without documenting it here. The common schema checks JSON representability, not the contents of each code's details. Do not put exceptions, stacks, or secrets in details.
 
+TASK-153's accepted [page protocol](../../render/adr/20261024-page-runtime-protocol.accepted.md) clarifies `render.page-error`: besides page exceptions, producers use it for configuration/module/registry initialization failures and loading timeouts before a frame exists. It has no new details payload; startup failure is not `render.frame-timeout`. A malformed duration/props schema result still uses its existing `composition.*` code.
+
 The code pattern is `^[a-z]+(\.[a-z0-9-]+)+$`. The namespace is the segment before the first dot. `DiagnosticCodeSchema`, a Zod enum, is the single source of truth for allowed codes; its closed membership enforces the pattern and reserved namespaces. Even features not yet implemented reserve their codes:
 
-| Namespace     | Initial codes                                                                                         |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                           |
-| `composition` | `composition.props-invalid`, `composition.duration-invalid`                                           |
-| `asset`       | `asset.load-failed`, `asset.not-ready` (readiness barrier timed out)                                  |
-| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error` (uncaught page exception) |
-| `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-failed`                                                     |
-| `seek`        | `seek.uncontrolled` (Tier C detected; emit as warning)                                                |
-| `layout`      | `layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`, `layout.font-not-loaded`        |
-| `internal`    | `internal.unexpected`                                                                                 |
+| Namespace     | Initial codes                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                                       |
+| `composition` | `composition.props-invalid`, `composition.duration-invalid`                                                       |
+| `asset`       | `asset.load-failed`, `asset.not-ready` (readiness barrier timed out)                                              |
+| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error` (page or composition-loading failure) |
+| `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-failed`                                                                 |
+| `seek`        | `seek.uncontrolled` (Tier C detected; emit as warning)                                                            |
+| `layout`      | `layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`, `layout.font-not-loaded`                    |
+| `internal`    | `internal.unexpected`                                                                                             |
 
 ### Command data
 

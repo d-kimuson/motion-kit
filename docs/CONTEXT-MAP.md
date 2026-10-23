@@ -25,9 +25,11 @@ Terms of how agents work on this repository, used by `docs/guidelines/`.
 
 ## Relations
 
-- Every context depends on `core` for time. `core` depends on nothing but React and `src/lib`.
+- Every context depends on `core` for time. `core` depends on React/ReactDOM for the tree/browser bootstrap, Zod for Composition schemas, and `src/lib`, never host or integration contexts.
 - `motion`, `theme`, `three`, and `presets` depend on `core`; `presets` also depends on `motion` and `theme`, and its `three` presets on `three`. None of them depends on `render` or `agent`.
 - `three` is the only context that imports Three.js and React Three Fiber (lint-enforced).
 - `render` depends on `core` and evaluates whatever the Composition contains; it never imports `presets` or `three` directly. Node.js APIs are allowed only in `render` and `agent` (lint-enforced).
 - `agent` depends on `render` for `render` and `frame`, and on `core` and `presets` metadata for `inspect` and `validate`.
 - A value crosses a boundary as a plain data type (a `Result`, a `Diagnostic`, a time value from the Time Module), never as a React component instance or a library object.
+- The accepted [composition-loading design](contexts/render/design-doc/20261024-composition-loading.md) keeps Node-owned generated-entry/HTML-shell source in `src/render/loading`, but its emitted page graph imports only user browser code, core's browser bootstrap and browser-safe dependencies. It never imports `src/render`, `src/cli`, or agent CLI modules. TASK-154/157 add context-import restrictions and resolved-browser-graph tests; current lint covers built-ins/Three placement, not this entire graph.
+- Preview and rendering share core's page-side time/seek/settle runtime and the registry loading contract. Preview UI scheduling runs outside the composition iframe and needs neither CDP nor host clock patches; render owns external browser/deadline/capture supervision.
