@@ -20,7 +20,7 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
   - Recent decisions: what was decided and why. Remove an entry once later turns no longer use it
   - Notes for the next turn
   - The wait interval (Wait, below)
-- `tasks/<id>.md`: one file per task in progress. `<id>` is the Backlog task id. Write who it was delegated to, what was asked, links (PR, worktree, task), what it is waiting for, and what has been decided. Delete the file when the task is done or dropped.
+- `tasks/<id>.md`: one file per task in progress. `<id>` is the Backlog task id, or `maintenance-<name>` for a maintenance task in progress (which also records the commit HEAD was at when it started). Write who it was delegated to, what was asked, links (PR, worktree, task), what it is waiting for, and what has been decided. Delete the file when the task is done or dropped; for a maintenance task, after recording it with `done`.
 - `maintenance-tasks/`: maintenance tasks (Maintenance tasks, below).
 - `troubleshots/<topic>.md`: workarounds for the auto-pilot mechanism itself, in the format of `docs/guidelines/writing/troubleshoot.md`. When a command or integration fails unexpectedly, look here first.
 
