@@ -1,0 +1,532 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/__schema0"
+    },
+    {
+      "$ref": "#/$defs/__schema13"
+    },
+    {
+      "$ref": "#/$defs/__schema14"
+    },
+    {
+      "$ref": "#/$defs/__schema17"
+    }
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "then": {
+        "properties": {
+          "diagnostics": {
+            "not": {
+              "contains": {
+                "properties": {
+                  "severity": {
+                    "const": "error"
+                  }
+                },
+                "required": ["severity"]
+              }
+            }
+          },
+          "data": {
+            "not": {
+              "type": "null"
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "diagnostics": {
+            "contains": {
+              "properties": {
+                "severity": {
+                  "const": "error"
+                }
+              },
+              "required": ["severity"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "ok": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "command": {
+          "type": "string",
+          "const": "render"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "output": {
+                  "$ref": "#/$defs/__schema10"
+                },
+                "format": {
+                  "type": "string",
+                  "const": "mp4"
+                },
+                "width": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "height": {
+                  "$ref": "#/$defs/__schema12"
+                },
+                "fps": {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "denominator": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["numerator", "denominator"],
+                  "additionalProperties": false
+                },
+                "frameCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "durationSeconds": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "output",
+                "format",
+                "width",
+                "height",
+                "fps",
+                "frameCount",
+                "durationSeconds"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "number",
+      "const": 1
+    },
+    "__schema2": {
+      "type": "boolean"
+    },
+    "__schema3": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "message": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "location": {
+                "$ref": "#/$defs/__schema6"
+              },
+              "details": {
+                "$ref": "#/$defs/__schema7"
+              },
+              "severity": {
+                "type": "string",
+                "const": "error"
+              },
+              "hint": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["code", "message", "severity", "hint"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "message": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "location": {
+                "$ref": "#/$defs/__schema6"
+              },
+              "details": {
+                "$ref": "#/$defs/__schema7"
+              },
+              "severity": {
+                "type": "string",
+                "const": "warning"
+              },
+              "hint": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["code", "message", "severity", "hint"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "message": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "location": {
+                "$ref": "#/$defs/__schema6"
+              },
+              "details": {
+                "$ref": "#/$defs/__schema7"
+              },
+              "severity": {
+                "type": "string",
+                "const": "info"
+              },
+              "hint": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["code", "message", "severity"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "__schema4": {
+      "type": "string",
+      "enum": [
+        "cli.invalid-arguments",
+        "cli.entry-not-found",
+        "cli.composition-not-found",
+        "composition.props-invalid",
+        "composition.duration-invalid",
+        "asset.load-failed",
+        "asset.not-ready",
+        "render.browser-launch-failed",
+        "render.frame-timeout",
+        "render.page-error",
+        "encode.ffmpeg-not-found",
+        "encode.ffmpeg-failed",
+        "seek.uncontrolled",
+        "layout.overflow",
+        "layout.out-of-frame",
+        "layout.unexpected-scroll",
+        "layout.font-not-loaded",
+        "internal.unexpected"
+      ]
+    },
+    "__schema5": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One sentence describing the finding; never a stack trace."
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "compositionId": {
+          "type": "string"
+        },
+        "sceneId": {
+          "type": "string"
+        },
+        "elementId": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "column": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "timeSeconds": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema8"
+      }
+    },
+    "__schema8": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema8"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema8"
+          }
+        }
+      ]
+    },
+    "__schema9": {
+      "type": "number",
+      "minimum": 0
+    },
+    "__schema10": {
+      "type": "string",
+      "pattern": "^(?:\\/|[a-zA-Z]:[\\\\/]|\\\\\\\\[^\\\\]+\\\\[^\\\\]+(?:\\\\|$))"
+    },
+    "__schema11": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema12": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema13": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "ok": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "command": {
+          "type": "string",
+          "const": "frame"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "output": {
+                  "$ref": "#/$defs/__schema10"
+                },
+                "format": {
+                  "type": "string",
+                  "const": "png"
+                },
+                "frame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "timeSeconds": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "width": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "height": {
+                  "$ref": "#/$defs/__schema12"
+                }
+              },
+              "required": ["output", "format", "frame", "timeSeconds", "width", "height"],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
+      "additionalProperties": false
+    },
+    "__schema14": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "ok": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "command": {
+          "type": "string",
+          "const": "inspect"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema15"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
+      "additionalProperties": false
+    },
+    "__schema15": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema16"
+      }
+    },
+    "__schema16": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema16"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema16"
+          }
+        }
+      ]
+    },
+    "__schema17": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "ok": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "command": {
+          "type": "string",
+          "const": "validate"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema15"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
+      "additionalProperties": false
+    }
+  }
+}
