@@ -36,6 +36,7 @@
     "configs",
     "spikes/a-motion",
     "spikes/b-r3f",
+    "spikes/c-clock",
     ".agents/**/*.ts"
   ]
 }

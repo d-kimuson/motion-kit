@@ -1,0 +1,43 @@
+# Own presentation time explicitly and share seek/readiness adapters between preview and rendering
+
+## Context
+
+Every context consumes time from core; render captures the resulting Composition. The [context map](../CONTEXT-MAP.md) makes clock selection a cross-context decision. The design requires a frame to be independent of traversal order and preview/rendering to use the same Timeline Runtime. Freezing all asynchronous scheduling is not equivalent to freezing Presentation Time: assets and registered work still have to complete before capture.
+
+TASK-145 compares motion-kit's own injected clock, controlled rAF alone, and Chromium CDP virtual time. The [Spike C report](../contexts/core/knowledge/spike-c-clock.md) and [reproducible experiment](../../spikes/c-clock/README.md) record the fixtures, raw-versus-adapted integration measurements, negative controls, environment and limits. TASK-151 will consolidate this accepted decision with the other Phase 0 spikes.
+
+The same React/CSS/rAF/video scene is tested with identical CSS/media adapters. The full scene includes both timestamp-only and independent clock-reading consumers. Results on headless Chromium 156.0.8078.4, Playwright 1.64.1, macOS arm64:
+
+| Candidate                             | Random/repeated + fresh-page exact DOM/PNG matches | Held DOM/PNG | Mean ± standard deviation per captured frame | Population variance |
+| ------------------------------------- | -------------------------------------------------- | ------------ | -------------------------------------------- | ------------------- |
+| Own clock + controlled rAF + adapters | **20/20**                                          | **1/1**      | **38.78 ± 6.32 ms**                          | **39.90 ms²**       |
+| Controlled rAF only + adapters        | 0/20                                               | 1/1          | 40.37 ± 9.36 ms                              | 87.57 ms²           |
+| CDP virtual time + adapters           | 0/20                                               | 0/1          | 66.88 ± 9.20 ms                              | 84.59 ms²           |
+
+Each cost row has 28 samples, including seeking, readiness, DOM inspection and PNG capture, excluding page setup. These are small-workload end-to-end measurements, not generic throughput promises. All three can inject React state explicitly and seek the tested CSS/video through adapters. Only the own-clock candidate synchronizes every tested clock-reading consumer at the requested time. The controlled-rAF difference is not evidence that timestamp-only animation is non-deterministic.
+
+## Decision
+
+**Accept motion-kit's own explicit, seekable presentation-time clock with integration-specific seeking and readiness.** Preview and the Browser Renderer use the same page-side time/seek/settle runtime. rAF is a scheduling/flush adapter, not the definition of time. CDP virtual time is not the shared master clock or readiness barrier.
+
+- Supply Presentation Time explicitly to React and each supported integration. Update from absolute time, not previous-frame delta. The Time Module continues to own production frame/time conversion; this spike introduces no public API.
+- Distinguish the presentation-time snapshot from the clock servicing async work. Hold the snapshot fixed while registered work completes. Real host deadlines must remain operational even when presentation time is paused or seeking backward.
+- Use explicit per-integration adapters. The experiment pauses CSS Animations/Transitions and assigns their `currentTime`; it assigns a paused video's `currentTime` and awaits `seeked`. Neither is accomplished by a JS clock override alone.
+- Await registered frame work and integration-specific render acknowledgements before capture. `flushSync`, a rAF callback, virtual-budget expiry, or an arbitrary number of microtask turns is not a universal barrier. Propagate readiness failure; bound waits and associate completion with the requested frame.
+- Prefer explicit time reads over global clock patches. The experiment's isolated `performance.now()`/`Date.now()` overrides demonstrate a compatibility route, not a guarantee for all browser/library clocks. Any future compatibility shim must be isolated from the preview host and qualified for the specific integration. Unsupported/history-dependent consumers remain Tier C.
+
+## Consequences
+
+The Browser Renderer supplies a frame's Presentation Time, invokes the shared seek operation, awaits that frame's registered completion and then captures. Preview supplies the same inputs during playback or scrubbing; its native rAF may decide **when to request** a frame but must not become a second time source inside integrations. Preview must not need a privileged CDP connection. Composition isolation keeps any compatibility overrides away from player UI scheduling and deadlines.
+
+This permits backward/repeated seeks while async I/O continues, but requires explicit integration ownership: a CSS/media adapter, React commit acknowledgement, and Motion/R3F completion hooks cannot be replaced by one browser-wide clock call. Asset readiness, frame-generation identity, cancellation, stale completion suppression and diagnostics need production design and tests. The experiment's throwing failures and bare promises are not the production API.
+
+The own-clock sample settled at exactly 500 ms while timer/microtask/video work completed. CDP consumed **10–130 ms extra virtual time** per sequential sample to settle the same work; **10/12** shuffled/repeated targets were behind the consumed budget. Its 5 ms timer remained pending during 30 ms of real waiting while paused. These measured properties conflict with treating CDP budget time as seekable Presentation Time. Four negative controls detected missing CSS/media adapters, accumulated state and premature capture; releasing the registered readiness gate restored the good frame.
+
+Residuals are explicit: only one headless Chromium/macOS environment, one short VP8 clip, eight ascending times through two seconds, normal speed, one React root, and a small DOM scene. Other browsers/OSes, long compositions, other speeds, concurrent React/Suspense, real Motion/R3F composition, GPU completion, external asset/network failures, exact video frame-index selection and audio remain unverified. No preview UI or production renderer is implemented. Clock patches can violate monotonic scheduler assumptions; cached clocks, workers and `new Date()` are outside the measured shim. Revisit if those requirements invalidate the adapter contract; do not broaden the guarantee from this finite spike.
+
+## Alternatives
+
+- **Controlled rAF as the sole clock:** callback timestamps were exactly injectable, all explicit React/CSS/video probes worked, and hold was stable. But independent clock readers produced **0/20** order/fresh matches at **40.37 ms/frame**; at the 500 ms sample the rAF timestamp was 500 while its clock read was 131 ms. Exposing a persistent supplied-time snapshot to those non-rAF consumers is the selected own-clock strategy. Keep controlled rAF as a useful adapter, not a rejected technology. Its tiny measured cost difference is not the reason for rejecting it as the master clock.
+- **CDP virtual time:** **0/20** order/fresh matches and failed hold at **66.88 ms/frame**, about **1.72×** the selected candidate. Budget time is monotonic, awaiting timer/media work requires more budget, and native rAF/CSS were not synchronized to budget expiry in this configuration. CDP is also unavailable to an ordinary browser preview. Reload/replay, alternate policies and explicit headless begin-frame control were not benchmarked; they are possible renderer experiments, not the shared runtime chosen here.
+- **Own JS clock without adapters/readiness:** rejected by direct measurements. At target 500 ms, bare CSS Animation/Transition were about **50.09 ms** and paused video stayed at **0 s**. Omitted-adapter and premature-capture controls failed both DOM and PNG comparison. Own time ownership is necessary for this strategy, not sufficient to make arbitrary browser code seekable.
