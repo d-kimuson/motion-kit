@@ -7,7 +7,7 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 - List: `taskroom_list_projects` to find the project, `taskroom_list_tasks` filtered by its `projectId`; `taskroom_get_task` for one task.
 - Create: `taskroom_create_task` with a new UUID as `id` and `projectId` set to the project.
 - Update: `taskroom_update_task` with the task's current `revision` (read it right before updating; a stale revision is rejected).
-- There are no comments on tasks; progress and findings go in the task `description`.
+- There are no comments on tasks; progress and findings go in the task `description`. For questions and answers, follow Questions on the Backlog in `docs/guidelines/team-channel.md`; its waiting-status rule overrides the status list below.
 
 ## State and priority
 
@@ -25,4 +25,4 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 
 ## Ready
 
-A task is ready to be picked up when its status is `Backlog`, every task that blocks it is `Done`, and its description says how the result is verified. Pick by priority, then by the roadmap order in `docs/tmp/design.md` (Phase 0 spikes before Foundation).
+A task is Ready to be picked up when its status is `Backlog`, every task that blocks it is `Done`, and its description says how the result is verified, except that a task carrying a `Waiting on the user:` paragraph is never Ready. Pick Ready tasks by priority, then by the roadmap order in `docs/tmp/design.md` (Phase 0 spikes before Foundation). For tasks that are not Ready, follow the Clarify step and its skip rule in `docs/guidelines/auto-pilot.md`.
