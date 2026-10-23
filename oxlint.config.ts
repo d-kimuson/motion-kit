@@ -21,6 +21,43 @@ const NODE_RESTRICTION = {
     },
   ],
 };
+const CORE_RESTRICTION = {
+  paths: [],
+  patterns: [
+    {
+      group: [
+        '**/render/**',
+        '**/cli/**',
+        '**/agent/**',
+        '**/motion/**',
+        '**/three/**',
+        '**/presets/**',
+        '**/theme/**',
+        'motion-kit/render',
+        'motion-kit/cli',
+        'motion-kit/agent',
+        'motion-kit/motion',
+        'motion-kit/three',
+        'motion-kit/presets',
+        'motion-kit/theme',
+        '@kimuson/motion-kit/render',
+        '@kimuson/motion-kit/cli',
+        '@kimuson/motion-kit/agent',
+        '@kimuson/motion-kit/motion',
+        '@kimuson/motion-kit/three',
+        '@kimuson/motion-kit/presets',
+        '@kimuson/motion-kit/theme',
+        'vite',
+        'vite/*',
+        'playwright',
+        'playwright/*',
+        '@playwright/*',
+      ],
+      message:
+        'Browser core depends only on core, shared utilities, React and Zod; host and integration contexts stay outside its graph.',
+    },
+  ],
+};
 const mergeRestrictions = (...restrictions: (typeof THREE_RESTRICTION)[]) => ({
   paths: restrictions.flatMap((r) => r.paths),
   patterns: restrictions.flatMap((r) => r.patterns),
@@ -264,6 +301,15 @@ export default defineConfig({
     // "node/no-process-env": "error", // process.env への直接アクセスを禁止 (腐敗防止層を用意する場合)
   },
   overrides: [
+    {
+      files: ['src/core/**', 'src/lib/**', 'src/index.ts'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          mergeRestrictions(THREE_RESTRICTION, NODE_RESTRICTION, CORE_RESTRICTION),
+        ],
+      },
+    },
     {
       files: ['**/*.{test,spec}.?([mc])[jt]s?(x)'],
       rules: {

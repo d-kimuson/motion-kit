@@ -11,7 +11,7 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 | Capture           | `captureFrame`                    | Taking the pixels of the rendered page for one frame.                                                                |
 | Encoder           | `encode`                          | Turning captured frames and audio into the output file with FFmpeg.                                                  |
 
-The following loading terms describe the accepted TASK-153 design; it is not implemented yet.
+The following loading terms describe the accepted TASK-153 design. TASK-154 implements core's registry/provider/coordinator; loading sessions and page transport remain TASK-157.
 
 | Term            | Code                              | Definition                                                                                                                                                                      |
 | --------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -25,6 +25,14 @@ The following loading terms describe the accepted TASK-153 design; it is not imp
 - Within supported A/B paths and a fixed qualified environment, rendering frames in any order produces the same files as rendering them in sequence; detected Tier C emits `seek.uncontrolled` instead of a determinism claim.
 - The [loading contract](design-doc/20261024-composition-loading.md) uses bundled Vite 7.3.7 and the named Composition registry. Node-owned shell/entry generators do not enter the browser import graph.
 - Settlement retains the capture lease until the host validates capture; resource-version changes re-settle under the original deadline, while cancellation aborts without publication.
+
+## Shared runtime handoff
+
+Consume core's `PreparedComposition` and `createCompositionRuntime`; do not duplicate schema parsing, frame generations or readiness in the renderer. Core's `mount` prepares validated props without rendering content; the first owned frame triggers the selected tree. A ready lease is not a release. Reject publication unless `completeCapture` accepts it; on `resettle`, discard pixels and retain the generation and original host deadline.
+
+TASK-157 owns loading supervision (including root/viewport preparation and mount acknowledgement), fixed host-mode validation, the grant handshake and outer monotonic deadline, screenshot transport, resource cleanup and page recycling. Configure core's `acquire`/`quiesce` hooks for that lifecycle; cancellation must revoke unfinished grants and prevent old work mutating a new owner. Core's cooperative timers do not replace host termination of blocked code. TASK-158 supplies the pending asset inventory and acquisition/decode/upload cooperation; an unresponsive page must never invent an inventory from stale observations. TASK-161 owns CLI selection/input envelopes.
+
+Core has browser-context import restrictions and a resolved public-root build-graph assertion with negative built-in and aliased-host fixtures. TASK-157 must extend it to the browser bootstrap subpath and generated entry using its production loading resolution. The assertion uses Vitest's existing dev bundler and does not implement or select the production bundled Vite version.
 
 ## Trust model
 
