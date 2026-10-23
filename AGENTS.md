@@ -35,6 +35,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 │   ├── design-doc/            # Cross-context Design Docs
 │   └── guidelines/            # Guidelines referenced from the table below
 ├── .agents/troubleshots/      # Workarounds for tooling problems
+├── .agents/auto-pilot/        # auto-pilot state, maintenance tasks, and its own workarounds
 ├── lakefile.toml, lean-toolchain  # Lean project (specs under src/core)
 └── .github/                   # CI (check.yaml) and composite setup actions
 ```
@@ -71,6 +72,8 @@ Always read every reference relevant to the task before making changes.
 | Writing or changing a Lean spec, writing a differential test                                                  | `docs/guidelines/quality-assurance/lean-spec.md`                       |
 | Adding tools or dependencies                                                                                  | `docs/guidelines/local-dev.md`                                         |
 | Checking, filing, or updating tasks                                                                           | `docs/guidelines/backlog.md`                                           |
+| Asking the user or the team a question, or reporting to them                                                  | `docs/guidelines/team-channel.md`                                      |
+| Leading the progress of the project (when started as auto-pilot)                                              | `docs/guidelines/auto-pilot.md`                                        |
 | A command or tool fails unexpectedly                                                                          | `.agents/troubleshots/`                                                |
 
 ## Code Review Rules

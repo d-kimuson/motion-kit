@@ -14,12 +14,13 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 - `status`: `Idea` (not yet agreed), `Backlog` (agreed, not started), `In Progress`, `In Review` (PR open), `Done`.
 - `priority`: `P0` (blocks everything), `P1` (next), `P2` (planned), `P3` (someday), or empty.
 - `blocks`: ids of the tasks this one blocks. `links`: PR, ADR, or spike report URLs.
-- `assignId`: the actor working on it. Set it when moving to `In Progress`.
+- `assignId`: the actor holding the task. Set it when moving to `In Progress`. A user task (one waiting for the user's decision or action) has `assignId: you` (the user, kaito); find the actor ids with `taskroom_list_actors`.
 
 ## Filing
 
 - Title: an imperative sentence naming the outcome, with the context in brackets when it belongs to one (`[core] Implement rational frame/time conversion`).
 - Description: the goal, how it is verified, and the documents to read (design section, ADR, CONTEXT.md). Problems found outside the current task (`docs/guidelines/delegate.md`) are filed as `Backlog` with the finding and the location, and the `Bug` label when it is a defect.
+- A task that asks for a decision says in its description what to decide, the options, the trade-offs of each, and the recommendation with its reason. Its verification says what has to be finished once the decision is made (implementing the chosen option, an ADR).
 - Dependencies go in `blocks` on the blocking task, not in prose.
 
 ## Ready

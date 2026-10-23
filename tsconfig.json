@@ -27,5 +27,5 @@
     "target": "es2024",
     "lib": ["dom", "dom.iterable", "esnext"]
   },
-  "include": ["src", "spec", "scripts", "configs"]
+  "include": ["src", "spec", "scripts", "configs", ".agents/**/*.ts"]
 }

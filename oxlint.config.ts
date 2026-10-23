@@ -294,10 +294,24 @@ export default defineConfig({
     },
     {
       // Node-only contexts (render pipeline and CLI) and repository tooling.
-      files: ['src/render/**', 'src/cli/**', 'scripts/**', 'spec/**', 'configs/**'],
+      files: [
+        'src/render/**',
+        'src/cli/**',
+        'scripts/**',
+        'spec/**',
+        'configs/**',
+        '.agents/**/scripts/**',
+      ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
         'import/no-nodejs-modules': 'off',
+      },
+    },
+    {
+      // auto-pilot tooling reads the wall clock to tell which maintenance tasks are due; it is not part of rendering.
+      files: ['.agents/**/scripts/**'],
+      rules: {
+        'no-restricted-globals': 'off',
       },
     },
     {
