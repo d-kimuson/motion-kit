@@ -6,18 +6,21 @@
 //
 // Exits 1 and lists the files `tsc -p . --listFilesOnly` does not list. Fix it by adding the path to `include`.
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { relative } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const TS_FILE = /\.(?:ts|tsx|mts|cts)$/;
 
-/** The TypeScript files of `repositoryFiles` that are missing from `programFiles` (both relative to the repository root). */
+/** Returns the original repository paths missing from the program, comparing existing files by real path. */
 export const findUncoveredFiles = (
   repositoryFiles: readonly string[],
   programFiles: readonly string[],
+  projectRoot: string,
 ): string[] => {
-  const covered = new Set(programFiles);
-  return repositoryFiles.filter((file) => TS_FILE.test(file) && !covered.has(file));
+  const root = realpathSync(projectRoot);
+  const canonicalPath = (file: string): string => realpathSync(resolve(root, file));
+  const covered = new Set(programFiles.map(canonicalPath));
+  return repositoryFiles.filter((file) => TS_FILE.test(file) && !covered.has(canonicalPath(file)));
 };
 
 const run = (command: string, args: readonly string[]): string[] => {
@@ -39,10 +42,8 @@ const main = (): void => {
     '--others',
     '--exclude-standard',
   ]).filter((file) => existsSync(file));
-  const programFiles = run('pnpm', ['exec', 'tsc', '-p', '.', '--listFilesOnly']).map((file) =>
-    relative(process.cwd(), file),
-  );
-  const uncovered = findUncoveredFiles(repositoryFiles, programFiles);
+  const programFiles = run('pnpm', ['exec', 'tsc', '-p', '.', '--listFilesOnly']);
+  const uncovered = findUncoveredFiles(repositoryFiles, programFiles, process.cwd());
   if (uncovered.length > 0) {
     process.stderr.write(
       `TypeScript files outside the tsconfig.json program (scripts/check-tsconfig-coverage.ts):\n${uncovered.map((file) => `  ${file}\n`).join('')}` +
