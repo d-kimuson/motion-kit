@@ -21,10 +21,11 @@ describe('Diagnostic', () => {
   });
 
   it('reserves all initial codes and their namespaces', () => {
-    expect(DiagnosticCodeSchema.options).toHaveLength(18);
+    expect(DiagnosticCodeSchema.options).toHaveLength(20);
     const namespaces = [
       'cli',
       'composition',
+      'motion',
       'asset',
       'render',
       'encode',

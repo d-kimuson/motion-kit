@@ -57,7 +57,10 @@ The code pattern is `^[a-z]+(\.[a-z0-9-]+)+$`. The namespace is the segment befo
 | `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-failed`                                                                 |
 | `seek`        | `seek.uncontrolled` (Tier C detected; emit as warning)                                                            |
 | `layout`      | `layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`, `layout.font-not-loaded`                    |
+| `motion`      | `motion.invalid-input`, `motion.non-finite-result`                                                                |
 | `internal`    | `internal.unexpected`                                                                                             |
+
+TASK-152 adds `motion.invalid-input` for invalid Pure Motion inputs (including non-finite numbers, non-increasing stops, mismatched ranges and invalid Bézier controls), and `motion.non-finite-result` for evaluation overflow or a non-finite easing result. Both are errors with actionable hints and no details payload; see the [Pure Motion contract](../../motion/adr/20261024-pure-motion-contract.accepted.md).
 
 ### Command data
 

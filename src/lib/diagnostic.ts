@@ -7,6 +7,8 @@ export const DiagnosticCodeSchema = z.enum([
   'cli.composition-not-found',
   'composition.props-invalid',
   'composition.duration-invalid',
+  'motion.invalid-input',
+  'motion.non-finite-result',
   'asset.load-failed',
   'asset.not-ready',
   'render.browser-launch-failed',
