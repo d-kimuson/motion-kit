@@ -1,4 +1,4 @@
-import { defineComposition, defineCompositions, type Result } from 'motion-kit';
+import { defineComposition, defineCompositions, DiagnosticSchema, type Result } from 'motion-kit';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -232,6 +232,22 @@ describe('Composition registry', () => {
     });
     expect(JSON.stringify(result)).not.toContain('secret');
     expect(render).not.toHaveBeenCalled();
+  });
+
+  it('keeps custom issue paths JSON-valued even when a refinement supplies non-finite keys', async () => {
+    const actualSchema = schema.superRefine((_props, context) => {
+      context.addIssue({
+        code: 'custom',
+        path: [Number.NaN, Number.POSITIVE_INFINITY, Symbol('private')],
+        message: 'private',
+      });
+    });
+    const registry = unwrap(
+      defineCompositions([defineComposition({ ...metadata, schema: actualSchema, component })]),
+    );
+    const result = await registry.mount({ revision: 'v1' });
+    expect(DiagnosticSchema.safeParse(result.ok ? undefined : result.error).success).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('private');
   });
 
   it('rejects invalid defaults, non-JSON output, and thrown refinements', async () => {

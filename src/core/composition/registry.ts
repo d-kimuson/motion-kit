@@ -73,7 +73,11 @@ const propsFailure = (id: string, issues: readonly z.core.$ZodIssue[]): Result<n
     details: {
       issues: issues.map((issue) => ({
         code: issue.code,
-        path: issue.path.map((part) => (typeof part === 'symbol' ? '[symbol]' : part)),
+        path: issue.path.map((part) =>
+          typeof part === 'string' || (typeof part === 'number' && Number.isFinite(part))
+            ? part
+            : '[invalid key]',
+        ),
         message: 'Invalid composition prop.',
       })),
     },
