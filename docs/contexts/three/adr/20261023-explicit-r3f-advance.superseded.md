@@ -1,5 +1,7 @@
 # Drive R3F with absolute time and verify capture readiness explicitly
 
+Status: **superseded** by the [accepted time-control and frame-capture ADR](../../../decisions/20261024-time-control-and-frame-capture.accepted.md). The proposal below is retained as history, not an unresolved decision.
+
 ## Context
 
 [Spike B](../knowledge/spike-b-seekability.md) reproduced a camera animation, object transforms and shader uniform using R3F 9.8.2 / three 0.186.1: 25/25 exact DOM and PNG comparisons across random/repeated seeks, fresh roots and held time. The full experiment passed on SwiftShader and Apple Metal. Four history-dependent controls differed from fresh rendering. R3F's never-loop delta was `[0,2,-1.5,0]` for timestamps `[0,2,0.5,0.5]`; Manual Advance does not erase component history.
@@ -15,6 +17,8 @@ Make capture readiness explicit after scene updates. The tested conservative can
 For reproducible software experiments, pin Playwright Chromium and explicitly select `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`; verify the actual renderer, not just launch success. This is a test configuration, not an accepted production security policy or a claim that all three flags were necessary on the measured host. Playwright already supplies the unsafe opt-in; removing it still worked with explicit SwiftShader in the tested build.
 
 ## Consequences
+
+The [successor ADR](../../../decisions/20261024-time-control-and-frame-capture.accepted.md#seekability-boundary) decides absolute-time/root-local advancement and a conservative GPU reference, with the readiness contract and security qualification separated. ThreeCanvas/CameraRig APIs remain later-phase work. Tier C emits `seek.uncontrolled` as a warning using [DiagnosticSchema](../../../../src/lib/diagnostic.ts); no spike-local Diagnostic type becomes public.
 
 - The committed experiment supplies a regression shape for order independence, negative controls and screenshot/readback agreement without shipping spike code or adding a root three dependency.
 - The root-local API avoids advancing unrelated canvases/global effects. Tests must continue to verify stopped clocks and held frames.
