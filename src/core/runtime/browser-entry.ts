@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { z } from 'zod';
 
 import { DiagnosticSchema } from '../../lib/diagnostic.ts';
+import { captureLeaseSchema, frameRequestSchema } from '../../lib/frame-protocol.ts';
 import {
   loadingProtocolVersion,
   mountRequestSchema,
@@ -26,7 +27,7 @@ const failure = () =>
     'Export the named compositions Result from defineCompositions.',
   );
 
-/** Browser-only loading bootstrap; no frame transport or implicit initial seek. */
+/** Browser-only bootstrap; mount never implies an initial seek or readiness. */
 export const bootstrapComposition = (input: unknown): void => {
   let registry: Registry | undefined;
   let declaration: Result<never> | undefined;
@@ -58,6 +59,32 @@ export const bootstrapComposition = (input: unknown): void => {
   const validated = new Set<number>();
   const api: LoadingPage = {
     protocolVersion: loadingProtocolVersion,
+    settleFrame: async (frame, request) => {
+      const checked = frameRequestSchema.safeParse(request);
+      if (!checked.success || runtime === undefined) return { status: 'aborted' };
+      return runtime.settleFrame(frame, checked.data);
+    },
+    resettle: async (lease) => {
+      const checked = captureLeaseSchema.safeParse(lease);
+      return checked.success && checked.data.source === 'renderer' && runtime !== undefined
+        ? runtime.resettle(checked.data)
+        : { status: 'aborted' };
+    },
+    validateCapture: (lease) => {
+      const checked = captureLeaseSchema.safeParse(lease);
+      return checked.success && checked.data.source === 'renderer' && runtime !== undefined
+        ? runtime.validateCapture(checked.data)
+        : { status: 'aborted' };
+    },
+    completeCapture: (lease) => {
+      const checked = captureLeaseSchema.safeParse(lease);
+      return checked.success && checked.data.source === 'renderer' && runtime !== undefined
+        ? runtime.completeCapture(checked.data)
+        : { status: 'aborted' };
+    },
+    cancel: (requestId) => runtime?.cancel(requestId),
+    pendingAssets: (requestId) => runtime?.pendingAssets(requestId) ?? [],
+    warnings: () => runtime?.warnings() ?? [],
     listCompositions: () =>
       registry === undefined
         ? (declaration ?? failure())
@@ -112,6 +139,20 @@ export const bootstrapComposition = (input: unknown): void => {
         definition: prepared.value,
         compositionRealm: request.instance,
         instance: request.instance,
+        frameTimeoutMs: request.frameTimeoutMs,
+        queueTimeoutMs: request.queueTimeoutMs,
+        externalDeadline: true,
+        acquire: async (snapshot, signal, requestId) => {
+          const granted = await window.__motionKitOwnership?.({
+            requestId,
+            source: 'renderer',
+            instance: snapshot.instance,
+            revision: snapshot.revision,
+            generation: snapshot.generation,
+            globalFrame: snapshot.globalFrame,
+          });
+          if (granted !== true || signal.aborted) selectedRuntime.cancel(requestId);
+        },
       });
       runtime = selectedRuntime;
       root = createRoot(container);
@@ -125,7 +166,11 @@ export const bootstrapComposition = (input: unknown): void => {
       );
       return {
         ok: true,
-        value: { instance: request.instance, descriptor: prepared.value.descriptor },
+        value: {
+          instance: request.instance,
+          revision: request.revision,
+          descriptor: prepared.value.descriptor,
+        },
       };
     },
     dispose: () => {

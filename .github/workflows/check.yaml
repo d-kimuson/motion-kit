@@ -39,7 +39,7 @@ jobs:
           test: false
           lint: false
 
-      - name: Install Chromium for Composition DOM and loading-session tests
+      - name: Install Chromium for Composition DOM, loading and frame-transport tests
         run: pnpm exec playwright install --with-deps chromium
 
       # Ubuntu restricts user namespaces for downloaded executables. Allow only
@@ -62,6 +62,9 @@ jobs:
 
       - name: Run supervised loading-session tests
         run: pnpm test --project loading
+
+      - name: Run frame transport and PNG determinism tests
+        run: pnpm test --project frame-transport
 
   gitleaks:
     name: gitleaks

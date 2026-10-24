@@ -1,4 +1,5 @@
 import { type Diagnostic } from '../../lib/diagnostic.ts';
+import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type Result } from '../../lib/result.ts';
 import { type PreparedComposition } from '../composition/registry.ts';
 import {
@@ -49,6 +50,8 @@ export type IntegrationRegistration = Readonly<{
   seekability: 'A' | 'B' | 'C';
   settle: (snapshot: FrameSnapshot, signal: AbortSignal) => Promise<Result<undefined>>;
   dispose?: () => void;
+  /** TASK-158/integrations report only current required acquisition/decode/upload work. */
+  pendingAssets?: () => readonly PendingAsset[];
 }>;
 export type CompositionRuntimeOptions = {
   definition: PreparedComposition;
@@ -59,7 +62,9 @@ export type CompositionRuntimeOptions = {
   /** Resolve only on confirmed host ownership; host starts its independent deadline here.
    * A canceled grant must be revoked. No page mutation occurs before resolution.
    */
-  acquire?: (snapshot: FrameSnapshot, signal: AbortSignal) => Promise<void>;
+  acquire?: (snapshot: FrameSnapshot, signal: AbortSignal, requestId: string) => Promise<void>;
+  /** A supervising host owns the deadline, including capture and blocked page work. */
+  externalDeadline?: boolean;
   /** Confirm old host/React work cannot mutate this realm before the next grant. */
   quiesce?: (snapshot: FrameSnapshot) => Promise<void>;
 };
@@ -248,7 +253,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
 
   const acquire = async (request: Request) => {
     try {
-      await options.acquire?.(request.snapshot, request.controller.signal);
+      await options.acquire?.(request.snapshot, request.controller.signal, request.requestId);
     } catch {
       if (live(request)) terminate(request, failed('Composition ownership grant failed.'));
       return;
@@ -256,14 +261,15 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     if (!live(request)) return;
     clearTimeout(request.queueTimer);
     // This budget is never restarted by readiness, capture, or resource re-settlement.
-    request.frameTimer = setTimeout(
-      () =>
-        terminate(
-          request,
-          failed('Composition frame settlement or capture timed out.', 'render.frame-timeout'),
-        ),
-      frameTimeoutMs,
-    );
+    if (options.externalDeadline !== true)
+      request.frameTimer = setTimeout(
+        () =>
+          terminate(
+            request,
+            failed('Composition frame settlement or capture timed out.', 'render.frame-timeout'),
+          ),
+        frameTimeoutMs,
+      );
     snapshot = Object.freeze({ ...request.snapshot, resourceRevision });
     request.snapshot = snapshot;
     emit();
@@ -488,6 +494,19 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     resettle,
     cancel,
     dispose,
+    pendingAssets: (requestId: string): PendingAsset[] => {
+      if (active?.requestId !== requestId || !live(active)) return [];
+      return [...integrations.values()].flatMap((entry) => [...(entry.pendingAssets?.() ?? [])]);
+    },
+    warnings: (): Diagnostic[] =>
+      [...integrations.values()]
+        .filter((entry) => entry.seekability === 'C')
+        .map(() => ({
+          code: 'seek.uncontrolled',
+          severity: 'warning',
+          message: 'An integration has uncontrolled time or history-dependent state.',
+          hint: 'Use a qualified absolute-time integration before claiming traversal-independent output.',
+        })),
     fail: (diagnostic: Diagnostic) => {
       if (active !== undefined) terminate(active, { status: 'failed', diagnostics: [diagnostic] });
     },

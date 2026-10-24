@@ -62,7 +62,27 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
   expect(container.style.width).toBe('320px');
   expect(container.style.height).toBe('180px');
   expect(container.innerHTML).toBe('');
-  expect('settleFrame' in api).toBe(false);
+  expect(await api.settleFrame(0, { source: 'preview', requestId: 'wrong-mode' })).toEqual({
+    status: 'aborted',
+  });
+  window.__motionKitOwnership = (ownership) => {
+    expect(ownership).toMatchObject({
+      source: 'renderer',
+      instance: 'instance',
+      revision: 'revision',
+      globalFrame: 0,
+    });
+    return Promise.resolve(true);
+  };
+  const ready = await api.settleFrame(0, { source: 'renderer', requestId: 'frame' });
+  expect(ready.status).toBe('ready');
+  if (ready.status !== 'ready') throw new Error('Expected ready lease');
+  expect(container.textContent).toBe('scene');
+  expect(api.validateCapture(ready.lease)).toEqual({ status: 'valid' });
+  expect(api.completeCapture(ready.lease)).toEqual({ status: 'accepted' });
+  expect(api.completeCapture(ready.lease)).toEqual({ status: 'aborted' });
+  expect(parses).toBe(2);
+  delete window.__motionKitOwnership;
   expect(api.dispose()).toEqual({ ok: true, value: undefined });
   delete window.__motionKitLoadingEvent;
 });

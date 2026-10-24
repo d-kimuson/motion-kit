@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { DiagnosticSchema } from './diagnostic.ts';
+import { type FramePage, type Ownership } from './frame-protocol.ts';
 import { type Result } from './result.ts';
 
 export const loadingProtocolVersion = 1;
@@ -26,12 +27,18 @@ export const mountRequestSchema = z.object({
   revision: z.string(),
   instance: z.string(),
   loadingTimeoutMs: z.number().positive(),
+  frameTimeoutMs: z.number().positive().default(30_000),
+  queueTimeoutMs: z.number().positive().default(30_000),
 });
 export type MountRequest = z.infer<typeof mountRequestSchema>;
-export const mountReceiptSchema = z.object({ instance: z.string(), descriptor: descriptorSchema });
+export const mountReceiptSchema = z.object({
+  instance: z.string(),
+  revision: z.string(),
+  descriptor: descriptorSchema,
+});
 export type MountReceipt = z.infer<typeof mountReceiptSchema>;
 /** Loading-only protocol. Mount acknowledges preparation, never frame readiness. */
-export type LoadingPage = {
+export type LoadingPage = FramePage & {
   protocolVersion: typeof loadingProtocolVersion;
   listCompositions: () => Result<readonly LoadingDescriptor[]>;
   validateDefault: (
@@ -48,5 +55,6 @@ declare global {
   interface Window {
     __motionKit?: LoadingPage;
     __motionKitLoadingEvent?: (event: { protocolVersion: number }) => Promise<void>;
+    __motionKitOwnership?: (event: Ownership) => Promise<boolean>;
   }
 }
