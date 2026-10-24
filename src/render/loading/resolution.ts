@@ -25,6 +25,16 @@ export const packageEntry = builtRoot
 export const browserEntry = builtRoot
   ? join(dirname(fileURLToPath(import.meta.url)), 'browser.js')
   : fileURLToPath(new URL('../../core/runtime/browser-entry.ts', import.meta.url));
+/** Ids the loading plugin owns. Vite's alias plugin runs before `enforce: 'pre'` plugins,
+ * so a project alias for these would shadow the bootstrap instead of the other way round.
+ * They are prepended to `resolve.alias` so motion-kit's reserved ids win over a conflicting
+ * project alias, without rejecting the project's config. */
+export const reservedAliases: readonly Alias[] = [
+  { find: /^@kimuson\/motion-kit\/browser$/, replacement: browserEntry },
+  { find: /^@kimuson\/motion-kit$/, replacement: packageEntry },
+  { find: /^motion-kit$/, replacement: packageEntry },
+  { find: /^virtual:motion-kit-entry$/, replacement: `\u0000${entryId}` },
+];
 export const loadingPlugin = (entry: string): Plugin => ({
   name: 'motion-kit-loading',
   enforce: 'pre',

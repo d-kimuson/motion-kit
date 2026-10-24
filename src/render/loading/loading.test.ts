@@ -593,6 +593,24 @@ export default {plugins:[react()],test:{environment:'jsdom'},build:{outDir:'dist
     expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
   });
 
+  it.each(['@kimuson/motion-kit/browser', '@kimuson/motion-kit', 'virtual:motion-kit-entry'])(
+    'overrides a project alias of the reserved id %s instead of rejecting the config',
+    async (id) => {
+      const root = fixture();
+      const shadow = join(root, 'shadow.ts');
+      writeFileSync(shadow, `export const bootstrapComposition = () => {};`);
+      writeFileSync(
+        join(root, 'vite.config.ts'),
+        `export default {resolve:{alias:{${JSON.stringify(id)}:${JSON.stringify(shadow)}}}};`,
+      );
+      const result = await open(root);
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) throw new Error('Loading failed');
+      expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
+    },
+    30_000,
+  );
+
   it('cancels startup without a Diagnostic and tears down the blocked service', async () => {
     const root = fixture(`export default {plugins:[{name:'blocked',config(){while(true){}}}]};`);
     const controller = new AbortController();

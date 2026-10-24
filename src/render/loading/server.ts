@@ -10,7 +10,7 @@ import { installBundledVite } from './config-loader.ts';
 import { configFailure, LoadingConfigError, loadingFailure } from './diagnostics.ts';
 import { htmlShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
-import { loadingPlugin, reactResolution } from './resolution.ts';
+import { loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
 
 const input = z
   .object({ projectRoot: z.string(), entry: z.string(), workspace: z.string() })
@@ -103,7 +103,7 @@ try {
                 esbuild: { jsx: 'automatic', ...final.esbuild },
                 resolve: {
                   ...final.resolve,
-                  alias: react.aliases,
+                  alias: [...reservedAliases, ...react.aliases],
                   dedupe: withReactDedupe(final.resolve?.dedupe ?? []),
                 },
                 optimizeDeps: { ...final.optimizeDeps, entries: [entry], include: react.include },
