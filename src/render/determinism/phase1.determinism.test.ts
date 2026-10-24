@@ -23,6 +23,10 @@ const referenceSuite = (compositionId: string, sustainedPasses?: number) =>
     ...(sustainedPasses === undefined ? {} : { sustainedPasses }),
   });
 
+const logModes = (report: Awaited<ReturnType<typeof runDeterminismSuite>>): void => {
+  for (const mode of report.compositions.flatMap((item) => item.modes)) console.info(mode.message);
+};
+
 describe('phase 1 determinism suite', () => {
   it('compares exact PNG bytes unless a cross-environment tolerance is explicit', () => {
     const left = Buffer.from([1, 2, 3, 4]);
@@ -45,11 +49,52 @@ describe('phase 1 determinism suite', () => {
 
   it('captures DOM text identically across sequential, fresh, random, reverse, repeated and held modes', async () => {
     const report = await runDeterminismSuite(referenceSuite('dom-text'));
-    for (const mode of report.compositions.flatMap((item) => item.modes))
-      console.info(mode.message);
+    logModes(report);
     expect(report.passed).toBe(true);
     expect(report.compositions[0]?.modes.map((mode) => mode.mode)).toEqual([
       ...requiredDeterminismModes,
     ]);
+  }, 60_000);
+
+  it.each(['css-transform', 'svg-path', 'sequence-boundary', 'transition-overlap'])(
+    'captures %s identically across the seven traversal modes',
+    async (compositionId) => {
+      const report = await runDeterminismSuite(referenceSuite(compositionId));
+      logModes(report);
+      expect(report.passed).toBe(true);
+      expect(report.compositions[0]?.framesDiffer).toBe(true);
+    },
+    60_000,
+  );
+
+  it('captures a canvas drawing identically, including repeated passes in one session', async () => {
+    const report = await runDeterminismSuite(referenceSuite('canvas-drawing', 6));
+    logModes(report);
+    expect(report.passed).toBe(true);
+    expect(report.compositions[0]?.modes.map((mode) => mode.mode)).toContain('sustained-session');
+  }, 60_000);
+
+  it('captures a nested Suspense font and image identically across the seven modes', async () => {
+    const report = await runDeterminismSuite(referenceSuite('asset-suspense'));
+    logModes(report);
+    expect(report.passed).toBe(true);
+    expect(report.compositions[0]?.framesDiffer).toBe(true);
+    expect(report.compositions[0]?.modes.map((mode) => mode.mode)).toEqual([
+      ...requiredDeterminismModes,
+    ]);
+  }, 60_000);
+
+  it('fails a Math.random render and names the byte mismatch', async () => {
+    const report = await runDeterminismSuite(referenceSuite('nondeterministic'));
+    logModes(report);
+    expect(report.passed).toBe(false);
+    const mismatched = report.compositions
+      .flatMap((item) => item.modes)
+      .filter((mode) => !mode.equal)
+      .map((mode) => mode.message);
+    expect(mismatched.length).toBeGreaterThan(0);
+    expect(mismatched.join('\n')).toMatch(
+      /nondeterministic\/\S+: frame \d+ PNG bytes differ from the sequential 0\.\.N capture/,
+    );
   }, 60_000);
 });

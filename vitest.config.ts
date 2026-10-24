@@ -34,6 +34,7 @@ export default defineConfig({
           include: [
             'src/render/renderer.test.ts',
             'src/render/capture/**/*.test.ts',
+            // Later contexts register reference Compositions as *.determinism.test.ts.
             'src/**/*.determinism.test.ts',
           ],
           testTimeout: 60_000,

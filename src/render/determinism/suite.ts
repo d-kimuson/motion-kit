@@ -195,12 +195,11 @@ const compareOrder = async (
         ),
       );
   }
-  const focus = order.at(-1) ?? 0;
   return modeResult(
     composition,
     mode,
     true,
-    `${composition}/${mode}: frame ${focus} PNG bytes match the sequential 0..N capture`,
+    `${composition}/${mode}: PNG bytes match the sequential 0..N capture`,
   );
 };
 

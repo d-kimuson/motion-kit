@@ -81,6 +81,6 @@ The complete `pnpm test` run passed **418 tests / 27 files**, 48.09 s Vitest / 4
 ## Residual qualification
 
 - TASK-158 still owns asset registration/discovery/cache APIs and concrete font/image/model/upload cooperation. Transport consumes an integration's current inventory and settlement; it does not infer that arbitrary DOM assets are ready.
-- TASK-160 owns the complete Phase 1 exit matrix: combined delayed/nested Suspense and assets, sustained-session/resource-pressure stress, broader source-change/late-callback combinations, actual hung GPU/context-loss paths, and fixed-environment Linux qualification. CI wiring is present; local macOS results are not Linux certification.
+- The Phase 1 traversal suite is `src/render/determinism` ([phase 1 determinism](20261024-phase1-determinism.md)). It covers combined nested Suspense with a font and image, and repeated passes in one session. Hung GPU fences and Linux qualification remain CI/platform work. Broader source-change combinations stay in the transport tests, not that suite.
 - Motion/R3F/WebGL adapters, arbitrary hidden clocks/history, encoding, CLI, and untrusted isolation are not added. The tested blocked page RPC verifies host termination, not a particular GPU driver fence.
 - The renderer is fail-closed: active failure/cancel disposes the entire session. Automatic in-place recovery is not claimed. Browser teardown overhead and the bounded diagnostic inventory probe are not permission to publish after the original frame deadline.
