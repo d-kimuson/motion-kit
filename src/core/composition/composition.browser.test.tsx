@@ -142,6 +142,98 @@ describe('Composition provider', () => {
     },
   );
 
+  it.each([
+    ['memo', 'own'],
+    ['forwardRef', 'own'],
+    ['intermediate memo', 'own'],
+    ['memo', 'inherited'],
+    ['forwardRef', 'inherited'],
+    ['intermediate memo', 'inherited'],
+  ] as const)(
+    'rejects %s wrapper-owned defaults with %s keys at declaration before rendering',
+    (wrapper, keys) => {
+      const render = vi.fn(() => <p>unchecked</p>);
+      const PlainScene = (_props: { values: number[] }) => render();
+      const PlainRender = (_props: { values: number[] }, _ref: unknown) => render();
+      const defaults: unknown =
+        keys === 'inherited'
+          ? Object.create({ callback: () => 42 })
+          : { callback: () => 42, key: 'injected' };
+      expect(Object.getOwnPropertyNames(defaults)).toEqual(
+        keys === 'inherited' ? [] : ['callback', 'key'],
+      );
+      const selected =
+        wrapper === 'forwardRef'
+          ? Object.assign(forwardRef(PlainRender), { defaultProps: defaults })
+          : wrapper === 'intermediate memo'
+            ? memo(Object.assign(memo(PlainScene), { defaultProps: defaults }))
+            : Object.assign(memo(PlainScene), { defaultProps: defaults });
+      const result = defineComposition({
+        ...metadata,
+        schema: z.object({ values: z.array(z.number()).default([1]) }),
+        component: selected,
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+      expect(render).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['memo', 'forwardRef'] as const)(
+    'renders plain %s without wrapper defaults with exactly checked JSON props',
+    async (wrapper) => {
+      const output = { nested: { label: 'kept', values: [1, null, true] }, values: [2] };
+      let received: typeof output | undefined;
+      const PlainScene = (props: typeof output) => {
+        received = props;
+        return (
+          <p>
+            {props.nested.label}:{props.values[0]}
+          </p>
+        );
+      };
+      const PlainRender = (props: typeof output, _ref: unknown) => PlainScene(props);
+      const definition = unwrap(
+        await unwrap(
+          defineCompositions([
+            defineComposition({
+              ...metadata,
+              schema: z.object({}).transform(() => output),
+              component: wrapper === 'memo' ? memo(PlainScene) : forwardRef(PlainRender),
+            }),
+          ]),
+        ).mount({ revision: 'plain-wrapper' }),
+      );
+      const runtime = createCompositionRuntime({
+        definition,
+        instance: 'plain-wrapper',
+        compositionRealm: 'iframe',
+      });
+      const container = document.createElement('div');
+      document.body.append(container);
+      const root = createRoot(container);
+      try {
+        flushSync(() =>
+          root.render(<Composition definition={definition} compositionRuntime={runtime} />),
+        );
+        const settled = await runtime.settleFrame(0, {
+          source: 'renderer',
+          requestId: 'plain-wrapper',
+        });
+        expect(settled.status).toBe('ready');
+        expect(container.textContent).toBe('kept:2');
+        expect(received).toEqual(output);
+        expect(received).toEqual(definition.props);
+        expect(received?.nested).toBe(definition.props['nested']);
+        expect(received?.values).toBe(definition.props['values']);
+        expectJsonTree(received);
+      } finally {
+        flushSync(() => root.unmount());
+        runtime.dispose();
+        container.remove();
+      }
+    },
+  );
+
   it('rejects forwardRef render-function defaults at declaration', () => {
     const Scene = (_props: { values: number[] }) => <p>unchecked</p>;
     const wrapped = forwardRef(Scene);
