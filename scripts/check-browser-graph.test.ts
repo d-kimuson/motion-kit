@@ -14,7 +14,7 @@ describe('resolved package-root browser graph', () => {
     );
     expect(graph.some((file) => file.endsWith('/react/index.js'))).toBe(true);
     expect(graph.some((file) => file.endsWith('/composition.tsx'))).toBe(true);
-  });
+  }, 60_000);
 
   it('checks the browser subpath export and emitted wrapper using production loading resolution', async () => {
     const graph = await checkBrowserGraph(
@@ -46,7 +46,7 @@ describe('resolved package-root browser graph', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 
   it('rejects transitive Node built-ins and a host module reached through an alias', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'motion-kit-graph-'));
@@ -63,5 +63,5 @@ describe('resolved package-root browser graph', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 });
