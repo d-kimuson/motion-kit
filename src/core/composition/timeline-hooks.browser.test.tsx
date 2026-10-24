@@ -235,6 +235,62 @@ describe('public timeline hooks', () => {
     );
   });
 
+  it.each([
+    { fps: { numerator: 1, denominator: 1 }, frame: 0, framePosition: 0.5 },
+    {
+      fps: metadata.fps,
+      frame: 14,
+      framePosition: toSeconds(unwrap(createTimelineTime({ numerator: 15000, denominator: 1001 }))),
+    },
+  ])(
+    'preserves non-grid Presentation Time at $fps.numerator/$fps.denominator fps',
+    async ({ fps, frame, framePosition }) => {
+      await withScene(
+        () => <Probe />,
+        async ({ seek, read, runtime }) => {
+          await seek(30);
+          // The public runtime contract supplies time independently of the requested frame.
+          expect(runtime.getSnapshot()?.globalFrame).toBe(30);
+          expect(read()).toMatchObject({
+            time: 0.5,
+            frame,
+            sequence: {
+              time: 0.5,
+              globalTime: 0.5,
+              globalFrame: frame,
+              localFramePosition: framePosition,
+            },
+            timeline: {
+              time: 0.5,
+              globalTime: 0.5,
+              globalFrame: frame,
+              localFramePosition: framePosition,
+            },
+          });
+        },
+        fps,
+        (runtime) => {
+          const snapshots = new WeakMap<FrameSnapshot, FrameSnapshot>();
+          const presentationTime = unwrap(createTimelineTime(0.5));
+          return {
+            ...runtime,
+            getSnapshot: () => {
+              const snapshot = runtime.getSnapshot();
+              if (snapshot === null) return null;
+              // Keep useSyncExternalStore snapshots stable until the runtime advances.
+              let overridden = snapshots.get(snapshot);
+              if (overridden === undefined) {
+                overridden = Object.freeze({ ...snapshot, presentationTime });
+                snapshots.set(snapshot, overridden);
+              }
+              return overridden;
+            },
+          };
+        },
+      );
+    },
+  );
+
   it('converts local time to seconds and rational fps to decimal without rounding localFramePosition', async () => {
     await withScene(
       () => (
