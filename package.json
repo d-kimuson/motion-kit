@@ -14,9 +14,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./agent": "./src/agent/cli-output.ts",
-    "./browser": "./src/core/runtime/browser-entry.ts",
-    "./render/loading": "./src/render/loading/session.ts"
+    "./agent": "./src/agent/cli-output.ts"
   },
   "scripts": {
     "lint": "run-p lint:*",

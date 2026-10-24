@@ -16,7 +16,7 @@ describe('resolved package-root browser graph', () => {
     expect(graph.some((file) => file.endsWith('/composition.tsx'))).toBe(true);
   }, 60_000);
 
-  it('checks the browser subpath export and emitted wrapper using production loading resolution', async () => {
+  it('checks the internal browser entry and emitted wrapper using production loading resolution', async () => {
     const graph = await checkBrowserGraph(
       new URL('./fixtures/browser-bootstrap.ts', import.meta.url).pathname,
     );
@@ -48,13 +48,17 @@ describe('resolved package-root browser graph', () => {
     }
   }, 60_000);
 
-  it('rejects transitive Node built-ins and a host module reached through an alias', async () => {
+  it('rejects transitive Node built-ins, Three imports and a host module reached through an alias', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'motion-kit-graph-'));
     try {
       const entry = join(directory, 'entry.ts');
       writeFileSync(entry, "import './indirect.ts';");
       writeFileSync(join(directory, 'indirect.ts'), "import 'node:fs';");
       await expect(checkBrowserGraph(entry)).rejects.toThrow('Node built-in');
+      for (const id of ['three', 'three/webgpu', '@react-three/fiber', '@react-three/drei']) {
+        writeFileSync(join(directory, 'indirect.ts'), `import '${id}';`);
+        await expect(checkBrowserGraph(entry)).rejects.toThrow('Three import');
+      }
       mkdirSync(join(directory, 'src/render'), { recursive: true });
       const host = join(directory, 'src/render/host.ts');
       writeFileSync(host, 'export const host = true;');

@@ -1,4 +1,3 @@
-import { openLoadingSession } from 'motion-kit/render/loading';
 import { fork } from 'node:child_process';
 import {
   existsSync,
@@ -13,6 +12,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { openLoadingSession } from './session.ts';
 
 const require = createRequire(import.meta.url);
 const directories: string[] = [];

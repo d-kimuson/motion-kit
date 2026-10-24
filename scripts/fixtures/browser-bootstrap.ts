@@ -1,1 +1,1 @@
-export { bootstrapComposition } from 'motion-kit/browser';
+export { bootstrapComposition } from '../../src/core/runtime/browser-entry.ts';

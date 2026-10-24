@@ -6,6 +6,8 @@ const builtins = new Set(builtinModules.map((name) => name.replace(/^node:/, '')
 const forbidden =
   /(?:^|[/\\])(?:src[/\\](?:render|cli|agent)|node_modules[/\\](?:vite|playwright|playwright-core|@playwright))[/\\]/;
 
+const three = /(?:^|[/\\]node_modules[/\\])(?:three|@react-three[/\\][^/\\]+)(?:[/\\]|$)/;
+
 /** Inspect the actually resolved browser build graph, including package exports,
  * aliases and transitive dependencies. Uses the production bundled Vite and accepts
  * the same private loading plugin used by the supervised service.
@@ -20,6 +22,7 @@ export const checkBrowserGraph = async (
     if (builtins.has(id.replace(/^node:/, '')) || id.includes('__vite-browser-external'))
       throw new Error(`Node built-in in browser graph: ${id}`);
     if (forbidden.test(id)) throw new Error(`Host module in browser graph: ${id}`);
+    if (three.test(id)) throw new Error(`Three import in browser graph: ${id}`);
   };
   await build({
     configFile: false,
