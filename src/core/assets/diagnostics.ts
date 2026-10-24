@@ -3,55 +3,6 @@ import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type AssetDescriptor, type AssetPhase } from './types.ts';
 
 const REDACTED_SOURCE = '[asset source]';
-const MAX_REDACTION_DEPTH = 4;
-
-/** Exact compact names. `key` stays exact so unrelated words are not dropped. */
-const SENSITIVE_EXACT = new Set([
-  'sig',
-  'auth',
-  'authorization',
-  'key',
-  'apikey',
-  'jwt',
-  'session',
-  'sessionid',
-  'sid',
-  'passwd',
-  'pwd',
-  'policy',
-  'keypairid',
-]);
-
-/**
- * Compact-name fragments. A query parameter is dropped when its alphanumeric
- * name contains one of these, is an exact denylist hit, has a `key` segment
- * (`access_key`), or contains `keyid` (`AWSAccessKeyId`).
- * Deliberately kept non-sensitive parameters are every other name, including
- * cache and dimension queries such as `v`, `w`, `h`, `width`, and `format`.
- */
-const SENSITIVE_FRAGMENTS = [
-  'accesskey',
-  'apikey',
-  'token',
-  'signature',
-  'secret',
-  'password',
-  'credential',
-  'session',
-  'auth',
-] as const;
-
-const compactName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-const sensitiveParameter = (name: string): boolean => {
-  const compact = compactName(name);
-  return (
-    SENSITIVE_EXACT.has(compact) ||
-    SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment)) ||
-    /(?:^|[^a-z0-9])key(?:[^a-z0-9]|$)/i.test(name) ||
-    compact.includes('keyid')
-  );
-};
 
 const decodeRepeated = (value: string): string => {
   let current = value;
@@ -82,46 +33,37 @@ const hasUserinfo = (value: string): boolean => {
   return /(?:^|\/\/)[^/?#\s@]*:[^/?#\s@]+@/.test(value);
 };
 
-const credentialValue = (value: string): boolean =>
-  hasUserinfo(value) || /^(?:AKIA|ASIA)[0-9A-Z]{16}$/.test(value);
-
-const redactQueryValue = (value: string, depth: number): string | undefined => {
-  const decoded = decodeRepeated(value);
-  if (isAbsoluteUrl(decoded)) {
-    const nested = redactSource(decoded, depth + 1);
-    if (nested === REDACTED_SOURCE || hasUserinfo(decodeRepeated(nested))) return undefined;
-    return nested;
-  }
-  if (credentialValue(decoded)) return undefined;
-  return value;
+/** Count only. A name or value here would re-open the query denylist. */
+const queryMarker = (count: number): string => {
+  if (count === 0) return '';
+  const noun = count === 1 ? 'parameter' : 'parameters';
+  return ` (+${count} query ${noun}, redacted)`;
 };
 
-const redactSource = (source: string, depth: number): string => {
-  if (depth > MAX_REDACTION_DEPTH) return REDACTED_SOURCE;
+/**
+ * Reported source is scheme, host and path, plus a count marker when a query
+ * was present. Parameter names and values are never copied. Relative sources
+ * report the path plus the same marker. Fragments and userinfo are stripped.
+ */
+const redactSource = (source: string): string => {
   try {
     const absolute = isAbsoluteUrl(source);
     const url = new URL(source, 'http://assets.invalid');
+    const queryCount = url.searchParams.size;
     url.username = '';
     url.password = '';
     url.hash = '';
-    const kept = new URLSearchParams();
-    for (const [name, value] of url.searchParams) {
-      if (sensitiveParameter(name)) continue;
-      const redactedValue = redactQueryValue(value, depth);
-      if (redactedValue === undefined) continue;
-      kept.append(name, redactedValue);
-    }
-    url.search = kept.toString();
-    const redacted = absolute ? url.toString() : `${url.pathname}${url.search}`;
-    if (hasUserinfo(decodeRepeated(redacted))) return REDACTED_SOURCE;
-    return redacted;
+    url.search = '';
+    const reported = absolute ? url.toString() : `${url.pathname}${url.search}`;
+    if (hasUserinfo(decodeRepeated(reported))) return REDACTED_SOURCE;
+    return `${reported}${queryMarker(queryCount)}`;
   } catch {
     return REDACTED_SOURCE;
   }
 };
 
 /** Schema validation does not redact. Every asset Diagnostic must pass through here. */
-export const redactAssetSource = (source: string): string => redactSource(source, 0);
+export const redactAssetSource = (source: string): string => redactSource(source);
 
 const loadFailedMessage = (kind: string): string => {
   if (kind === 'font') return 'The required font failed to load.';

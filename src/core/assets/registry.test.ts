@@ -203,8 +203,10 @@ describe('asset registry', () => {
     if (result.ok || 'aborted' in result) throw new Error('expected diagnostics');
     expect(leaked(result)).toBe(false);
     expect(JSON.stringify(result)).not.toContain('user:s3cret');
+    expect(JSON.stringify(result)).not.toContain('signedvalue');
+    expect(JSON.stringify(result)).not.toContain('v=1');
+    expect(JSON.stringify(result)).not.toContain('X-Amz-Signature');
     expect(JSON.stringify(result)).toContain('example.com/image.png');
-    expect(JSON.stringify(result)).toContain('v=1');
     for (const diagnostic of result.error)
       expect(DiagnosticSchema.parse(diagnostic)).toEqual(diagnostic);
     expect(result.error[0]).toMatchObject({
@@ -217,7 +219,13 @@ describe('asset registry', () => {
         elementId: 'hero',
       },
       details: {
-        assets: [{ kind: 'image', phase: 'decode', source: 'https://example.com/image.png?v=1' }],
+        assets: [
+          {
+            kind: 'image',
+            phase: 'decode',
+            source: 'https://example.com/image.png (+2 query parameters, redacted)',
+          },
+        ],
       },
     });
     const dirty = DiagnosticSchema.parse({
@@ -228,7 +236,9 @@ describe('asset registry', () => {
       details: { assets: [{ kind: 'image', source: secretUrl, phase: 'decode' }] },
     });
     expect(JSON.stringify(dirty)).toContain('s3cret');
-    expect(redactAssetSource(secretUrl)).toBe('https://example.com/image.png?v=1');
+    expect(redactAssetSource(secretUrl)).toBe(
+      'https://example.com/image.png (+2 query parameters, redacted)',
+    );
     expect(leaked(registry.versions())).toBe(false);
     expect(leaked(registry.snapshot())).toBe(false);
   });
@@ -236,20 +246,98 @@ describe('asset registry', () => {
   it('redacts signed-query credentials, access-key names, and nested userinfo', () => {
     expect(
       redactAssetSource('https://user:s3cret@example.com/one.png?AWSAccessKeyId=AKIASECRET'),
-    ).toBe('https://example.com/one.png');
-    expect(redactAssetSource('/two.png?access_key=SECRETKEY')).toBe('/two.png');
+    ).toBe('https://example.com/one.png (+1 query parameter, redacted)');
+    expect(redactAssetSource('/two.png?access_key=SECRETKEY')).toBe(
+      '/two.png (+1 query parameter, redacted)',
+    );
     expect(
       redactAssetSource('https://cdn.example/two.png?url=https://user:s3cret@evil.example/x'),
-    ).toBe('https://cdn.example/two.png?url=https%3A%2F%2Fevil.example%2Fx');
+    ).toBe('https://cdn.example/two.png (+1 query parameter, redacted)');
     expect(redactAssetSource('https://cdn.example/ok.png?v=2&w=320')).toBe(
-      'https://cdn.example/ok.png?v=2&w=320',
+      'https://cdn.example/ok.png (+2 query parameters, redacted)',
+    );
+    expect(redactAssetSource('https://example.com/a.png#fragment-token')).toBe(
+      'https://example.com/a.png',
     );
     const nested = redactAssetSource(
       'https://cdn.example/two.png?url=https://user:s3cret@evil.example/x',
     );
     expect(nested).not.toContain('s3cret');
     expect(nested).not.toContain('user%3A');
+    expect(nested).not.toContain('url=');
     expect(decodeURIComponent(nested)).not.toContain('user:s3cret');
+  });
+
+  it('redacts query values under unrelated parameter names', async () => {
+    const awsSecret = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+    const jwt = [
+      'eyJhbGciOiJub25lIn0',
+      'eyJzdWIiOiJmaXh0dXJlIn0',
+      'bm90LWEtbGl2ZS1zaWduYXR1cmU',
+    ].join('.');
+    const sig2 = 'hmac9f3a1c8e7b6d5a4f';
+    const googleAccessId = 'prod-signer@example.iam.gserviceaccount.com';
+    const shapes = [
+      {
+        source: `https://example.com/a.png?q=${encodeURIComponent(awsSecret)}`,
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+        secret: awsSecret,
+        forbidden: ['q=', awsSecret],
+      },
+      {
+        source: `https://example.com/a.png?next=${encodeURIComponent(jwt)}`,
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+        secret: jwt,
+        forbidden: ['next=', jwt],
+      },
+      {
+        source: `https://example.com/a.png?sig2=${encodeURIComponent(sig2)}`,
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+        secret: sig2,
+        forbidden: ['sig2', sig2],
+      },
+      {
+        source: `https://example.com/a.png?GoogleAccessId=${encodeURIComponent(googleAccessId)}`,
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+        secret: googleAccessId,
+        forbidden: ['GoogleAccessId', googleAccessId],
+      },
+    ];
+    const registry = createAssetRegistry({
+      load: () => Promise.reject(new Error('load failed')),
+    });
+    for (const [index, shape] of shapes.entries())
+      registry.retain(image(shape.source, `asset-${index}`), `owner-${index}`, context);
+    const result = await registry.whenReady({
+      signal: new AbortController().signal,
+      timeoutMs: 1000,
+      location: { compositionId: 'demo', frame: 3, timeSeconds: 0.1 },
+      generation: 1,
+      committed: () => true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok || 'aborted' in result) throw new Error('expected diagnostics');
+    expect(result.error).toHaveLength(shapes.length);
+    for (const [index, shape] of shapes.entries()) {
+      expect(result.error[index]).toMatchObject({
+        code: 'asset.load-failed',
+        details: {
+          assets: [{ kind: 'image', phase: 'decode', source: shape.expected }],
+        },
+      });
+    }
+    const serialized = JSON.stringify(result);
+    for (const shape of shapes) {
+      expect(serialized).not.toContain(shape.secret);
+      expect(serialized).not.toContain(encodeURIComponent(shape.secret));
+      for (const forbidden of shape.forbidden) expect(serialized).not.toContain(forbidden);
+      expect(redactAssetSource(shape.source)).toBe(shape.expected);
+    }
+    expect(redactAssetSource('https://example.com/a.png?v=1&w=2&scale=3')).toBe(
+      'https://example.com/a.png (+3 query parameters, redacted)',
+    );
+    for (const diagnostic of result.error)
+      expect(DiagnosticSchema.parse(diagnostic)).toEqual(diagnostic);
   });
 
   it('lists every pending registration and timeoutMs', async () => {

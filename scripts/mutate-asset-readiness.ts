@@ -129,6 +129,13 @@ const mutants: Mutant[] = [
     files: frame,
     test: 'publishes every asset diagnostic from a failed settlement',
   },
+  {
+    name: 'restore-query-parameter-names',
+    file: 'src/core/assets/diagnostics.ts',
+    before: "url.search = '';",
+    after: '/* query parameter names retained */',
+    test: 'redacts query values under unrelated parameter names',
+  },
 ];
 /** Removed because it is equivalent to the attempt counter. Not a survivor. */
 const equivalent = [

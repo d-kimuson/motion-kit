@@ -232,7 +232,10 @@ describe('host frame lease', () => {
       error: [
         {
           code: 'asset.not-ready',
-          details: { timeoutMs: 100, assets: [{ source: 'https://example.com/image' }] },
+          details: {
+            timeoutMs: 100,
+            assets: [{ source: 'https://example.com/image (+1 query parameter, redacted)' }],
+          },
         },
       ],
     });
