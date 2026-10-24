@@ -36,6 +36,26 @@ width:320,height:180,fps:{numerator:30,denominator:1},durationInFrames:10})));`,
   if (config !== undefined) writeFileSync(join(root, 'vite.config.ts'), config);
   return root;
 };
+/** A project config that crashes the bundled dependency optimizer: esbuild writes outside
+ * the optimizer's cache, so Vite reads an undefined output and throws inside its own
+ * async context. `noDiscovery` runs that optimizer inside createServer instead. */
+const optimizerFixture = (noDiscovery = false) => {
+  const root = fixture();
+  writeFileSync(
+    join(root, 'vite.config.ts'),
+    `export default {optimizeDeps:{${noDiscovery ? 'noDiscovery:true,' : ''}esbuildOptions:{outdir:${JSON.stringify(join(root, 'optimizer-output'))}}}};`,
+  );
+  return root;
+};
+const optimizerDiagnostic = (root: string) => ({
+  ok: false,
+  error: {
+    code: 'render.page-error',
+    severity: 'error',
+    message: 'Loading configuration failed for "configuration" with bundled Vite 7.3.7.',
+    hint: `The project configuration and plugins must work under Vite 7; check ${join(root, 'vite.config.ts')}.`,
+  },
+});
 const open = async (root: string, loadingTimeoutMs = 15_000) => {
   const result = await openLoadingSession({
     projectRoot: root,
@@ -561,20 +581,28 @@ export default defineConfig({});`);
   }, 30_000);
 
   it("reports a project config that crashes Vite's dependency optimizer with the bundled version and config path", async () => {
-    const root = fixture();
-    writeFileSync(
-      join(root, 'vite.config.ts'),
-      `export default {optimizeDeps:{esbuildOptions:{outdir:${JSON.stringify(join(root, 'optimizer-output'))}}}};`,
-    );
-    expect(await open(root)).toEqual({
-      ok: false,
-      error: {
-        code: 'render.page-error',
-        severity: 'error',
-        message: 'Loading configuration failed for "configuration" with bundled Vite 7.3.7.',
-        hint: `The project configuration and plugins must work under Vite 7; check ${join(root, 'vite.config.ts')}.`,
-      },
-    });
+    const root = optimizerFixture();
+    expect(await open(root)).toEqual(optimizerDiagnostic(root));
+  }, 30_000);
+
+  it('attributes the optimizer crash when the reported banner is styled for CI', async () => {
+    // Vite prefixes its optimizer banner with picocolors, which turns color on whenever
+    // CI or FORCE_COLOR is set, and GitHub Actions sets CI, so the marker must ignore
+    // that styling as well as the position of the banner.
+    const root = optimizerFixture();
+    vi.stubEnv('FORCE_COLOR', '1');
+    try {
+      expect(await open(root)).toEqual(optimizerDiagnostic(root));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 30_000);
+
+  it('attributes the optimizer crash when createServer rejects it instead of an unhandled rejection', async () => {
+    // noDiscovery moves the same optimizer run inside createServer, so the rejection is
+    // awaited there instead of surfacing as an unhandled rejection later.
+    const root = optimizerFixture(true);
+    expect(await open(root)).toEqual(optimizerDiagnostic(root));
   }, 30_000);
 
   it('reports a crash after ready as a plain loading failure and still prints its cause', async () => {

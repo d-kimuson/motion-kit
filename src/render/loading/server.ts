@@ -12,6 +12,7 @@ import {
   LoadingConfigError,
   loadingFailure,
   preprocessorFailure,
+  viteOptimizerFailure,
 } from './diagnostics.ts';
 import { htmlShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
@@ -51,36 +52,28 @@ const failureName = (error: unknown): string | undefined => {
   return typeof name === 'string' && !name.startsWith('vite:') ? name : undefined;
 };
 /** Only the project's config and plugin resolution is a configuration failure; anything
- * else (server creation, the shell, the loopback bind) keeps the plain loading failure. */
+ * else (server creation, the shell, the loopback bind) keeps the plain loading failure.
+ * The phase alone cannot decide it: Vite surfaces the same failure from the try below,
+ * from the custom logger, or as an unhandled rejection, before or after `ready`, so every
+ * path classifies through this one function. */
 let resolvingConfig = true;
-const failed = (error: unknown, configuration = resolvingConfig) => {
+const failed = (error: unknown) => {
   const name = failureName(error);
-  return configuration || name !== undefined
+  return resolvingConfig || name !== undefined || viteOptimizerFailure(error)
     ? configFailure(name ?? 'configuration', configPath)
     : loadingFailure('configuration');
 };
 const report = (error: unknown) => send({ type: 'failure', error: failed(error) });
-/** Vite's dependency optimizer rejects the project's `optimizeDeps` settings inside its
- * own async context, where the failure is a bare `TypeError` (no `plugin` field) whose
- * message is the only marker that the project's configuration caused it. */
-const optimizerFailure = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'message' in error &&
-  typeof error.message === 'string' &&
-  error.message.startsWith('Error during dependency optimization');
 // A project setting can crash Vite inside its own async context (the dependency
 // optimizer, for example) without ever reaching the try below. The listeners below stop
 // Node from printing the cause and exiting, so print it to the inherited stderr and
 // report it: the caller would otherwise only see the generic service-exit Diagnostic.
 // The guard covers the child's whole life, so configuration attribution needs a real
-// marker — the config phase, the optimizer's message, a plugin name or a config key —
+// marker — the config phase, the optimizer's banner, a plugin name or a config key —
 // and any other crash keeps the plain loading Diagnostic.
 const crashed = (error: unknown) => {
   console.error(error);
-  send({ type: 'failure', error: failed(error, resolvingConfig || optimizerFailure(error)) }, () =>
-    process.disconnect?.(),
-  );
+  send({ type: 'failure', error: failed(error) }, () => process.disconnect?.());
 };
 process.on('uncaughtException', crashed);
 process.on('unhandledRejection', crashed);
