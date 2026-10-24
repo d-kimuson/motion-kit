@@ -6,15 +6,29 @@ const outputPath = z
   .string()
   .regex(/^(?:\/|[a-zA-Z]:[\\/]|\\\\[^\\]+\\[^\\]+(?:\\|$))/, 'Expected an absolute output path');
 const dimensions = { width: z.int().positive(), height: z.int().positive() };
-
-export const RenderDataSchema = z.strictObject({
-  output: outputPath,
-  format: z.literal('mp4'),
+const videoShape = {
   ...dimensions,
   fps: z.strictObject({ numerator: z.int().positive(), denominator: z.int().positive() }),
   frameCount: z.int().nonnegative(),
   durationSeconds: z.number().nonnegative(),
-});
+};
+
+// Encoding is TASK-150/159; until it lands, `render` honestly produces a frame
+// sequence into a directory plus a manifest. The `mp4` variant stays reserved
+// for the encoder without bumping schemaVersion (an added value is compatible).
+export const RenderDataSchema = z.discriminatedUnion('format', [
+  z.strictObject({
+    output: outputPath,
+    format: z.literal('mp4'),
+    ...videoShape,
+  }),
+  z.strictObject({
+    output: outputPath,
+    format: z.literal('frames'),
+    manifest: outputPath,
+    ...videoShape,
+  }),
+]);
 
 export const FrameDataSchema = z.strictObject({
   output: outputPath,

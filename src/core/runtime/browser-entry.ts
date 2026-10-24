@@ -141,6 +141,8 @@ export const bootstrapComposition = (input: unknown): void => {
           'cli.invalid-arguments',
           'Select a Composition from this registry.',
           `Supply a composition id from: ${descriptors.map((item) => item.id).join(', ')}.`,
+          undefined,
+          { ids: descriptors.map((item) => item.id) },
         );
       const index = descriptors.findIndex((item) => item.id === id);
       if (index === -1)

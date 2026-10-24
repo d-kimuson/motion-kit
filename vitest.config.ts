@@ -13,9 +13,19 @@ export default defineConfig({
           exclude: [
             'src/**/*.browser.test.tsx',
             'src/render/**/*.test.ts',
+            'src/cli/**/*.test.ts',
             'src/**/*.determinism.test.ts',
           ],
           setupFiles: ['configs/vitest/time.setup.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'cli',
+          include: ['src/cli/**/*.test.ts'],
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
         },
       },
       {

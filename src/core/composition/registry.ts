@@ -1,7 +1,7 @@
 import { createElement, type ComponentType, type ReactNode } from 'react';
 import { type z } from 'zod';
 
-import { type DiagnosticCode } from '../../lib/diagnostic.ts';
+import { type Diagnostic, type DiagnosticCode } from '../../lib/diagnostic.ts';
 import { type Result } from '../../lib/result.ts';
 import { createFrameRate, type FrameRate, type RationalInput } from '../timeline/time.ts';
 
@@ -44,6 +44,7 @@ export const compositionFailure = (
   message: string,
   hint: string,
   id?: string,
+  details?: NonNullable<Diagnostic['details']>,
 ): Result<never> => ({
   ok: false,
   error: {
@@ -52,6 +53,7 @@ export const compositionFailure = (
     message,
     hint,
     ...(id === undefined ? {} : { location: { compositionId: id } }),
+    ...(details === undefined ? {} : { details }),
   },
 });
 const pageFailure = (id?: string) =>
@@ -407,6 +409,8 @@ export const defineCompositions = <const D extends readonly Result<CompositionEn
               'cli.invalid-arguments',
               'Select a Composition from this registry.',
               `Supply a composition id from: ${descriptors.map((item) => item.id).join(', ')}.`,
+              undefined,
+              { ids: descriptors.map((item) => item.id) },
             );
           const entry = entries.get(id);
           if (entry === undefined)
