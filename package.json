@@ -13,7 +13,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "node": "./src/render/index.ts",
+      "default": "./src/index.ts"
+    },
     "./agent": "./src/agent/cli-output.ts"
   },
   "scripts": {

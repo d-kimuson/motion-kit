@@ -11,6 +11,8 @@
     // Module Resolution
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    // Node tests exercise the conditional public renderer; browser builds use default.
+    "customConditions": ["node"],
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,

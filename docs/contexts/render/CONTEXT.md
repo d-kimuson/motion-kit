@@ -4,14 +4,14 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 
 ## Ubiquitous Language
 
-| Term              | Code                              | Definition                                                                                                           |
-| ----------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Renderer          | `renderer.renderFrame({ frame })` | The contract that produces one frame: compute time, update the timeline, wait for readiness, capture.                |
-| Readiness Barrier | `awaitFrameReady`                 | The explicit condition (assets loaded, React committed, WebGL flushed) that must hold before capture; never a timer. |
-| Capture           | `captureFrame`                    | Taking the pixels of the rendered page for one frame.                                                                |
-| Encoder           | `encode`                          | Turning captured frames and audio into the output file with FFmpeg.                                                  |
+| Term              | Code             | Definition                                                                                                                                          |
+| ----------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Renderer          | `createRenderer` | Builds the host object exposing `renderFrame({ frame })` and `renderFrames({ from, to })`; each frame computes time, waits for readiness, captures. |
+| Readiness Barrier | `settleFrame`    | The page operation that seeks/commits and drains generation-tagged content and integration acknowledgements into a ready lease; never a timer.      |
+| Capture           | `capture`        | The transport step that screenshots the settled page via `page.screenshot`, inside the host frame deadline.                                         |
+| Encoder           | `encode`         | Turning captured frames and audio into the output file with FFmpeg.                                                                                 |
 
-The loading-session half of TASK-157 implements the accepted TASK-153 contract. Core's registry/provider/coordinator are shared with the browser bootstrap; frame transport and capture remain the second half of TASK-157.
+TASK-157 implements supervised loading, frame transport and PNG capture over core's shared registry/provider/coordinator. Encoding and the asset acquisition API remain separate tasks.
 
 | Term            | Code                              | Definition                                                                                                                                                                      |
 | --------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -34,13 +34,27 @@ TASK-157 owns loading supervision (including root/viewport preparation and mount
 
 Core's existing browser-context import restrictions also reject `src/render/loading` (relative and package-subpath imports). The resolved graph assertion now uses bundled Vite 7.3.7 for the public root, browser subpath and emitted entry, including the production loading resolver. Negative fixtures exercise Node built-ins and an aliased loading-service module; a separate negative lint test checks core imports. `src` in the tsconfig includes the generators, browser bootstrap, virtual-entry declaration and checked JavaScript child launcher.
 
-## Loading-session API
+## Renderer API
 
-`/render/loading` exports `openLoadingSession`, `LoadingSessionOptions`, `LoadingSession`, `Selection` and `LoadingOutcome`. The repository's current package name is `motion-kit`; the generated scene imports use the planned `@kimuson/motion-kit` name through the private loader. `/browser` exports only `bootstrapComposition`; the package root never re-exports it.
+The Node condition of the existing package root exports `createRenderer` and its public types from `src/render/index.ts`; the browser/default condition keeps `src/index.ts` free of host dependencies. NodeNext consumers resolve the Node API automatically; a bundler-mode TypeScript host must enable `customConditions: ["node"]`. No package subpath is added. The loading session and browser bootstrap remain internal; the loader privately resolves `@kimuson/motion-kit/browser`. The current package name is `motion-kit`.
+
+- `await createRenderer({ projectRoot, entry, compositionId?, props?, loadingTimeoutMs?, queueTimeoutMs?, frameTimeoutMs?, signal?, ...browserOptions })` returns `Result<Renderer>` or `{ ok: false, aborted: true }`. Props are JSON objects, validated once per selection in the page.
+- `renderer.renderFrame({ frame, signal? })` returns PNG `Buffer` bytes with `frame`, `width`, `height`, and warning `diagnostics`, only after capture completion accepts the lease. Invalid output frames use the Time Module's `composition.props-invalid`; `location.frame` is supplied only for safe integers.
+- `renderer.renderFrames({ from, to, signal? })` is an async iterable of those Results for the **half-open** range `[from, to)`, stopping at the first failure/abort. An empty valid range produces no frames.
+- `renderer.select({ compositionId?, props? })` serializes a fresh realm/props revision behind existing frame work while retaining the Vite service. Concurrent frame calls queue in submission order; queued cancellation does not mutate or destroy an active renderer frame.
+- Always await `renderer.dispose()` and check its Result, including after an automatically cleaned-up failure. Active failure/cancellation closes the entire owned session rather than reusing a potentially poisoned realm; create a new renderer to retry. Successful frames retain the healthy session until disposal.
+- Loading, caller/queue, and frame budgets default independently to **30,000 ms**. The queue budget starts at submission; a validated host ownership grant replaces it with the monotonic frame deadline, before page mutation. Screenshot and final acceptance remain inside that one deadline. Source-version changes discard bytes and re-settle under the same generation/deadline.
+- The version-1 promise RPC uses `settleFrame`, `validateCapture`, `resettle`, `completeCapture`, `cancel`, and disposal. `page.exposeFunction` carries validated ownership grants before navigation. Host and page check mode, instance, revision, generation, rational time, frame and resource versions; ready is not release.
+- A responsive coordinator's current required-asset inventory at deadline produces `asset.not-ready` with every pending asset and `timeoutMs`. Other deadline expiry, including unresponsive GPU/RPC/capture, produces `render.frame-timeout`; the post-expiry inventory probe is bounded to 100 ms and never authorizes publication. Asset failures preserve `asset.load-failed`; caller/queue cancellation returns aborted without a Diagnostic or frame. Integration-provided inventory is a neutral TASK-158 cooperation hook, not automatic asset discovery.
+- Detected Tier C registrations emit `seek.uncontrolled`; arbitrary hidden clocks are not detected. Exact-byte evidence applies only to supported paths in the tested fixed environment, not every React component or GPU.
+
+## Internal loading session
+
+`src/render/loading/session.ts` supplies `openLoadingSession`, `LoadingSessionOptions`, `LoadingSession`, `Selection` and `LoadingOutcome` to the supervisor. These are not package exports.
 
 - Supply `projectRoot` and an `entry` relative to it. No Vite config, Vite installation or application entry is required. One session owns its Vite process, loopback listener, temporary cache/config bundles, browser and replaceable contexts. Independent invocations do not share them.
 - Read `session.compositions`, then call `session.select({ compositionId?, props? })`. Every selection creates a fresh realm, including a props-only change. A successful selection returns an instance identity and descriptor, not a ready frame. Core prepares the React root without rendering scene content or seeking time.
-- Loading operations return `Result<T>`; caller cancellation through `options.signal` instead returns `{ ok: false, aborted: true }`, with no Diagnostic. Always await `session.dispose()` and check its Result. The session exposes its URL, workspace, service/browser PIDs and browser connection state for lifecycle inspection, not page evaluation.
+- Loading operations return `Result<T>`; caller cancellation through `options.signal` instead returns `{ ok: false, aborted: true }`, with no Diagnostic. Always await `session.dispose()` and check its Result. The internal session exposes its URL, workspace, service/browser PIDs, connection state and owned page to the supervisor and lifecycle tests; none is exposed on the public Renderer.
 - `loadingTimeoutMs` defaults to 30,000. Initial config/server/navigation/handshake/metadata share one budget; each sequential defaults parse and each later props/mount operation gets a fresh full budget. The external supervisor kills a synchronously blocked service process group or an unresponsive owned browser. Normal teardown attempts Vite close before bounded escalation, and removes the entire temporary workspace.
 - `disableSandbox` defaults to false; `softwareWebGL` defaults to false. `executablePath` is an explicit launch override. A missing browser yields `render.browser-launch-failed` with `pnpm exec playwright install chromium`, without installation or retry.
 
@@ -50,7 +64,7 @@ The loader runs serve/development, preserving config functions, aliases, plugins
 
 Motion-kit owns middleware/custom HTML, loopback listening, bootstrap routes, no auto-open, renderer HMR policy, serve/development mode, ephemeral cache, React/ReactDOM/runtime singleton resolution and stderr logging. React comes from the project even for linked packages; the bootstrap comes from the invoking installation. Vite 7 still creates a WebSocket listener with `hmr: false`, so the renderer also sets `ws: false`. A guarded, exact-version client transform suppresses its connection call while retaining Vite's CSS helpers. Detected source/config edits invalidate and close a renderer session; start a fresh session. Preview orchestration is not shipped here.
 
-Tests: `pnpm test --project loading` runs the real Chromium config/lifetime/launch matrix; `composition-dom` checks bootstrap preparation without content; `unit` checks the resolved browser graph and lint negatives. No frame settlement, Presentation Time transport, screenshot/PNG, readiness barrier wiring, encoding, asset API or CLI is implemented by this API.
+Tests: `pnpm test --project loading` runs the Chromium config/lifetime/launch matrix; `composition-dom` checks bootstrap preparation and owned settlement; `unit` checks the resolved browser graph and lint negatives; `frame-transport` checks PNG pixels, traversal comparisons, leases, deadlines and OS teardown. All four run in CI, with Chromium provisioning. [Transport evidence](knowledge/20261024-frame-transport.md) records the comparison and mutation matrix. Encoding, automatic asset discovery, CLI and the full TASK-160 Phase 1 qualification matrix are not implemented here.
 
 ## Trust model
 

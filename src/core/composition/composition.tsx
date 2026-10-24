@@ -27,6 +27,13 @@ export const useCompositionFrame = (): FrameSnapshot => {
   return context.snapshot;
 };
 
+/** Internal adapter access; registrations belong to this mounted Composition. */
+export const useCompositionRuntime = (): CompositionRuntime => {
+  const context = useContext(RuntimeContext);
+  if (context === null) throw new Error('Integration requires a Composition provider.');
+  return context.runtime;
+};
+
 /** Internal metadata access for the public timeline hooks and Sequence boundary. */
 export const useCompositionDefinition = (): PreparedComposition => {
   const context = useContext(RuntimeContext);

@@ -7,6 +7,7 @@ import { type BrowserContext, type Page } from 'playwright';
 import { z } from 'zod';
 
 import { DiagnosticSchema, type Diagnostic } from '../../lib/diagnostic.ts';
+import { ownershipSchema, type Ownership } from '../../lib/frame-protocol.ts';
 import {
   descriptorSchema,
   loadingProtocolVersion,
@@ -24,6 +25,10 @@ export type LoadingSessionOptions = BrowserOptions & {
   entry: string;
   loadingTimeoutMs?: number;
   signal?: AbortSignal;
+  frameTimeoutMs?: number;
+  queueTimeoutMs?: number;
+  /** Internal transport callback, installed before any realm navigation. */
+  acquire?: (ownership: Ownership) => boolean;
 };
 /** Caller cancellation is control flow, never a Diagnostic. */
 export type LoadingOutcome<T> = Result<T> | { ok: false; aborted: true };
@@ -40,6 +45,8 @@ export type LoadingSession = {
   select: (selection: Selection) => Promise<LoadingOutcome<MountReceipt>>;
   dispose: () => Promise<Result<undefined>>;
   browserConnected: () => boolean;
+  /** Internal supervisor access; not exported from the public Renderer. */
+  page: () => Page;
 };
 class LoadingAborted extends Error {}
 class LoadingError extends Error {
@@ -205,6 +212,12 @@ export const openLoadingSession = async (
       if (!value.success) fail(loadingFailure('protocol handshake'));
       else handshake.resolve();
     });
+    await page.exposeFunction('__motionKitOwnership', (event: unknown) => {
+      const checked = ownershipSchema.safeParse(event);
+      return !disposed && !aborted && terminal === undefined && checked.success
+        ? (options.acquire?.(checked.data) ?? false)
+        : false;
+    });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 0 });
     await handshake.promise;
     const value: unknown = await page.evaluate(() => window.__motionKit?.listCompositions());
@@ -292,6 +305,11 @@ export const openLoadingSession = async (
         servicePid: pid,
         workspace,
         browserConnected: () => owned?.browser.isConnected() ?? false,
+        page: () => {
+          if (page === undefined || disposed || terminal !== undefined || aborted)
+            throw new Error('Realm unavailable');
+          return page;
+        },
         dispose: () => {
           onAbort();
           return dispose();
@@ -320,6 +338,8 @@ export const openLoadingSession = async (
                   revision,
                   instance,
                   loadingTimeoutMs: timeoutMs,
+                  frameTimeoutMs: options.frameTimeoutMs ?? 30_000,
+                  queueTimeoutMs: options.queueTimeoutMs ?? 30_000,
                 } as unknown,
               );
               const result = resultSchema(mountReceiptSchema).parse(value);

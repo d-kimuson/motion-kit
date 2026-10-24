@@ -18,9 +18,18 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'loading',
-          include: ['src/render/**/*.test.ts'],
-          testTimeout: 20_000,
+          include: ['src/render/loading/**/*.test.ts', 'src/render/browser/**/*.test.ts'],
+          testTimeout: 60_000,
           hookTimeout: 20_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'frame-transport',
+          include: ['src/render/renderer.test.ts', 'src/render/capture/**/*.test.ts'],
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
         },
       },
       {
