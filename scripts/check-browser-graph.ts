@@ -1,34 +1,30 @@
-import { builtinModules, createRequire } from 'node:module';
+import { builtinModules } from 'node:module';
 import { resolve } from 'node:path';
-import { type Vite } from 'vitest/node';
-import { z } from 'zod';
-
-const require = createRequire(import.meta.resolve('vitest/node'));
-const bundlerSchema = z.object({
-  build: z.custom<typeof Vite.build>((value) => typeof value === 'function'),
-});
+import { build, type Plugin } from 'vite';
 
 const builtins = new Set(builtinModules.map((name) => name.replace(/^node:/, '')));
 const forbidden =
   /(?:^|[/\\])(?:src[/\\](?:render|cli|agent)|node_modules[/\\](?:vite|playwright|playwright-core|@playwright))[/\\]/;
 
+const three = /(?:^|[/\\]node_modules[/\\])(?:three|@react-three[/\\][^/\\]+)(?:[/\\]|$)/;
+
 /** Inspect the actually resolved browser build graph, including package exports,
- * aliases and transitive dependencies. This uses Vitest's existing dev bundler,
- * not TASK-157's production loading service. That task adds its generated entry.
+ * aliases and transitive dependencies. Uses the production bundled Vite and accepts
+ * the same private loading plugin used by the supervised service.
  */
 export const checkBrowserGraph = async (
   entry: string,
   aliases: Readonly<Record<string, string>> = {},
+  plugins: readonly Plugin[] = [],
 ): Promise<readonly string[]> => {
   const visited = new Set<string>();
   const check = (id: string) => {
     if (builtins.has(id.replace(/^node:/, '')) || id.includes('__vite-browser-external'))
       throw new Error(`Node built-in in browser graph: ${id}`);
     if (forbidden.test(id)) throw new Error(`Host module in browser graph: ${id}`);
+    if (three.test(id)) throw new Error(`Three import in browser graph: ${id}`);
   };
-  const imported: unknown = await import(require.resolve('vite'));
-  const bundler = bundlerSchema.parse(imported);
-  await bundler.build({
+  await build({
     configFile: false,
     logLevel: 'silent',
     resolve: { alias: { ...aliases } },
@@ -47,6 +43,7 @@ export const checkBrowserGraph = async (
           visited.add(id);
         },
       },
+      ...plugins,
     ],
     build: {
       write: false,
