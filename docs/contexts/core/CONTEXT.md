@@ -18,6 +18,8 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 | Transition Sample        | `TransitionSample`               | Whether an overlap is active and its exact, clamped progress at a supplied time.                                                                                                        |
 | Time Module              | `src/core/timeline`              | The only place that converts seconds, timeline time, and frames, and defines rounding and comparison. Specified in Lean.                                                                |
 | Sequence                 | `Sequence`                       | A scene's display period on the timeline, the half-open interval `[start, end)`.                                                                                                        |
+| Transition Series        | `TransitionSeries`               | A declarative layout of scenes starting at the enclosing Sequence's origin, with optional overlaps between adjacent scenes.                                                             |
+| Transition Scene         | `TransitionScene`                | A duration and content declaration placed by its enclosing TransitionSeries.                                                                                                            |
 | Transition               | `Transition`                     | A period in which two adjacent scenes of a `TransitionSeries` are mounted at once and share a progress value.                                                                           |
 | Seekability Tier         | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                                      |
 | Asset Readiness          | `useAsset`                       | Whether every required registered font or image has settled for the active frame generation; undeclared assets are not assumed ready, and a failure is a diagnostic, not a silent skip. |
@@ -98,6 +100,34 @@ declare function Sequence(props: SequenceProps): React.JSX.Element | null;
 - Sequence membership is exactly `[start, end)`: children are not rendered outside it, including a zero-length interval at its start. Nested Sequences add offsets exactly, and ancestor membership clips visibility without changing the child's declared duration, local origin or progress. Signed starts and ends beyond the Composition duration are **valid**, matching `createSequence`; only valid output frames can render. Negative duration, nonfinite/out-of-safe-range number seconds or malformed rational input are invalid authored JSX and throw; the existing Composition error boundary reports `render.page-error`. A valid but entirely offscreen interval is simply empty in the output. No extra containment constraint is imposed on the Time Module's signed-interval contract.
 
 `composition/timeline-hooks.browser.test.tsx` imports the public package root in the existing Chromium `composition-dom` project. It asserts every field at 30000/1001 fps, fractional local frame positions, exact start/end boundaries, nested offsets, clipping, zero duration, invalid authoring and missing providers. Sequential values for 90 distinct frames match three seeded random permutations, reverse order and repeated seeks. The tests use the landed runtime's owned Presentation Time, not a second test clock or provider. A snapshot-accessor probe deliberately supplies Presentation Time inconsistent with `globalFrame` to pin the runtime's ownership: hooks consume that time rather than recomputing it from the frame. Fractional-position assertions also compare strictly against the Time Module's final conversion of hand-calculated rationals, so premature numeric conversion fails.
+
+## Transition component API
+
+The package root exports `TransitionSeries`, `TransitionScene`, `Transition`, their props types, and `useTransitionProgress(): number`. No effect presets, style injection or DOM wrappers are included.
+
+```tsx
+<TransitionSeries>
+  <TransitionScene duration={4}>
+    <Intro />
+  </TransitionScene>
+  <Transition duration={0.5}>
+    <OverlapContent />
+  </Transition>
+  <TransitionScene duration={5}>
+    <Product />
+  </TransitionScene>
+</TransitionSeries>
+// Inside OverlapContent: const progress = useTransitionProgress();
+```
+
+- `TransitionSeriesProps` has optional `children: ReactNode`. Its direct children must be `TransitionScene` declarations, with at most one `Transition` between adjacent scenes. Arrays and empty React children are supported; fragments, custom declaration wrappers, text and unrelated elements are rejected. An empty series renders nothing. Adjacent scenes without a Transition have a zero overlap (a hard cut).
+- `TransitionSceneProps` requires `duration: number | RationalInput` and `children: ReactNode`. `TransitionProps` requires the same duration input and accepts optional children. Duration validation and layout use `createTransitionSeries`; overlap sampling uses `sampleTransition`. Negative durations, malformed rational/number input, invalid overlaps and invalid child order throw as authored JSX errors, reported by Composition as `render.page-error`.
+- A series begins at the enclosing Sequence's exact global start (zero at the Composition root). Internal absolute placement translates the pure layout's endpoints exactly once, without converting through numeric hook values or reapplying a relative Sequence offset. Scene children observe their own declared interval through the timeline hooks. Nested Sequences and series use the scene's origin; ancestors clip visibility without changing declared timing.
+- Total duration remains **sum(scene durations) − sum(overlap durations)**, as specified in Invariants (`Transition.placement_total`); components do not change Composition metadata. For scene durations `[2, 3, 1]` and overlaps `[0.5, 0.25]`, total duration is `5.25`, and no scene remains mounted at that exclusive end.
+- Each scene mounts on `[start, end)`; both neighbors mount throughout their overlap. Each Transition's children mount only on its own half-open overlap and observe that overlap's local interval via `useSequence()`/`useTime()`. `useTransitionProgress()` exposes its exact sampled ratio converted once to a dimensionless `number`, starting at 0. The exclusive end (progress 1) is not rendered. Zero-duration overlaps never mount their children. Simultaneous overlaps have independent progress providers.
+- `useTransitionProgress()` without an active Transition throws `useTransitionProgress requires an active Transition.` There is no fallback progress outside an overlap. A standalone TransitionScene is also an authoring error. Scene siblings do not inherit a Transition's progress context; the minimal hook is for Transition descendants, not an effect API.
+
+`composition/transition-series.browser.test.tsx` imports the root API in Chromium and asserts layout and duration, first/last/after-end samples, effect-observed unmounts, fractional starts and rational FPS, full and simultaneous overlaps, nested timing and clipping, zero/empty layouts, invalid authoring, and identical trees under sequential, seeded random, reverse and repeated seeks.
 
 ## Composition API and host integration
 

@@ -4,7 +4,7 @@ import { type Result } from '../../lib/result.ts';
 import { useCompositionFrame } from '../composition/composition.tsx';
 import { addTime, createTimelineTime, type RationalInput } from '../timeline/time.ts';
 import { SequenceIntervalContext, useSequenceInterval } from './context.ts';
-import { createSequence, sequenceContains } from './interval.ts';
+import { createSequence, sequenceContains, type SequenceInterval } from './interval.ts';
 
 export type SequenceProps = {
   /** Seconds relative to the enclosing Sequence start (or the Composition start). */
@@ -22,7 +22,6 @@ const authored = <T,>(result: Result<T>): T => {
 
 /** Render only within [start, end). Ancestors clip visibility, not the declared interval. */
 export const Sequence = ({ from, duration, children }: SequenceProps) => {
-  const { presentationTime } = useCompositionFrame();
   const parent = useSequenceInterval();
   const interval = useMemo(
     () =>
@@ -34,6 +33,18 @@ export const Sequence = ({ from, duration, children }: SequenceProps) => {
       ),
     [parent.start, from, duration],
   );
+  return <AbsoluteSequence interval={interval}>{children}</AbsoluteSequence>;
+};
+
+/** Internal absolute-placement path shared by Sequence and TransitionSeries. */
+export const AbsoluteSequence = ({
+  interval,
+  children,
+}: {
+  interval: SequenceInterval;
+  children: ReactNode;
+}) => {
+  const { presentationTime } = useCompositionFrame();
   if (!sequenceContains(interval, presentationTime)) return null;
   return (
     <SequenceIntervalContext.Provider value={interval}>{children}</SequenceIntervalContext.Provider>
