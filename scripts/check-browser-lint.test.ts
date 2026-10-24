@@ -13,7 +13,8 @@ it('keeps Node and loading-session imports forbidden in core browser sources', (
       file,
       "import 'node:fs';import '../../../render/loading/session.ts';import 'motion-kit/render/loading';",
     );
-    const result = spawnSync('pnpm', ['exec', 'oxlint', file], {
+    // GitHub's auto-selected formatter omits the rule's corrective help text.
+    const result = spawnSync('pnpm', ['exec', 'oxlint', '--format', 'default', file], {
       encoding: 'utf8',
       timeout: 20_000,
     });
