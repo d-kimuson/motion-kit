@@ -106,9 +106,9 @@ const mutants: Mutant[] = [
     name: 'timeout-before-failure',
     file: 'src/core/assets/registry.ts',
     before:
-      'const failed = failedEntries();\n        if (failed.length > 0) return failureResult(request, failed);\n        if (timedOut) return timeoutResult(request);',
+      'const failed = failedEntries();\n        // A sibling still loading must land before this returns, or the first\n        // rejection publishes a partial set and the boundary cannot add it later.\n        if (failed.length > 0 && (pendingRegistrations().length === 0 || timedOut))\n          return failureResult(request, failed);\n        if (timedOut) return timeoutResult(request);',
     after:
-      'if (timedOut) return timeoutResult(request);\n        const failed = failedEntries();\n        if (failed.length > 0) return failureResult(request, failed);',
+      'if (timedOut) return timeoutResult(request);\n        const failed = failedEntries();\n        if (failed.length > 0 && (pendingRegistrations().length === 0 || timedOut))\n          return failureResult(request, failed);',
     test: 'prefers asset.load-failed when the deadline flag and a rejection are both visible',
   },
   {
@@ -135,6 +135,21 @@ const mutants: Mutant[] = [
     before: "url.search = '';",
     after: '/* query parameter names retained */',
     test: 'redacts query values under unrelated parameter names',
+  },
+  {
+    name: 'redact-marker-twice',
+    file: 'src/core/assets/diagnostics.ts',
+    before: 'if (alreadyRedacted(source)) return source;',
+    after: '/* idempotence guard removed */',
+    test: 'returns an already-redacted source unchanged',
+  },
+  {
+    name: 'boundary-drops-registered-failures',
+    file: 'src/core/runtime/composition-runtime.ts',
+    before: 'mergeFailureDiagnostics(thrown, registry.failures(locationFor(request)))',
+    after: 'thrown[0] === undefined ? undefined : [thrown[0]]',
+    files: ['src/core/runtime/composition-runtime.test.ts'],
+    test: 'publishes every failed registration when the boundary fails',
   },
 ];
 /** Removed because it is equivalent to the attempt counter. Not a survivor. */

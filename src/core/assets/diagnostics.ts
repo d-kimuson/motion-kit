@@ -3,6 +3,8 @@ import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type AssetDescriptor, type AssetPhase } from './types.ts';
 
 const REDACTED_SOURCE = '[asset source]';
+/** Count marker produced by this module. The count is digits only; names never appear. */
+const QUERY_MARKER = / \(\+\d+ query parameters?, redacted\)$/;
 
 const decodeRepeated = (value: string): string => {
   let current = value;
@@ -44,8 +46,10 @@ const queryMarker = (count: number): string => {
  * Reported source is scheme, host and path, plus a count marker when a query
  * was present. Parameter names and values are never copied. Relative sources
  * report the path plus the same marker. Fragments and userinfo are stripped.
+ * A second pass returns that reported string unchanged: the host deadline
+ * probes an inventory that was already redacted.
  */
-const redactSource = (source: string): string => {
+const redactUnmarked = (source: string): string => {
   try {
     const absolute = isAbsoluteUrl(source);
     const url = new URL(source, 'http://assets.invalid');
@@ -60,6 +64,23 @@ const redactSource = (source: string): string => {
   } catch {
     return REDACTED_SOURCE;
   }
+};
+
+/**
+ * The marker form is a fixed point. A spoofed suffix whose prefix still has
+ * userinfo, a query, or a fragment is not trusted and is redacted again.
+ */
+const alreadyRedacted = (source: string): boolean => {
+  if (source === REDACTED_SOURCE) return true;
+  const marker = QUERY_MARKER.exec(source);
+  if (marker === null) return false;
+  const prefix = source.slice(0, source.length - marker[0].length);
+  return redactUnmarked(prefix) === prefix;
+};
+
+const redactSource = (source: string): string => {
+  if (alreadyRedacted(source)) return source;
+  return redactUnmarked(source);
 };
 
 /** Schema validation does not redact. Every asset Diagnostic must pass through here. */
@@ -155,6 +176,72 @@ export const assetNotReadyDiagnostic = (input: {
       assets: input.assets.map(assetRecord),
     },
   };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const recordedAssets = (diagnostic: Diagnostic): AssetDiagnosticInput[] => {
+  if (diagnostic.code !== 'asset.load-failed') return [];
+  const assets = diagnostic.details?.['assets'];
+  if (!Array.isArray(assets)) return [];
+  return assets.flatMap((asset): AssetDiagnosticInput[] => {
+    if (!isRecord(asset)) return [];
+    const { kind, source, phase } = asset;
+    if (typeof kind !== 'string' || typeof source !== 'string' || typeof phase !== 'string')
+      return [];
+    const id = typeof asset['id'] === 'string' ? asset['id'] : undefined;
+    const sceneId = typeof asset['sceneId'] === 'string' ? asset['sceneId'] : undefined;
+    return [
+      {
+        kind,
+        source,
+        phase,
+        ...(id === undefined ? {} : { id }),
+        ...(sceneId === undefined ? {} : { sceneId }),
+      },
+    ];
+  });
+};
+
+const assetIdentity = (asset: AssetDiagnosticInput): string =>
+  `${asset.phase}\u0000${redactAssetSource(asset.source)}`;
+
+/**
+ * Union of registry failures and diagnostics thrown through the error boundary.
+ * The same source and phase is one entry. Registry records win so a second
+ * redaction pass cannot replace them with a percent-encoded marker.
+ */
+export const mergeFailureDiagnostics = (
+  thrown: readonly Diagnostic[],
+  registered: readonly Diagnostic[],
+): [Diagnostic, ...Diagnostic[]] | undefined => {
+  const seen = new Set<string>();
+  const merged: Diagnostic[] = [];
+  const take = (diagnostic: Diagnostic): void => {
+    if (diagnostic.code !== 'asset.load-failed') {
+      merged.push(diagnostic);
+      return;
+    }
+    const assets = recordedAssets(diagnostic);
+    const fresh = assets.filter((asset) => {
+      const identity = assetIdentity(asset);
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
+    if (fresh.length === 0) return;
+    merged.push(
+      fresh.length === assets.length
+        ? diagnostic
+        : assetLoadFailed({ assets: fresh, location: diagnostic.location, cause: undefined }),
+    );
+  };
+  for (const diagnostic of registered) take(diagnostic);
+  for (const diagnostic of thrown) take(diagnostic);
+  const [first, ...rest] = merged;
+  if (first === undefined) return undefined;
+  return [first, ...rest];
 };
 
 export class AssetLoadError extends Error {

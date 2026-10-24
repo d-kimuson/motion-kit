@@ -92,6 +92,8 @@ export type AssetRegistry = Readonly<{
   endPass: () => void;
   whenReady: (request: ReadinessRequest) => Promise<AssetSettlement>;
   pending: () => readonly PendingAsset[];
+  /** Failed registrations as produced diagnostics. Not a package export. */
+  failures: (location?: Location) => readonly Diagnostic[];
   snapshot: () => AssetReadinessSnapshot;
   versions: () => readonly Readonly<{ id: string; version: string }>[];
   poke: () => void;
@@ -324,7 +326,10 @@ export const createAssetRegistry = (options: {
       let confirmedRevision: number | undefined;
       while (!request.signal.aborted) {
         const failed = failedEntries();
-        if (failed.length > 0) return failureResult(request, failed);
+        // A sibling still loading must land before this returns, or the first
+        // rejection publishes a partial set and the boundary cannot add it later.
+        if (failed.length > 0 && (pendingRegistrations().length === 0 || timedOut))
+          return failureResult(request, failed);
         if (timedOut) return timeoutResult(request);
         const required = liveEntries();
         const pending = required.filter((entry) => entry.status !== 'ready');
@@ -347,7 +352,11 @@ export const createAssetRegistry = (options: {
         }
         confirmedRevision = undefined;
         const seen = wakeVersion;
-        await waitFor(seen, pending);
+        // A failed entry's gate is already resolved. Racing it would spin while a sibling is pending.
+        const stillPending = required.filter(
+          (entry) => entry.status === 'pending' || entry.status === 'idle',
+        );
+        await waitFor(seen, stillPending.length > 0 ? stillPending : pending);
       }
       return { ok: false, aborted: true };
     } finally {
@@ -390,6 +399,7 @@ export const createAssetRegistry = (options: {
     },
     whenReady,
     pending: () => pendingRegistrations().map(publishRecord),
+    failures: (location) => failedEntries().map((entry) => diagnosticFor(entry, location)),
     snapshot: () => ({
       pending: liveEntries()
         .filter((entry) => entry.status === 'pending' || entry.status === 'idle')

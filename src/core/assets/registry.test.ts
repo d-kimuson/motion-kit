@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { assetsOf, createCompositionRuntime } from '../runtime/composition-runtime.ts';
-import { redactAssetSource } from './diagnostics.ts';
+import { assetLoadFailed, assetNotReadyDiagnostic, redactAssetSource } from './diagnostics.ts';
 import { createAssetRegistry } from './registry.ts';
 import { type AssetContext, type AssetDescriptor, type ImageAssetDescriptor } from './types.ts';
 import { openAssetRead } from './use-asset.ts';
@@ -340,6 +340,110 @@ describe('asset registry', () => {
       expect(DiagnosticSchema.parse(diagnostic)).toEqual(diagnostic);
   });
 
+  it('returns an already-redacted source unchanged', () => {
+    const awsSecret = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+    const jwt = [
+      'eyJhbGciOiJub25lIn0',
+      'eyJzdWIiOiJmaXh0dXJlIn0',
+      'bm90LWEtbGl2ZS1zaWduYXR1cmU',
+    ].join('.');
+    const shapes = [
+      {
+        name: 'userinfo',
+        source: 'https://user:s3cret@example.com/one.png?AWSAccessKeyId=AKIASECRET',
+        expected: 'https://example.com/one.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'percent-encoded userinfo',
+        source: 'https://cdn.example/%2F%2Fuser%3As3cret%40evil.example%2Fx',
+        expected: '[asset source]',
+      },
+      {
+        name: 'signed query',
+        source: 'https://example.com/image.png?X-Amz-Signature=signedvalue&v=1',
+        expected: 'https://example.com/image.png (+2 query parameters, redacted)',
+      },
+      {
+        name: 'AWS secret under q=',
+        source: `https://example.com/a.png?q=${encodeURIComponent(awsSecret)}`,
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'JWT under next=',
+        source: `https://example.com/a.png?next=${encodeURIComponent(jwt)}`,
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'sig2',
+        source: 'https://example.com/a.png?sig2=hmac9f3a1c8e7b6d5a4f',
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'GoogleAccessId',
+        source:
+          'https://example.com/a.png?GoogleAccessId=prod-signer%40example.iam.gserviceaccount.com',
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'fragment token',
+        source: 'https://example.com/a.png#fragment-token',
+        expected: 'https://example.com/a.png',
+      },
+      {
+        name: 'fragment plus query',
+        source: 'https://example.com/a.png?v=1#fragment-token',
+        expected: 'https://example.com/a.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'double-encoded nested URL',
+        source: `https://cdn.example/two.png?url=${encodeURIComponent(encodeURIComponent('https://user:s3cret@evil.example/x'))}`,
+        expected: 'https://cdn.example/two.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'relative source with query',
+        source: '/two.png?access_key=SECRETKEY',
+        expected: '/two.png (+1 query parameter, redacted)',
+      },
+      {
+        name: 'benign query',
+        source: 'https://cdn.example/ok.png?v=2&w=320',
+        expected: 'https://cdn.example/ok.png (+2 query parameters, redacted)',
+      },
+    ];
+    for (const shape of shapes) {
+      const once = redactAssetSource(shape.source);
+      expect(once).toBe(shape.expected);
+      expect(redactAssetSource(once)).toBe(once);
+      const produced = assetNotReadyDiagnostic({
+        assets: [{ kind: 'image', phase: 'decode', source: shape.source }],
+        timeoutMs: 10,
+      });
+      const reported = produced.details?.['assets'];
+      const again = assetNotReadyDiagnostic({
+        assets: [
+          {
+            kind: 'image',
+            phase: 'decode',
+            source: once,
+          },
+        ],
+        timeoutMs: 10,
+      });
+      expect(again.details).toEqual(produced.details);
+      expect(reported).toEqual([{ kind: 'image', phase: 'decode', source: once }]);
+      const failed = assetLoadFailed({
+        assets: [{ kind: 'image', phase: 'decode', source: once }],
+        cause: new Error('s3cret'),
+      });
+      const failedAgain = assetLoadFailed({
+        assets: [{ kind: 'image', phase: 'decode', source: once }],
+        cause: new Error('s3cret'),
+      });
+      expect(failedAgain.details).toEqual(failed.details);
+      expect(JSON.stringify(failed)).not.toContain('s3cret');
+    }
+  });
+
   it('lists every pending registration and timeoutMs', async () => {
     vi.useFakeTimers();
     try {
@@ -467,6 +571,43 @@ describe('asset registry', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('waits for a sibling rejection before publishing a partial failure set', async () => {
+    const first = Promise.withResolvers<string>();
+    const second = Promise.withResolvers<string>();
+    const registry = createAssetRegistry({
+      load: (descriptor) => (descriptor.id === 'fail-a' ? first.promise : second.promise),
+    });
+    registry.retain(image('http://127.0.0.1:9/fail-a.png', 'fail-a'), 'a', context);
+    registry.retain(image('/fail-b.png', 'fail-b'), 'b', context);
+    const result = registry.whenReady({
+      signal: new AbortController().signal,
+      timeoutMs: 1000,
+      location: { compositionId: 'demo', frame: 0, timeSeconds: 0 },
+      generation: 1,
+      committed: () => true,
+    });
+    first.reject(new Error('missing'));
+    await tick();
+    let settled = false;
+    void result.then(() => {
+      settled = true;
+    });
+    await tick();
+    expect(settled).toBe(false);
+    second.reject(new Error('missing'));
+    const outcome = await result;
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok || 'aborted' in outcome) throw new Error('expected diagnostics');
+    expect(outcome.error.map((diagnostic) => diagnostic.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    expect(outcome.error.map((diagnostic) => diagnostic.details?.['assets'])).toEqual([
+      [expect.objectContaining({ id: 'fail-a', source: 'http://127.0.0.1:9/fail-a.png' })],
+      [expect.objectContaining({ id: 'fail-b', source: '/fail-b.png' })],
+    ]);
   });
 
   it('maps font and image load failures to asset.load-failed', async () => {

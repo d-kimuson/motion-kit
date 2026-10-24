@@ -1,7 +1,7 @@
 import { type Diagnostic, type Location } from '../../lib/diagnostic.ts';
 import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type Result } from '../../lib/result.ts';
-import { assetNotReadyDiagnostic } from '../assets/diagnostics.ts';
+import { assetNotReadyDiagnostic, mergeFailureDiagnostics } from '../assets/diagnostics.ts';
 import { loadRegisteredAsset, type AssetLoader } from '../assets/loaders.ts';
 import { createAssetRegistry, type AssetRegistry } from '../assets/registry.ts';
 import { type PreparedComposition } from '../composition/registry.ts';
@@ -107,6 +107,8 @@ type Request = {
   running?: Promise<void>;
   releasing: boolean;
   draining: boolean;
+  /** Asset errors thrown while another registration is still pending. */
+  boundaryFailures?: Diagnostic[];
 };
 
 const failed = (
@@ -245,6 +247,12 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     if (active === request) void release(request);
   };
 
+  const settledFailures = (
+    request: Request,
+    thrown: readonly Diagnostic[],
+  ): [Diagnostic, ...Diagnostic[]] | undefined =>
+    mergeFailureDiagnostics(thrown, registry.failures(locationFor(request)));
+
   const drain = async (request: Request) => {
     request.draining = true;
     try {
@@ -264,9 +272,17 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
         if (!live(request)) return;
         if (!readiness.ok) {
           if ('aborted' in readiness) return;
-          const [first, ...rest] = readiness.error;
-          if (first === undefined) return;
-          terminate(request, { status: 'failed', diagnostics: [first, ...rest] });
+          const diagnostics = settledFailures(request, [
+            ...readiness.error,
+            ...(request.boundaryFailures ?? []),
+          ]);
+          if (diagnostics === undefined) return;
+          terminate(request, { status: 'failed', diagnostics });
+          return;
+        }
+        if ((request.boundaryFailures?.length ?? 0) > 0) {
+          const diagnostics = settledFailures(request, request.boundaryFailures ?? []);
+          if (diagnostics !== undefined) terminate(request, { status: 'failed', diagnostics });
           return;
         }
         const revision = resourceRevision;
@@ -574,7 +590,15 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
           hint: 'Use a qualified absolute-time integration before claiming traversal-independent output.',
         })),
     fail: (diagnostic: Diagnostic) => {
-      if (active !== undefined) terminate(active, { status: 'failed', diagnostics: [diagnostic] });
+      if (active === undefined || active.terminal !== undefined) return;
+      // Terminating here drops registrations whose loaders have not rejected yet.
+      if (diagnostic.code === 'asset.load-failed' && registry.pending().length > 0) {
+        active.boundaryFailures = [...(active.boundaryFailures ?? []), diagnostic];
+        return;
+      }
+      const diagnostics = settledFailures(active, [diagnostic, ...(active.boundaryFailures ?? [])]);
+      if (diagnostics === undefined) return;
+      terminate(active, { status: 'failed', diagnostics });
     },
   });
   assetRegistries.set(runtime, registry);

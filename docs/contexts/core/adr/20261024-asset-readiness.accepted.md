@@ -16,7 +16,7 @@ Registration runs during render, before the hook can throw a promise. The load p
 
 `whenReady` loops until required registrations for the request are ready and a commit acknowledgement has been observed, then confirms the registration revision did not change and every live entry is still ready. `retain` does not bump that revision, so the post-microtask ready check is what keeps a registration that appears during confirmation from being treated as settled. It does not take one `Promise.all` of the initial set. New registrations and version changes continue the loop under the same frame generation. The configured deadline is not restarted. Cancellation resolves as `{ ok: false, aborted: true }` and emits no Diagnostic. A deadline with pending registrations returns one `asset.not-ready` Diagnostic listing every pending owner and `details.timeoutMs`. A loader rejection returns `asset.load-failed` even if the deadline has already expired; `pending()` does not list failed registrations. An empty registry does not mean undeclared assets are ready; it means no registered resource is pending.
 
-Font loads use `FontFace.load()`, then `document.fonts.ready` and `document.fonts.check` for the declared face. Image loads use `HTMLImageElement.decode()`. Failures carry phase `load`, `font-set` or `decode`. The thrown React error is a stable `AssetLoadError`; its Diagnostic was already built by the single producer. The reported source contains scheme, host, path and at most a redacted query marker. An absolute URL is serialized after userinfo, query and fragment removal, so the marker is the only query trace: `https://example.com/a.png (+3 query parameters, redacted)`. One parameter uses the singular `parameter`. The marker carries the parameter count only, never a name or value, and there is no name allowlist. A relative source reports its path plus the same marker. Fragments and URL userinfo stay stripped, including userinfo the parser still leaves in the serialized URL. A digest of the query is not included, because it would let a reader confirm a guessed credential. The producer discards exception messages and stacks. Zod accepts a secret-bearing details object; redaction is a producer obligation.
+Font loads use `FontFace.load()`, then `document.fonts.ready` and `document.fonts.check` for the declared face. Image loads use `HTMLImageElement.decode()`. Failures carry phase `load`, `font-set` or `decode`. The thrown React error is a stable `AssetLoadError`; its Diagnostic was already built by the single producer. `runtime.fail` merges that diagnostic with every failed registration, deduplicated by source and phase, and does not abort settlement while another registration is still pending. `whenReady` waits for that sibling unless the deadline has already fired, then publishes the full failure set. The reported source contains scheme, host, path and at most a redacted query marker. Redaction is idempotent: the marker form and `[asset source]` are returned unchanged, so a second producer pass, including the host deadline probe of an already-redacted `pending()` inventory, cannot percent-encode the marker. An absolute URL is serialized after userinfo, query and fragment removal, so the marker is the only query trace: `https://example.com/a.png (+3 query parameters, redacted)`. One parameter uses the singular `parameter`. The marker carries the parameter count only, never a name or value, and there is no name allowlist. A relative source reports its path plus the same marker. Fragments and URL userinfo stay stripped, including userinfo the parser still leaves in the serialized URL. A digest of the query is not included, because it would let a reader confirm a guessed credential. The producer discards exception messages and stacks. Zod accepts a secret-bearing details object; redaction is a producer obligation.
 
 `settleFrame` awaits `whenReady` before integration settlement and a ready lease. Asset versions are on the lease, so a source change invalidates capture without publishing the previous bytes. The host still classifies a responsive `pendingAssets` inventory as `asset.not-ready`. Three upload and model phases are not implemented here.
 
@@ -26,24 +26,26 @@ Scene authors opt in by calling `useAsset`. A raw `<img>` or CSS font is outside
 
 The opt-in mutation round is `node scripts/mutate-asset-readiness.ts`. Each mutant is restored in `finally`.
 
-| Mutant                            | Killing test                                                                        |
-| --------------------------------- | ----------------------------------------------------------------------------------- |
-| Register after the suspense read  | `registers before the suspense read is observable`                                  |
-| Single `Promise.all` snapshot     | `drains registrations discovered after the first pending set settles`               |
-| Cache key includes caller id      | `shares a load for the same source and distinguishes weight and source`             |
-| Retry does not start              | `retries a failed load as a new attempt`                                            |
-| Accept a stale acknowledgement    | `suppresses a stale load acknowledgement`                                           |
-| Skip source redaction             | `redacts credentials signed queries and loader exception text`                      |
-| Copy loader exception text        | `redacts credentials signed queries and loader exception text`                      |
-| Timeout lists one asset           | `lists every pending registration and timeoutMs`                                    |
-| Map load failure to not-ready     | `maps font and image load failures to asset.load-failed`                            |
-| Keep userinfo                     | `redacts credentials signed queries and loader exception text`                      |
-| Image key ignores source          | `shares a load for the same source and distinguishes weight and source`             |
-| Confirm ignores new pending       | `keeps the barrier waiting when a registration appears during confirmation`         |
-| Timeout before failure            | `prefers asset.load-failed when the deadline flag and a rejection are both visible` |
-| Pending includes failed           | `reports load-failed when a rejection and a still-pending registration coexist`     |
-| Publish only the first diagnostic | `publishes every asset diagnostic from a failed settlement`                         |
-| Restore query parameter names     | `redacts query values under unrelated parameter names`                              |
+| Mutant                             | Killing test                                                                        |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| Register after the suspense read   | `registers before the suspense read is observable`                                  |
+| Single `Promise.all` snapshot      | `drains registrations discovered after the first pending set settles`               |
+| Cache key includes caller id       | `shares a load for the same source and distinguishes weight and source`             |
+| Retry does not start               | `retries a failed load as a new attempt`                                            |
+| Accept a stale acknowledgement     | `suppresses a stale load acknowledgement`                                           |
+| Skip source redaction              | `redacts credentials signed queries and loader exception text`                      |
+| Copy loader exception text         | `redacts credentials signed queries and loader exception text`                      |
+| Timeout lists one asset            | `lists every pending registration and timeoutMs`                                    |
+| Map load failure to not-ready      | `maps font and image load failures to asset.load-failed`                            |
+| Keep userinfo                      | `redacts credentials signed queries and loader exception text`                      |
+| Image key ignores source           | `shares a load for the same source and distinguishes weight and source`             |
+| Confirm ignores new pending        | `keeps the barrier waiting when a registration appears during confirmation`         |
+| Timeout before failure             | `prefers asset.load-failed when the deadline flag and a rejection are both visible` |
+| Pending includes failed            | `reports load-failed when a rejection and a still-pending registration coexist`     |
+| Publish only the first diagnostic  | `publishes every asset diagnostic from a failed settlement`                         |
+| Restore query parameter names      | `redacts query values under unrelated parameter names`                              |
+| Redact an already-redacted marker  | `returns an already-redacted source unchanged`                                      |
+| Boundary drops registered failures | `publishes every failed registration when the boundary fails`                       |
 
 `drop-entry-identity-stale-check` is not a survivor. The object-identity comparison was removed because release, retry and dispose increment `attempt` before a replacement entry can settle. A stale completion already fails the attempt check, so the identity line had no separate behavior to pin.
 

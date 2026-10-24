@@ -25,7 +25,7 @@ afterEach(async () => {
   if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
 });
 
-const open = async () => {
+const open = async (compositionId = 'assets') => {
   directory = mkdtempSync(join(tmpdir(), 'motion-kit-assets-'));
   mkdirSync(join(directory, 'node_modules'));
   for (const name of ['react', 'react-dom', 'zod'])
@@ -47,7 +47,7 @@ const open = async () => {
   const result = await createRenderer({
     projectRoot: directory,
     entry: 'entry.ts',
-    compositionId: 'assets',
+    compositionId,
     frameTimeoutMs: 15_000,
   });
   expect(result.ok).toBe(true);
@@ -57,6 +57,45 @@ const open = async () => {
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const readSource = (value: unknown): string | undefined => {
+  if (typeof value !== 'object' || value === null || !('source' in value)) return undefined;
+  const source = value['source'];
+  return typeof source === 'string' ? source : undefined;
+};
+
+const failedSources = (result: {
+  ok: boolean;
+  error?: readonly { details?: Readonly<Record<string, unknown>> }[];
+}): string[] => {
+  if (result.ok || result.error === undefined) return [];
+  const sources: string[] = [];
+  for (const diagnostic of result.error) {
+    const assets = diagnostic.details?.['assets'];
+    if (!Array.isArray(assets)) continue;
+    for (const asset of assets) {
+      const source = readSource(asset);
+      if (source !== undefined) sources.push(source);
+    }
+  }
+  return sources;
+};
+
+const routeMissing = async (page: ReturnType<loading.LoadingSession['page']>) => {
+  await page.route('**/*', async (route) => {
+    const url = route.request().url();
+    if (
+      url.includes('fail-a.png') ||
+      url.includes('fail-b.png') ||
+      url.includes('loader-rejected.png') ||
+      url.includes('boundary.png')
+    ) {
+      await route.fulfill({ status: 404, body: 'missing' });
+      return;
+    }
+    await route.continue();
+  });
+};
 
 describe('asset readiness barrier', () => {
   it('captures only after the delayed font and image load', async () => {
@@ -193,5 +232,41 @@ describe('asset readiness barrier', () => {
       ],
       textInk: true,
     });
+  }, 60_000);
+
+  it('publishes both failed assets when the error boundary throws', async () => {
+    const renderer = await open('failing-assets');
+    const owned = sessions.at(-1);
+    if (owned === undefined) throw new Error('Session missing');
+    await routeMissing(owned.page());
+    const result = await renderer.renderFrame({ frame: 0 });
+    expect(result.ok).toBe(false);
+    if (result.ok || !('error' in result)) throw new Error('expected diagnostics');
+    expect(result.error.map((diagnostic) => diagnostic.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    expect(failedSources(result)).toEqual(['http://127.0.0.1:9/fail-a.png', '/fail-b.png']);
+    expect(new Set(failedSources(result)).size).toBe(2);
+  }, 60_000);
+
+  it('publishes a loader rejection and a boundary failure as two entries', async () => {
+    const renderer = await open('mixed-failure');
+    const owned = sessions.at(-1);
+    if (owned === undefined) throw new Error('Session missing');
+    await routeMissing(owned.page());
+    const result = await renderer.renderFrame({ frame: 0 });
+    expect(result.ok).toBe(false);
+    if (result.ok || !('error' in result)) throw new Error('expected diagnostics');
+    expect(result.error.map((diagnostic) => diagnostic.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    expect(failedSources(result)).toEqual([
+      '/loader-rejected.png',
+      '/boundary.png (+1 query parameter, redacted)',
+    ]);
+    expect(JSON.stringify(result)).not.toContain('token=');
+    expect(JSON.stringify(result)).not.toContain('secret');
   }, 60_000);
 });
