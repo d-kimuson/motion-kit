@@ -9,7 +9,7 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 | Renderer          | `createRenderer` | Builds the host object exposing `renderFrame({ frame })` and `renderFrames({ from, to })`; each frame computes time, waits for readiness, captures. |
 | Readiness Barrier | `settleFrame`    | The page operation that seeks/commits and drains generation-tagged content and integration acknowledgements into a ready lease; never a timer.      |
 | Capture           | `capture`        | The transport step that screenshots the settled page via `page.screenshot`, inside the host frame deadline.                                         |
-| Encoder           | `encode`         | Turning captured frames and audio into the output file with FFmpeg.                                                                                 |
+| Encoder           | `Encoder`        | The port that turns the captured frame stream into an MP4 file; see the [system FFmpeg ADR](adr/20261025-system-ffmpeg-encoder.accepted.md).        |
 
 TASK-157 implements supervised loading, frame transport and PNG capture over core's shared registry/provider/coordinator. Encoding and the asset acquisition API remain separate tasks.
 
@@ -69,6 +69,16 @@ Motion-kit owns middleware/custom HTML, loopback listening, bootstrap routes, no
 Tests: `pnpm test --project loading` runs the Chromium config/lifetime/launch matrix; `composition-dom` checks bootstrap preparation and owned settlement; `unit` checks the resolved browser graph and lint negatives; `frame-transport` checks PNG pixels, traversal comparisons, leases, deadlines and OS teardown. All four run in CI, with Chromium provisioning. [Transport evidence](knowledge/20261024-frame-transport.md) records the comparison and mutation matrix.
 
 `src/**/*.determinism.test.ts` is the Phase 1 determinism suite, included in `frame-transport` and excluded from `unit`. `defineDeterminismSuite({ composition, frames })` plus `runDeterminismSuite` (`src/render/determinism/suite.ts`) captures a Composition module through `createRenderer` and compares PNG bytes. The seven modes are sequential 0..N then N, a random order containing N, reverse, repeated N, fresh realm, held session, and N alone in a fresh renderer. Exact bytes are the default. A tolerance is valid only as `{ purpose: 'cross-environment', maxDifferentBytes }` at the call site. Later contexts register a reference Composition by adding a `*.determinism.test.ts` that calls the suite; capture identity is host PNG bytes, so the suite does not run inside the browser-mode project. Hung GPU fences and Linux qualification are CI/platform work, not this suite. Encoding and the CLI are not implemented here.
+
+## Encoding
+
+The [accepted encoding decision](adr/20261025-system-ffmpeg-encoder.accepted.md) fixes the Phase 1 encoder; TASK-159 implements it and wires the CLI. `src/render/encoding` owns the port and the whole subprocess boundary.
+
+- Phase 1 encodes H.264/MP4 with **`ffmpeg` from the user's `PATH`** (or an explicit `ffmpegPath`). motion-kit bundles and downloads no binary and takes no encoder package dependency; a working FFmpeg 6.0+ with `libx264` is a documented prerequisite, probed once per invocation.
+- `Encoder.encode({ frames, fps, output, signal?, onProgress? })` consumes the stream `renderFrames` already yields — PNG bytes per frame — and returns `Result<EncodeReceipt, readonly Diagnostic[]>` or aborted control flow. The port does not reopen the frame transport or accept a file layout instead.
+- FPS crosses as the Composition's rational and reaches FFmpeg as `numerator/denominator`, never a float; the receipt's duration comes from the Time Module. The target is written to a temporary sibling and renamed only on success, so no partial file appears at `output`.
+- Encoder failures are `encode.ffmpeg-not-found` (missing binary), `encode.ffmpeg-unsupported` (too old or no `libx264`), `encode.ffmpeg-failed` (non-zero exit), and `encode.output-invalid` (exit 0 with no usable file), each with an OS-specific install or upgrade hint. A failed capture frame ends the encode with that frame's Diagnostics, never as an FFmpeg failure.
+- Encoding in the capture page with WebCodecs and Mediabunny is a Phase 5 experiment, not Phase 1.
 
 ## Trust model
 
