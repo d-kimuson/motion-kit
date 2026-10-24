@@ -349,6 +349,8 @@ export default defineConfig({
         'spikes/b-r3f/run-flags.ts',
         'spikes/d-assets/vitest.config.ts',
         '.agents/**/scripts/**',
+        // Separate Node processes; the test-file override glob does not match `*.test.ts`.
+        'src/motion/spring-determinism.test.ts',
       ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
