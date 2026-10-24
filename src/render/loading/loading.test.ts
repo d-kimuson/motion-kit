@@ -1,4 +1,5 @@
 import { openLoadingSession } from 'motion-kit/render/loading';
+import { fork } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -94,6 +95,110 @@ configureServer(s){const c=s.config;if(c.server.ws!==false||c.server.hmr!==false
     expect(await open(root)).toMatchObject({ ok: true });
   });
 
+  it.each(['resolve', 'environments.client.resolve'])(
+    'restores singleton aliases on the actual optimizer path after mutating %s',
+    async (target) => {
+      const root = fixture(`export default {plugins:[{name:'late-alias',configResolved(c){
+for(const a of c.${target}.alias)if(String(a.find).includes('react'))a.replacement='/missing-review-react.js';
+}}]};`);
+      const result = await open(root);
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) throw new Error('Loading failed');
+      const metadata = readFileSync(
+        join(result.value.workspace, 'cache/deps/_metadata.json'),
+        'utf8',
+      );
+      expect(metadata).toContain('react/jsx-runtime');
+      expect(metadata).toContain('react-dom/client');
+      expect(metadata).not.toContain('missing-review-react');
+      expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
+    },
+  );
+
+  it('restores React dedupe in the effective client environment after in-place clearing', async () => {
+    const root =
+      fixture(`export default {plugins:[{name:'late-dedupe',configResolved(c){c.resolve.dedupe.splice(0);},configureServer(s){
+for(const name of ['react','react-dom'])if(!s.environments.client.config.resolve.dedupe.includes(name))throw Error('dedupe escaped');
+}}]};`);
+    expect(await open(root)).toMatchObject({ ok: true });
+  });
+
+  it('applies supported late client conditions and define while restoring optimizer entries and includes', async () => {
+    const root = fixture(`export default {plugins:[{name:'late-environment',configResolved(c){
+const e=c.environments.client;e.resolve.conditions=['audit-condition'];e.define={__AUDIT_TOKEN__:JSON.stringify('defined-ok')};
+e.optimizeDeps={...e.optimizeDeps,noDiscovery:true,entries:['/missing-audit-entry.ts'],include:['missing-audit-dependency']};
+}}]};`);
+    const dependency = join(root, 'node_modules/condition-probe');
+    mkdirSync(dependency);
+    writeFileSync(
+      join(dependency, 'package.json'),
+      JSON.stringify({
+        name: 'condition-probe',
+        type: 'module',
+        exports: { 'audit-condition': './chosen.js', default: './wrong.js' },
+      }),
+    );
+    writeFileSync(join(dependency, 'chosen.js'), `export default 'condition-ok';`);
+    writeFileSync(join(dependency, 'wrong.js'), `throw Error('condition ignored');`);
+    writeFileSync(
+      join(root, 'entry.tsx'),
+      `import token from 'condition-probe';if(token!=='condition-ok'||__AUDIT_TOKEN__!=='defined-ok')throw Error('environment ignored');\n${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+    );
+    expect(await open(root)).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    'config',
+    'configResolved',
+    'configureServer',
+    'async config',
+    'async configResolved',
+    'async configureServer',
+  ])('reports an awaited %s hook failure in exactly one IPC message', async (hook) => {
+    const root = fixture(
+      `export default {plugins:[{name:'throwing-hook',${hook}(){throw Error('private');}}]};`,
+    );
+    const workspace = mkdtempSync(join(tmpdir(), 'motion-kit-ipc-'));
+    directories.push(workspace);
+    const child = fork(
+      new URL('./child.js', import.meta.url),
+      [JSON.stringify({ projectRoot: root, entry: 'entry.tsx', workspace })],
+      {
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+        detached: true,
+        execArgv: [],
+      },
+    );
+    const messages: unknown[] = [];
+    child.on('message', (message) => messages.push(message));
+    const closed = new Promise<void>((done) => child.once('close', () => done()));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        new Promise<void>((done) => child.once('disconnect', done)),
+        new Promise<never>((_done, reject) => {
+          timer = setTimeout(() => reject(Error('Child did not close')), 10_000);
+        }),
+      ]);
+      expect(messages).toEqual([
+        {
+          type: 'failure',
+          error: {
+            code: 'render.page-error',
+            severity: 'error',
+            message: 'Loading configuration rejected "throwing-hook".',
+            hint: `Use a Vite 7.3.7-compatible plugin, serve setting or installed preprocessor; check ${join(root, 'vite.config.ts')}.`,
+          },
+        },
+      ]);
+    } finally {
+      clearTimeout(timer);
+      if (child.exitCode === null && child.signalCode === null && child.pid !== undefined)
+        process.kill(-child.pid, 'SIGKILL');
+      await closed;
+    }
+  });
+
   it('deduplicates React for linked packages against the project installation', async () => {
     const root = fixture();
     const linked = mkdtempSync(join(tmpdir(), 'motion-kit-linked-'));
@@ -140,6 +245,34 @@ configureServer(s){const c=s.config;if(c.server.ws!==false||c.server.hmr!==false
       },
     });
   }, 20_000);
+
+  it('rejects imported Sass before Vite attempts optional-preprocessor package lookup', async () => {
+    const root = fixture();
+    const markerRoot = mkdtempSync(join(tmpdir(), 'motion-kit-preprocessor-order-'));
+    directories.push(markerRoot);
+    const marker = join(markerRoot, 'lookup-attempted');
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `import fs from 'node:fs';
+export default {plugins:[{name:'preprocessor-order',configResolved(){
+const original=fs.existsSync;fs.existsSync=path=>{
+if(/\\/node_modules\\/sass(?:-embedded)?\\/package\\.json$/.test(String(path))){fs.writeFileSync(${JSON.stringify(marker)},'FORBIDDEN_PREPROCESSOR_LOOKUP');throw Error('FORBIDDEN_PREPROCESSOR_LOOKUP');}
+return original(path);};}}]};`,
+    );
+    writeFileSync(join(root, 'style.scss'), '$color:red;body{color:$color}');
+    writeFileSync(
+      join(root, 'entry.tsx'),
+      `import './style.scss';\n${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+    );
+    const result = await open(root);
+    expect({ forbiddenPreprocessorLookup: existsSync(marker) }).toEqual({
+      forbiddenPreprocessorLookup: false,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { message: 'Loading configuration rejected "sass".' },
+    });
+  });
 
   it('names a missing preprocessor reached through nested CSS imports', async () => {
     const root = fixture();
@@ -386,6 +519,46 @@ export default defineConfig({});`);
       `export default {optimizeDeps:{esbuildOptions:{futureOption:true}}}`,
       'optimizeDeps.esbuildOptions',
     ],
+    [
+      'late optimizer option',
+      `export default {plugins:[{name:'late-key',configResolved(c){c.optimizeDeps.esbuildOptions={outdir:'ignored'};}}]}`,
+      'optimizeDeps.esbuildOptions',
+    ],
+    ...[
+      ['late nested key', `c.css.futureOption=true`, 'css.futureOption'],
+      ['late build option', `c.build.outDir='ignored'`, 'build'],
+      ['late server option', `c.server.fs.futureOption=true`, 'server.fs.futureOption'],
+      [
+        'late client optimizer option',
+        `c.environments.client.optimizeDeps={...c.environments.client.optimizeDeps,esbuildOptions:{outdir:'ignored'}}`,
+        'environments.client.optimizeDeps.esbuildOptions',
+      ],
+      [
+        'late in-place optimizer option',
+        `c.optimizeDeps.esbuildOptions.outdir='ignored'`,
+        'optimizeDeps.esbuildOptions',
+      ],
+      [
+        'late client resolve option',
+        `c.environments.client.resolve.futureOption=true`,
+        'environments.client.resolve.futureOption',
+      ],
+      [
+        'late client server option',
+        `c.environments.client.server={ws:true}`,
+        'environments.client.server',
+      ],
+      [
+        'late SSR optimizer option',
+        `c.environments.ssr.optimizeDeps={...c.environments.ssr.optimizeDeps,esbuildOptions:{outdir:'ignored'}}`,
+        'environments.ssr.optimizeDeps.esbuildOptions',
+      ],
+      ['late extra environment', `c.environments.extra={}`, 'environments'],
+    ].map(([name, mutation, key]) => [
+      name,
+      `export default {plugins:[{name:'late-key',configResolved(c){${mutation};}}]}`,
+      key,
+    ]),
     [
       'deferred plugin hook',
       `export default {plugins:[{name:'post-configure-r',configureServer(){return ()=>{throw new Error('boom');};}}]}`,

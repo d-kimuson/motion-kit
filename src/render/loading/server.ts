@@ -7,7 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 import { installBundledVite } from './config-loader.ts';
-import { checkPreprocessorFile, preprocessorFailure, validateConfig } from './config-validation.ts';
+import {
+  checkPreprocessorFile,
+  preprocessorFailure,
+  resolvedConfigValidator,
+  validateConfig,
+} from './config-validation.ts';
 import { configFailure, LoadingConfigError, loadingFailure } from './diagnostics.ts';
 import { htmlShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
@@ -162,6 +167,8 @@ try {
         customLogger: resolved.customLogger,
         clearScreen: resolved.clearScreen,
       };
+      const validateResolved = resolvedConfigValidator(resolved, input.projectRoot);
+      const environmentNames = Object.keys(resolved.environments);
       const aliases = resolved.resolve.alias.map((alias) => ({ ...alias }));
       const dedupe = [...resolved.resolve.dedupe];
       const allow = [...resolved.server.fs.allow];
@@ -180,6 +187,22 @@ try {
         resolved.resolve.dedupe = dedupe;
         resolved.optimizeDeps.entries = [entry];
         resolved.optimizeDeps.include = include;
+        // Vite has already forked environment options. The optimizer and module
+        // resolver consume these, not just the top-level compatibility fields.
+        if (
+          Object.keys(resolved.environments).length !== environmentNames.length ||
+          environmentNames.some((name) => resolved.environments[name] === undefined)
+        )
+          throw new LoadingConfigError('environments');
+        for (const environment of Object.values(resolved.environments)) {
+          Object.assign(environment.resolve, { alias: aliases, dedupe });
+        }
+        const client = resolved.environments['client'];
+        if (client !== undefined) {
+          client.optimizeDeps.entries = [entry];
+          client.optimizeDeps.include = include;
+        }
+        validateResolved();
       };
     },
   );

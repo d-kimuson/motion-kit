@@ -8,6 +8,7 @@ const namedHook = <T extends object>(
   hook: T,
   name: string,
   report: (error: LoadingConfigError) => void,
+  unawaited = false,
 ): T =>
   new Proxy(hook, {
     apply(target, thisArg, args) {
@@ -15,12 +16,14 @@ const namedHook = <T extends object>(
         if (typeof target !== 'function') throw new Error('Expected callable plugin hook');
         const result: unknown = Reflect.apply(target, thisArg, args);
         const wrap = (value: unknown): unknown =>
-          typeof value === 'function' ? namedHook(value, name, report) : value;
+          typeof value === 'function' ? namedHook(value, name, report, true) : value;
         if (result instanceof Promise) {
           const pending = result.then(wrap).catch((error: unknown) => {
             const failure =
               error instanceof LoadingConfigError ? error : new LoadingConfigError(name);
-            report(failure);
+            // Awaited hooks propagate to the owning server boundary. Only a
+            // detached post-configure promise needs its own reporting boundary.
+            if (unawaited) report(failure);
             throw failure;
           });
           // Vite does not await post-configure callbacks. Report their failures
@@ -31,7 +34,6 @@ const namedHook = <T extends object>(
         return wrap(result);
       } catch (error) {
         const failure = error instanceof LoadingConfigError ? error : new LoadingConfigError(name);
-        report(failure);
         throw failure;
       }
     },
