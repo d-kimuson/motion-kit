@@ -16,10 +16,8 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "node": "./src/render/index.ts",
-      "default": "./src/index.ts"
-    },
+    ".": "./src/index.ts",
+    "./render": "./src/render/index.ts",
     "./agent": "./src/agent/cli-output.ts"
   },
   "scripts": {
