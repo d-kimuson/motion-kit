@@ -8,7 +8,7 @@ import {
   type ContentRegistration,
   type Result,
 } from 'motion-kit';
-import { Suspense, use } from 'react';
+import { Component, Suspense, use } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -102,6 +102,91 @@ describe('Composition provider', () => {
       container.remove();
     }
   });
+
+  it('rejects class static defaultProps at declaration before rendering', () => {
+    const render = vi.fn(() => <p>unchecked</p>);
+    class DefaultedScene extends Component<{ values: number[] }> {
+      static defaultProps = {
+        values: [99],
+        callback: () => 42,
+        key: 'injected',
+        ref: null,
+        __self: 'injected',
+        __source: 'injected',
+      };
+      override render() {
+        return render();
+      }
+    }
+    const result = defineComposition({
+      ...metadata,
+      schema: z.object({ values: z.array(z.number()).default([1]) }),
+      component: DefaultedScene,
+    });
+    expect(result).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    if (result.ok) throw new Error('accepted class defaults');
+    expect(result.error.message).toContain('DefaultedScene');
+    expect(result.error.message).toContain('schema defaults are the only defaults authority');
+    expect(render).not.toHaveBeenCalled();
+  });
+
+  it.each(['ordinary', 'null-prototype root', 'null-prototype nested'] as const)(
+    'delivers %s checked JSON to a plain class component',
+    async (shape) => {
+      const nested = { label: 'kept', values: [1, null, true] };
+      const output = { nested, values: [2] };
+      if (shape === 'null-prototype root') Object.setPrototypeOf(output, null);
+      if (shape === 'null-prototype nested') Object.setPrototypeOf(nested, null);
+      let received: Readonly<typeof output> | undefined;
+      class PlainScene extends Component<typeof output> {
+        override render() {
+          received = this.props;
+          return (
+            <p>
+              {this.props.nested.label}:{this.props.values[0]}
+            </p>
+          );
+        }
+      }
+      const definition = unwrap(
+        await unwrap(
+          defineCompositions([
+            defineComposition({
+              ...metadata,
+              schema: z.object({}).transform(() => output),
+              component: PlainScene,
+            }),
+          ]),
+        ).mount({ revision: 'class' }),
+      );
+      const runtime = createCompositionRuntime({
+        definition,
+        instance: 'class',
+        compositionRealm: 'iframe',
+      });
+      const container = document.createElement('div');
+      document.body.append(container);
+      const root = createRoot(container);
+      try {
+        flushSync(() =>
+          root.render(<Composition definition={definition} compositionRuntime={runtime} />),
+        );
+        const settled = await runtime.settleFrame(0, { source: 'renderer', requestId: 'class' });
+        expect(settled.status).toBe('ready');
+        expect(container.textContent).toBe('kept:2');
+        expect(received).toEqual(output);
+        expect(received).toEqual(definition.props);
+        expect(received).not.toBe(definition.props);
+        expect(received?.nested).toBe(definition.props['nested']);
+        expect(received?.values).toBe(definition.props['values']);
+        expectJsonTree(received);
+      } finally {
+        flushSync(() => root.unmount());
+        runtime.dispose();
+        container.remove();
+      }
+    },
+  );
 
   it.each(['key', 'ref', '__self', '__source', '__proto__'])(
     'rejects the reserved top-level field %s before mounting',

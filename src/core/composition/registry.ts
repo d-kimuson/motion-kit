@@ -167,6 +167,8 @@ const parseProps = async <S extends z.ZodType<object>>(
     try {
       const parsed = await schema.safeParseAsync(input);
       if (!parsed.success) return propsFailure(id, parsed.error.issues);
+      if (parsed.data === null || typeof parsed.data !== 'object' || Array.isArray(parsed.data))
+        return propsFailure(id, [{ code: 'custom', path: [], message: 'Expected a JSON object.' }]);
       for (const field of ['key', 'ref', '__self', '__source', '__proto__']) {
         if (Object.hasOwn(parsed.data, field))
           return compositionFailure(
@@ -196,6 +198,42 @@ const parseProps = async <S extends z.ZodType<object>>(
   }
 };
 
+// Inspect inherited class statics too, without executing defaultProps accessors.
+const validateComponentDefaults = (component: object, id: string): Result<undefined> => {
+  let name = id;
+  const failure = () =>
+    compositionFailure(
+      'render.page-error',
+      `Component "${name}" has non-empty or unreadable defaultProps; schema defaults are the only defaults authority.`,
+      'Remove component defaultProps (including accessors) and declare defaults in the schema.',
+      id,
+    );
+  try {
+    if ('name' in component && typeof component.name === 'string' && component.name.length > 0)
+      name = component.name;
+    let current: unknown = component;
+    while ((typeof current === 'object' && current !== null) || typeof current === 'function') {
+      const property = Object.getOwnPropertyDescriptor(current, 'defaultProps');
+      if (property !== undefined) {
+        if (!('value' in property)) return failure();
+        const defaults: unknown = property.value;
+        if (defaults === undefined || defaults === null) return { ok: true, value: undefined };
+        if (typeof defaults !== 'object' || Reflect.ownKeys(defaults).length > 0) return failure();
+        // React also copies inherited enumerable defaults.
+        for (const key in defaults) {
+          void key;
+          return failure();
+        }
+        return { ok: true, value: undefined };
+      }
+      current = Object.getPrototypeOf(current);
+    }
+    return { ok: true, value: undefined };
+  } catch {
+    return failure();
+  }
+};
+
 /** Declaration errors are data, so a bad entry cannot throw out of module evaluation. */
 export const defineComposition = <S extends z.ZodType<object>>(
   input: CompositionDescriptor & {
@@ -218,6 +256,8 @@ export const defineComposition = <S extends z.ZodType<object>>(
       (typeof component !== 'function' && (typeof component !== 'object' || component === null))
     )
       return pageFailure();
+    const componentDefaults = validateComponentDefaults(component, id);
+    if (!componentDefaults.ok) return componentDefaults;
     if (!Number.isSafeInteger(durationInFrames) || durationInFrames < 0)
       return compositionFailure(
         'composition.duration-invalid',

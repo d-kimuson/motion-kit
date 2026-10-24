@@ -102,6 +102,65 @@ describe('Composition registry', () => {
       });
   });
 
+  it.each(['function', 'inherited', 'throwing getter'] as const)(
+    'rejects %s component defaultProps at declaration',
+    (kind) => {
+      const Scene = (_props: z.output<typeof schema>) => null;
+      if (kind === 'throwing getter')
+        Object.defineProperty(Scene, 'defaultProps', {
+          get: () => {
+            throw new Error('private getter error');
+          },
+        });
+      else if (kind === 'inherited')
+        Object.setPrototypeOf(Scene, { defaultProps: { callback: () => 42 } });
+      else Object.assign(Scene, { defaultProps: { callback: () => 42 } });
+      const result = defineComposition({ ...metadata, schema, component: Scene });
+      expect(result).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+      if (result.ok) throw new Error('accepted component defaults');
+      expect(result.error.message).toContain('Scene');
+      expect(result.error.message).toContain('defaultProps');
+      expect(result.error.message).toContain('schema defaults are the only defaults authority');
+      expect(JSON.stringify(result)).not.toContain('private getter error');
+    },
+  );
+
+  it('accepts empty component defaultProps', () => {
+    const Scene = Object.assign((_props: z.output<typeof schema>) => null, { defaultProps: {} });
+    expect(defineComposition({ ...metadata, schema, component: Scene })).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['array', [1]],
+    ['primitive', 'title'],
+    ['bigint root', 1n],
+  ] as const)(
+    'classifies %s schema output as props-invalid after defaults succeed',
+    async (_name, output) => {
+      const registry = unwrap(
+        defineCompositions([
+          defineComposition({
+            ...metadata,
+            schema: z
+              .any()
+              .transform((input: unknown) => (input === 'supplied' ? output : input))
+              .pipe(z.any()),
+            component: () => null,
+          }),
+        ]),
+      );
+      expect(await registry.validateDefaults('v1')).toEqual({ ok: true, value: undefined });
+      expect(await registry.mount({ revision: 'v1', props: 'supplied' })).toMatchObject({
+        ok: false,
+        error: { code: 'composition.props-invalid' },
+      });
+    },
+  );
+
   it('rejects cyclic and exotic outputs with JSON issues rather than throwing', async () => {
     const cycle: { next?: object } = {};
     cycle.next = cycle;
@@ -178,6 +237,12 @@ describe('Composition registry', () => {
           count = 1;
         })(),
       }),
+    ],
+    ['bigint property', () => ({ value: 1n })],
+    ['nested bigint', () => ({ values: [{ value: 1n }] })],
+    [
+      'bigint under __proto__',
+      () => ({ nested: Object.defineProperty({}, '__proto__', { value: 1n, enumerable: true }) }),
     ],
     ['functions', () => ({ value: () => 1 })],
     ['symbols', () => ({ value: Symbol('private') })],
