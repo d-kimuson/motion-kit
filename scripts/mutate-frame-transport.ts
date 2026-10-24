@@ -83,6 +83,25 @@ mutants.push({
   test: 'matches sequential single random reverse repeated fresh-realm and held-session bytes with nonconstant frames',
   suite: browserTests,
 });
+mutants.push({
+  name: 'validate-every-composition-with-empty-props',
+  file: 'src/core/composition/registry.ts',
+  before: '          return entry.prepare(props, revision, loadingTimeoutMs);',
+  after:
+    '          for (const candidate of entries.values()) {\n            const result = await candidate.prepare({}, revision, loadingTimeoutMs);\n            if (!result.ok) return result;\n          }\n          return entry.prepare(props, revision, loadingTimeoutMs);',
+  test: 'mounts a selected composition without validating an unselected required-prop sibling',
+  suite: 'src/core/composition/registry.test.ts',
+});
+mutants.push({
+  name: 'fail-on-any-watched-file',
+  file: 'src/render/loading/server.ts',
+  before:
+    "      if (isSource(path))\n        send({ type: 'failure', error: loadingFailure('source changed; start a fresh session') });",
+  after:
+    "      send({ type: 'failure', error: loadingFailure('source changed; start a fresh session') });",
+  test: 'ignores non-source files added to the project root and keeps the session healthy',
+  suite: 'src/render/loading/loading.test.ts',
+});
 for (const mutant of mutants) {
   const original = readFileSync(mutant.file, 'utf8');
   if (original.split(mutant.before).length !== 2)
