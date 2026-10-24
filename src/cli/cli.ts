@@ -1,6 +1,6 @@
 import { Command, CommanderError } from 'commander';
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 
 import {
   EnvelopeSchema,
@@ -11,6 +11,7 @@ import {
 import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
+import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
 import { CliArgsSchema, type FrameArgs, type RenderArgs } from './args.ts';
 
@@ -45,7 +46,7 @@ const internalUnexpected = (): Diagnostic =>
 const renderCommand = new Command('render')
   .argument('<entry>')
   .option('--composition <id>')
-  .requiredOption('--out <file>')
+  .requiredOption('--out <file-or-dir>')
   .option('--props <json>')
   .option('--json')
   .exitOverride()
@@ -134,6 +135,9 @@ const rendererFailure = (
 const frameFailure = (result: Extract<FrameCaptureResult, { ok: false }>): CommandOutcome =>
   'error' in result ? failure([...result.error]) : failure([internalUnexpected()]);
 
+/** The one format rule: an .mp4 target is encoded video; every other target is a PNG directory. */
+const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() === '.mp4';
+
 const isFile = (path: string): boolean => {
   try {
     return statSync(path).isFile();
@@ -166,6 +170,30 @@ const runRender = async (args: RenderArgs): Promise<CommandOutcome> => {
     const rate = createFrameRate(descriptor.fps);
     if (!rate.ok) return failure([rate.error]);
     const outAbsolute = resolve(process.cwd(), args.out);
+    // The target's extension selects the format: an `.mp4` file is encoded video, and any
+    // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
+    if (isVideoOutput(outAbsolute)) {
+      mkdirSync(dirname(outAbsolute), { recursive: true });
+      const encoded = await renderVideo({ composition: renderer, output: outAbsolute });
+      if (!encoded.ok)
+        return 'error' in encoded ? failure([...encoded.error]) : failure([internalUnexpected()]);
+      return {
+        ok: true,
+        diagnostics: [],
+        data: {
+          output: encoded.value.output,
+          format: 'mp4',
+          width: encoded.value.width,
+          height: encoded.value.height,
+          fps: {
+            numerator: encoded.value.fps.numerator,
+            denominator: encoded.value.fps.denominator,
+          },
+          frameCount: encoded.value.frameCount,
+          durationSeconds: encoded.value.durationSeconds,
+        },
+      };
+    }
     mkdirSync(outAbsolute, { recursive: true });
     const files: string[] = [];
     const diagnostics: Diagnostic[] = [];
@@ -275,8 +303,9 @@ const summarize = (envelope: Envelope): string => {
   if (envelope.ok && envelope.data !== null) {
     if (envelope.command === 'render') {
       const data = envelope.data;
+      const verb = data.format === 'mp4' ? 'encoded' : 'rendered';
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
-      return `rendered ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
+      return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
     }
     if (envelope.command === 'frame')
       return `captured frame ${envelope.data.frame} to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
@@ -309,7 +338,7 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
   if (parsed.kind === 'help') return 0;
   if (parsed.kind === 'usage') {
     process.stdout.write(
-      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a frame sequence to PNG files\n\nRun `motion-kit <command> --help` for command options.\n',
+      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir)\n\nRun `motion-kit <command> --help` for command options.\n',
     );
     return 0;
   }
