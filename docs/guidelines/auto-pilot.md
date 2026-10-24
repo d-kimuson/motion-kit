@@ -28,7 +28,7 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
 
 Independent Agent, SubAgent, user task, and maintenance task are defined in `docs/CONTEXT-MAP.md`. Run at most 3 Independent Agents at a time.
 
-Start it as a SubAgent that uses a worktree. In this harness (pi), worktree isolation needs a workflow script, so: keep the git tree clean; write the script to `/tmp/auto-pilot-launch/<task>.js` (outside the repository) containing `runs.run("<key>", { agent: "delegate", model: "openai-codex/gpt-6-astra:high", task, worktree: true })`; then call `subagent({ workflow: "/tmp/auto-pilot-launch/<task>.js", async: true })`. In Claude Code, start it with the Agent tool and `isolation: "worktree"` instead. Use `delegate` with an explicit model: the builtin `worker` agent is disabled by a user settings override. A builtin SubAgent cannot start SubAgents, so run the Review and QA Check of the definition of done yourself with your own SubAgents and hand the findings back to the Independent Agent, which then fixes and merges. Check its state by the SubAgent's completion notification and by the PR's state and checks (`gh pr list`, `gh pr checks <number>`). On a launch failure, see `.agents/auto-pilot/troubleshots/independent-agent-launch.md`.
+Start it as a SubAgent that uses a worktree. In this harness (pi), worktree isolation needs a workflow script, so: keep the git tree clean; write the script to `/tmp/auto-pilot-launch/<task>.js` (outside the repository) containing `runs.run("<key>", { agent: "delegate", model: "openai-codex/gpt-6-astra:high", task, worktree: true })`; then call `subagent({ workflow: "/tmp/auto-pilot-launch/<task>.js", async: true })`. In Claude Code, start it with the Agent tool and `isolation: "worktree"` instead. In Command Code, start it with `agent({ subagent_type: "general", run_in_background: true })` and tell it in the prompt to create its own persistent worktree under `/Users/kaito/repos/worktrees/motion-kit/<task>` and to commit and push early; a finished run leaves that worktree on disk, so a fix round is a new run pointed at the same path. Use `delegate` with an explicit model where the harness offers it: the builtin `worker` agent is disabled by a user settings override. A builtin SubAgent cannot start SubAgents, so run the Review and QA Check of the definition of done yourself with your own SubAgents and hand the findings back to the Independent Agent, which then fixes and merges. Check its state by the SubAgent's completion notification and by the PR's state and checks (`gh pr list`, `gh pr checks <number>`). On a launch failure, see `.agents/auto-pilot/troubleshots/independent-agent-launch.md`.
 
 ## Turn
 
@@ -76,11 +76,11 @@ Example request (SubAgent): "This problem occurred while running auto-pilot: <th
 ### clean-up
 
 1. Update `tasks/` and `context.md` so that the next turn can continue from those two alone.
-2. Call the `compact` tool with `resume` set to "Read `docs/guidelines/auto-pilot.md` and `.agents/auto-pilot/context.md`, and start the next turn", and end the turn.
+2. Call the `compact` tool with `resume` set to "Read `docs/guidelines/auto-pilot.md` and `.agents/auto-pilot/context.md`, and start the next turn", and end the turn. In Command Code, which has no `compact`, end the turn with that same resume instruction stated in `context.md`.
 
 ### Wait
 
-In a turn whose action did nothing, wait before clean-up with whatever waiting means the environment offers (a feature that resumes the session after a delay). Start at 10 minutes, double the interval for each consecutive idle turn up to 1 hour, and go back to 10 minutes once you act.
+In a turn whose action did nothing, wait before clean-up with whatever waiting means the environment offers (a feature that resumes the session after a delay; in Command Code, a one-shot `cron_create` or `sleep`). Start at 10 minutes, double the interval for each consecutive idle turn up to 1 hour, and go back to 10 minutes once you act.
 
 ## Maintenance tasks
 
