@@ -2,14 +2,17 @@ import fc from 'fast-check';
 import {
   Composition,
   createCompositionRuntime,
+  createTimelineTime,
   defineComposition,
   defineCompositions,
   Sequence,
+  toSeconds,
   useFrame,
   useSequence,
   useTime,
   useTimeline,
   type FrameRate,
+  type FrameSnapshot,
   type RationalInput,
   type Result,
   type SequenceContext,
@@ -61,6 +64,9 @@ const withScene = async (
     errors: Error[];
   }) => Promise<void>,
   fps: RationalInput = metadata.fps,
+  wrapRuntime: (
+    runtime: ReturnType<typeof createCompositionRuntime>,
+  ) => ReturnType<typeof createCompositionRuntime> = (runtime) => runtime,
 ) => {
   const definition = unwrap(
     await unwrap(
@@ -69,11 +75,13 @@ const withScene = async (
       ]),
     ).mount({ revision: 'hooks' }),
   );
-  const runtime = createCompositionRuntime({
-    definition,
-    instance: 'hooks',
-    compositionRealm: 'hooks-page',
-  });
+  const runtime = wrapRuntime(
+    createCompositionRuntime({
+      definition,
+      instance: 'hooks',
+      compositionRealm: 'hooks-page',
+    }),
+  );
   const container = document.createElement('div');
   document.body.append(container);
   const errors: Error[] = [];
@@ -175,8 +183,58 @@ describe('public timeline hooks', () => {
     );
   });
 
-  // expectValues checks every field recursively with tolerance only at the numeric boundary.
-  // oxlint-disable-next-line jest/expect-expect
+  it('reads the runtime Presentation Time snapshot rather than reconstructing it from globalFrame', async () => {
+    await withScene(
+      () => (
+        <>
+          <Probe name="global" />
+          <Sequence from={0.5} duration={3}>
+            <Sequence from={0.25} duration={2}>
+              <Probe />
+            </Sequence>
+          </Sequence>
+        </>
+      ),
+      async ({ seek, read, runtime }) => {
+        await seek(30);
+        // Deliberately disagree with globalFrame: only the runtime's time is authoritative.
+        expect(runtime.getSnapshot()?.globalFrame).toBe(30);
+        expect(read('global')).toMatchObject({
+          time: 2.002,
+          frame: 60,
+          sequence: { time: 2.002, globalTime: 2.002, globalFrame: 60 },
+          timeline: { time: 2.002, globalTime: 2.002, globalFrame: 60 },
+        });
+        expect(read()).toMatchObject({
+          time: 1.252,
+          frame: 60,
+          sequence: { time: 1.252, globalTime: 2.002, globalFrame: 60 },
+          timeline: { time: 2.002, globalTime: 2.002, globalFrame: 60 },
+        });
+      },
+      metadata.fps,
+      (runtime) => {
+        const getSnapshot = runtime.getSnapshot;
+        const snapshots = new WeakMap<FrameSnapshot, FrameSnapshot>();
+        const presentationTime = unwrap(createTimelineTime({ numerator: 1001, denominator: 500 }));
+        return {
+          ...runtime,
+          getSnapshot: () => {
+            const snapshot = getSnapshot();
+            if (snapshot === null) return null;
+            // useSyncExternalStore requires stable identity until the owned snapshot changes.
+            let overridden = snapshots.get(snapshot);
+            if (overridden === undefined) {
+              overridden = Object.freeze({ ...snapshot, presentationTime });
+              snapshots.set(snapshot, overridden);
+            }
+            return overridden;
+          },
+        };
+      },
+    );
+  });
+
   it('converts local time to seconds and rational fps to decimal without rounding localFramePosition', async () => {
     await withScene(
       () => (
@@ -201,11 +259,17 @@ describe('public timeline hooks', () => {
           },
           timeline: expectedTimeline,
         });
+        expect(read()).toMatchObject({
+          sequence: {
+            localFramePosition: toSeconds(
+              unwrap(createTimelineTime({ numerator: 15030, denominator: 1001 })),
+            ),
+          },
+        });
       },
     );
   });
 
-  // oxlint-disable-next-line jest/expect-expect
   it('composes nested Sequence offsets while keeping useTimeline and useFrame global', async () => {
     await withScene(
       () => (
@@ -231,6 +295,14 @@ describe('public timeline hooks', () => {
             globalFrame: 30,
           },
           timeline: expectedTimeline,
+        });
+        // .251 * (30000/1001) = 7530/1001; convert this exact result only once.
+        expect(read()).toMatchObject({
+          sequence: {
+            localFramePosition: toSeconds(
+              unwrap(createTimelineTime({ numerator: 7530, denominator: 1001 })),
+            ),
+          },
         });
       },
     );
@@ -489,7 +561,7 @@ it.each([useTime, useFrame, useSequence, useTimeline])(
     });
     const Invalid = () => {
       hook();
-      return null;
+      return <output>unexpected fallback</output>;
     };
     try {
       flushSync(() =>
@@ -501,7 +573,11 @@ it.each([useTime, useFrame, useSequence, useTimeline])(
       );
       expect(errors).toHaveLength(1);
       expect(errors[0]).toBeInstanceOf(Error);
-      expect(errors[0]).toHaveProperty('message', expect.stringContaining('Composition provider'));
+      expect(errors[0]).toHaveProperty(
+        'message',
+        'useCompositionFrame requires a Composition provider.',
+      );
+      expect(container.childNodes).toHaveLength(0);
     } finally {
       flushSync(() => root.unmount());
     }
