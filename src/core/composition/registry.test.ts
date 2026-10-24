@@ -1,4 +1,5 @@
 import { defineComposition, defineCompositions, DiagnosticSchema, type Result } from 'motion-kit';
+import { isValidElement } from 'react';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -120,6 +121,68 @@ describe('Composition registry', () => {
       expect(result).toMatchObject({ ok: false, error: { code: 'composition.props-invalid' } });
       expect(JSON.stringify(result)).toContain('"issues":[');
     }
+  });
+
+  it.each([
+    [
+      'non-index array function properties',
+      () => ({ values: Object.assign([1], { callback: () => 'not JSON' }) }),
+    ],
+    ['non-JSON numbers', () => ({ value: Number.POSITIVE_INFINITY })],
+    [
+      'cycles',
+      () => {
+        const value: { next?: object } = {};
+        value.next = value;
+        return value;
+      },
+    ],
+    [
+      'class instances',
+      () => ({
+        value: new (class Value {
+          count = 1;
+        })(),
+      }),
+    ],
+    ['functions', () => ({ value: () => 1 })],
+    ['symbols', () => ({ value: Symbol('private') })],
+    ['symbol keys', () => ({ [Symbol('private')]: 1 })],
+    ['undefined', () => ({ value: undefined })],
+  ] as const)('rejects %s in parsed props without mounting', async (_name, output) => {
+    const render = vi.fn(() => null);
+    const registry = unwrap(
+      defineCompositions([
+        defineComposition({
+          ...metadata,
+          schema: z.object({}).transform(output),
+          component: render,
+        }),
+      ]),
+    );
+    expect(await registry.mount({ revision: 'v1' })).toMatchObject({
+      ok: false,
+      error: { code: 'composition.props-invalid' },
+    });
+    expect(render).not.toHaveBeenCalled();
+  });
+
+  it('retains the same checked JSON output for prepared props and rendering', async () => {
+    const output = { values: [1] };
+    const registry = unwrap(
+      defineCompositions([
+        defineComposition({
+          ...metadata,
+          schema: z.object({}).transform(() => output),
+          component: () => null,
+        }),
+      ]),
+    );
+    const prepared = unwrap(await registry.mount({ revision: 'v1' }));
+    const rendered = prepared.render();
+    if (!isValidElement<{ values: number[] }>(rendered)) throw new Error('not an element');
+    expect(prepared.props).toBe(output);
+    expect(rendered.props.values).toBe(prepared.props['values']);
   });
 
   it('reports non-JSON output as a producer-created custom issue at the output path', async () => {
@@ -273,6 +336,33 @@ describe('Composition registry', () => {
       ok: false,
       error: { code: 'render.page-error' },
     });
+  });
+
+  it('retries failed defaults with a corrected budget and caches only success', async () => {
+    vi.useFakeTimers();
+    try {
+      const parse = vi.fn(async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        return { title: 'Hello' };
+      });
+      const registry = unwrap(
+        defineCompositions([
+          defineComposition({ ...metadata, schema: z.object({}).transform(parse), component }),
+        ]),
+      );
+      const expired = registry.validateDefaults('v1', 10);
+      expect(registry.validateDefaults('v1', 10)).toBe(expired);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await expired).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+      const retried = registry.validateDefaults('v1', 100);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(await retried).toEqual({ ok: true, value: undefined });
+      expect(await registry.validateDefaults('v1', 100)).toEqual({ ok: true, value: undefined });
+      expect(parse).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('bounds each parse separately and ignores a late result', async () => {

@@ -162,6 +162,13 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
       ]),
     });
 
+  // Publish the task before calling user code, which can synchronously cancel ownership.
+  const track = (request: Request, work: () => Promise<void>) => {
+    const running = Promise.withResolvers<void>();
+    request.running = running.promise;
+    running.resolve(work());
+  };
+
   const release = async (request: Request) => {
     if (request.releasing) return;
     request.releasing = true;
@@ -268,23 +275,41 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     while (next !== undefined && next.terminal !== undefined) next = queue.shift();
     if (next === undefined) return;
     active = next;
-    next.running = acquire(next);
+    const request = next;
+    track(request, () => acquire(request));
   };
   const cancel = (requestId: string) => {
     const request = requests.get(requestId);
     if (request !== undefined) terminate(request, { status: 'aborted' });
   };
-  const dispose = () => {
-    if (disposed) return;
+  let disposalResult: Result<undefined> = { ok: true, value: undefined };
+  const dispose = (): Result<undefined> => {
+    if (disposed) return disposalResult;
     disposed = true;
-    for (const request of requests.values()) terminate(request, { status: 'aborted' });
-    for (const registration of integrations.values()) registration.dispose?.();
-    integrations.clear();
-    contents.clear();
-    snapshot = null;
-    emit();
-    listeners.clear();
-    signalChange();
+    try {
+      for (const request of requests.values()) terminate(request, { status: 'aborted' });
+      for (const registration of integrations.values()) {
+        try {
+          registration.dispose?.();
+        } catch {
+          disposalResult = {
+            ok: false,
+            error: failed('Composition integration disposal failed.').diagnostics[0],
+          };
+        }
+      }
+    } finally {
+      integrations.clear();
+      contents.clear();
+      snapshot = null;
+      try {
+        emit();
+      } finally {
+        listeners.clear();
+        signalChange();
+      }
+    }
+    return disposalResult;
   };
   const acknowledgeContent = (
     id: string,
@@ -391,7 +416,8 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
       return Promise.resolve({ status: 'ready', lease: leaseFor(active) });
     if (active.draining) return active.result.promise;
     active.result = Promise.withResolvers<FrameOutcome>();
-    active.running = drain(active);
+    const request = active;
+    track(request, () => drain(request));
     return active.result.promise;
   };
   const settleFrame = (

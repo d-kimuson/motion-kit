@@ -104,6 +104,7 @@ const jsonShapeIssue = (
     const property = Object.getOwnPropertyDescriptor(value, key);
     if (
       typeof key === 'symbol' ||
+      (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) ||
       property === undefined ||
       !('value' in property) ||
       property.enumerable !== true
@@ -156,7 +157,10 @@ const parseProps = async <S extends z.ZodType<object>>(
             message: 'Expected JSON-valued output props.',
           })),
         );
-      return { ok: true, value: { typed: parsed.data, json: json.data } };
+      // Shape and JSON validation above establish JsonObject for the original output too.
+      // Keep that checked object, not Zod's clone, for both consumers.
+      // oxlint-disable-next-line no-unsafe-type-assertion
+      return { ok: true, value: { typed: parsed.data, json: parsed.data as JsonObject } };
     } catch {
       return pageFailure(id);
     }
@@ -281,7 +285,10 @@ export const defineCompositions = <const D extends readonly Result<CompositionEn
         }
         return { ok: true, value: undefined };
       };
-      const pending = validate();
+      const pending = validate().then((result) => {
+        if (!result.ok) defaults.delete(revision);
+        return result;
+      });
       defaults.set(revision, pending);
       return pending;
     };

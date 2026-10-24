@@ -131,6 +131,78 @@ describe('Composition runtime ownership', () => {
     runtime.dispose();
   });
 
+  it('tracks resettlement before reentrant cancellation and holds the queue until work finishes', async () => {
+    const runtime = await setup();
+    const work = deferred<Result<undefined>>();
+    try {
+      const first = runtime.settleFrame(0, { source: 'renderer', requestId: 'first' });
+      await tick();
+      runtime.acknowledgeContent('composition-root', 1, '1');
+      const ready = await first;
+      if (ready.status !== 'ready') throw new Error('not ready');
+      const second = runtime.settleFrame(1, { source: 'renderer', requestId: 'second' });
+      runtime.registerIntegration({
+        id: 'reentrant',
+        version: '1',
+        seekability: 'B',
+        settle: () => {
+          runtime.cancel('first');
+          return work.promise;
+        },
+      });
+      expect(await runtime.resettle(ready.lease)).toEqual({ status: 'aborted' });
+      await tick();
+      expect(runtime.getSnapshot()).toBeNull();
+      work.resolve({ ok: true, value: undefined });
+      await tick();
+      expect(runtime.getSnapshot()?.generation).toBe(2);
+      runtime.acknowledgeContent('composition-root', 2, '1');
+      expect(await second).toMatchObject({ status: 'ready' });
+    } finally {
+      work.resolve({ ok: true, value: undefined });
+      runtime.dispose();
+    }
+  });
+
+  it('finishes teardown and reports a throwing integration disposer without retaining listeners', async () => {
+    const runtime = await setup();
+    const first = vi.fn(() => {
+      throw new Error('private disposal details');
+    });
+    const second = vi.fn();
+    const unregister = [first, second].map((dispose, index) =>
+      runtime.registerIntegration({
+        id: String(index),
+        version: '1',
+        seekability: 'B',
+        settle: () => Promise.resolve({ ok: true, value: undefined }),
+        dispose,
+      }),
+    );
+    const content = runtime.registerContent('nested', '1');
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+    const detachRoot = runtime.attachRoot();
+    const result = runtime.dispose();
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    expect(JSON.stringify(result)).not.toContain('private');
+    expect(runtime.dispose()).toEqual(result);
+    listener.mockClear();
+    for (const detach of unregister) detach();
+    content.update('2');
+    content.dispose();
+    detachRoot(); // Registration handles and listeners must be detached after teardown.
+    expect(listener).not.toHaveBeenCalled();
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(runtime.getSnapshot()).toBeNull();
+    expect(await runtime.settleFrame(0, { source: 'renderer', requestId: 'late' })).toEqual({
+      status: 'aborted',
+    });
+  });
+
   it('preview supersedes only preview work and joins behind surviving renderer requests', async () => {
     const runtime = await setup();
     const renderer = runtime.settleFrame(0, { source: 'renderer', requestId: 'r1' });
