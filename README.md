@@ -34,10 +34,11 @@ motion-kit render <entry> [--composition <id>] --out <dir> [--props <json>] [--j
 Composition; otherwise the command fails with `cli.invalid-arguments` naming the
 available ids.
 
-Encoding is not implemented yet (TASK-150/159), so `render` produces a directory of
+Encoding is not implemented yet (TASK-159), so `render` still produces a directory of
 PNG frames plus a `manifest.json` and reports `"format": "frames"` in `data` — never a
-fake MP4. Phase 1 encodes H.264/MP4 with an FFmpeg you install yourself; motion-kit
-ships no binary ([encoding decision](docs/contexts/render/adr/20261025-system-ffmpeg-encoder.accepted.md)).
+fake MP4. Once TASK-159 lands, Phase 1 will encode H.264/MP4 with an FFmpeg you install
+yourself; motion-kit will ship no binary
+([encoding decision](docs/contexts/render/adr/20261025-system-ffmpeg-encoder.accepted.md)).
 
 Exit codes: `0` success, `1` domain failure (e.g. invalid props), `2` invocation error
 (e.g. missing entry or unknown id), `3` unexpected internal error. Failures are always
