@@ -48,7 +48,8 @@ const renderCommand = new Command('render')
   .requiredOption('--out <file>')
   .option('--props <json>')
   .option('--json')
-  .exitOverride();
+  .exitOverride()
+  .configureOutput({ outputError: () => {} });
 
 const frameCommand = new Command('frame')
   .argument('<entry>')
@@ -56,7 +57,8 @@ const frameCommand = new Command('frame')
   .requiredOption('--frame <n>')
   .requiredOption('--out <png>')
   .option('--json')
-  .exitOverride();
+  .exitOverride()
+  .configureOutput({ outputError: () => {} });
 
 const commands: Readonly<Record<'render' | 'frame', Command>> = {
   render: renderCommand,
@@ -270,8 +272,11 @@ const exitCodeFor = (envelope: Envelope): number => {
 
 const summarize = (envelope: Envelope): string => {
   if (envelope.ok && envelope.data !== null) {
-    if (envelope.command === 'render')
-      return `rendered ${envelope.data.frameCount} frames to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
+    if (envelope.command === 'render') {
+      const data = envelope.data;
+      const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
+      return `rendered ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
+    }
     if (envelope.command === 'frame')
       return `captured frame ${envelope.data.frame} to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
   }
