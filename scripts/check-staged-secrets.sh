@@ -1,10 +1,15 @@
 #!/bin/sh
 
-if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || ! cd "$root"; then
+# The sentinel preserves newlines in the path; remove only Git's final newline.
+if ! root=$(git rev-parse --show-toplevel 2>/dev/null && printf '.'); then
   printf '%s\n' 'Error: staged secret scan must run inside a Git working tree.' >&2
   exit 1
 fi
 
+root=${root%.}
+root=${root%?}
+
+# Resolve PATH relative to the caller, before changing directories.
 scanner=$(command -v gitleaks 2>/dev/null)
 if [ -z "$scanner" ]; then
   # command -v may omit an installed scanner that lacks execute permission.
@@ -21,6 +26,24 @@ if [ -z "$scanner" ]; then
       *) break ;;
     esac
   done
+fi
+
+case "$scanner" in
+  ''|/*) ;;
+  *)
+    if ! caller=$(pwd -P && printf '.'); then
+      printf 'Error: cannot resolve gitleaks scanner path: %s\n' "$scanner" >&2
+      exit 126
+    fi
+    caller=${caller%.}
+    caller=${caller%?}
+    scanner=$caller/$scanner
+    ;;
+esac
+
+if ! cd "$root"; then
+  printf '%s\n' 'Error: staged secret scan must run inside a Git working tree.' >&2
+  exit 1
 fi
 
 if [ -n "$scanner" ]; then
