@@ -1,3 +1,4 @@
+import { assetNotReadyDiagnostic } from '../../core/assets/diagnostics.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type Ownership } from '../../lib/frame-protocol.ts';
@@ -19,18 +20,6 @@ export type FrameJob = {
   pending: () => boolean;
 };
 const aborted = { ok: false, aborted: true } as const;
-const redactSource = (source: string): string => {
-  try {
-    const url = new URL(source);
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch {
-    return '[asset source]';
-  }
-};
 /** A request's queue watchdog starts at submission. Only a matching host grant
  * replaces it with the single monotonic frame deadline, retained through capture.
  */
@@ -95,23 +84,11 @@ export const createFrameJob = (options: {
     }
     const diagnostic: Diagnostic =
       assets.length > 0
-        ? {
-            code: 'asset.not-ready',
-            severity: 'error',
+        ? assetNotReadyDiagnostic({
+            assets,
+            timeoutMs: options.frameTimeoutMs,
             location,
-            message: 'Required assets were not ready before the frame deadline.',
-            hint: 'Fix pending asset acquisition, decode or upload, or increase frameTimeoutMs.',
-            details: {
-              timeoutMs: options.frameTimeoutMs,
-              assets: assets.map((asset) => ({
-                ...asset,
-                source: redactSource(asset.source),
-                ...(asset.relatedSources === undefined
-                  ? {}
-                  : { relatedSources: asset.relatedSources.map(redactSource) }),
-              })),
-            },
-          }
+          })
         : {
             code: 'render.frame-timeout',
             severity: 'error',

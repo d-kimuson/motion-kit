@@ -17,7 +17,12 @@ import {
   type CompositionEntry,
   type CompositionRegistry,
 } from '../composition/registry.ts';
-import { createCompositionRuntime, type CompositionRuntime } from './composition-runtime.ts';
+import { toSeconds } from '../timeline/time.ts';
+import {
+  assetsOf,
+  createCompositionRuntime,
+  type CompositionRuntime,
+} from './composition-runtime.ts';
 
 type Registry = CompositionRegistry<readonly Result<CompositionEntry>[]>;
 const failure = () =>
@@ -85,6 +90,29 @@ export const bootstrapComposition = (input: unknown): void => {
     cancel: (requestId) => runtime?.cancel(requestId),
     pendingAssets: (requestId) => runtime?.pendingAssets(requestId) ?? [],
     warnings: () => runtime?.warnings() ?? [],
+    assetReadiness: () =>
+      runtime === undefined ? { pending: [], failed: [], ready: [] } : assetsOf(runtime).snapshot(),
+    whenReady: (timeoutMs) => {
+      if (runtime === undefined) return Promise.resolve({ ok: false, aborted: true });
+      const current = runtime;
+      const snapshot = current.getSnapshot();
+      return assetsOf(current).whenReady({
+        signal: new AbortController().signal,
+        timeoutMs,
+        configuredTimeoutMs: timeoutMs,
+        location: {
+          compositionId: current.definition.descriptor.id,
+          ...(snapshot === null
+            ? {}
+            : {
+                frame: snapshot.globalFrame,
+                timeSeconds: toSeconds(snapshot.presentationTime),
+              }),
+        },
+        generation: snapshot?.generation ?? 0,
+        committed: () => current.getSnapshot() !== null,
+      });
+    },
     listCompositions: () =>
       registry === undefined
         ? (declaration ?? failure())

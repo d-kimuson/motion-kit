@@ -42,6 +42,7 @@ export default defineConfig({
           include: [
             'src/core/composition/**/*.browser.test.tsx',
             'src/core/runtime/**/*.browser.test.tsx',
+            'src/core/assets/**/*.browser.test.tsx',
           ],
           setupFiles: ['configs/vitest/time.setup.ts'],
           browser: {

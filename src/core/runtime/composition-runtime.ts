@@ -1,13 +1,38 @@
-import { type Diagnostic } from '../../lib/diagnostic.ts';
+import { type Diagnostic, type Location } from '../../lib/diagnostic.ts';
 import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type Result } from '../../lib/result.ts';
+import { assetNotReadyDiagnostic } from '../assets/diagnostics.ts';
+import { loadRegisteredAsset, type AssetLoader } from '../assets/loaders.ts';
+import { createAssetRegistry, type AssetRegistry } from '../assets/registry.ts';
 import { type PreparedComposition } from '../composition/registry.ts';
 import {
   frameToTime,
+  toSeconds,
   validateOutputFrame,
   type RationalInput,
   type TimelineTime,
 } from '../timeline/time.ts';
+
+const assetRegistries = new WeakMap<object, AssetRegistry>();
+const isAssetRegistry = (value: unknown): value is AssetRegistry =>
+  typeof value === 'object' &&
+  value !== null &&
+  'whenReady' in value &&
+  'retain' in value &&
+  'pending' in value;
+/** Realm wrappers may copy enumerable fields. The registry travels with the object. */
+export const assetsOf = (runtime: object): AssetRegistry => {
+  if ('assetRegistry' in runtime && isAssetRegistry(runtime.assetRegistry))
+    return runtime.assetRegistry;
+  const found = assetRegistries.get(runtime);
+  if (found === undefined) throw new Error('Asset registry is owned by a Composition runtime.');
+  return found;
+};
+const isAssetLoader = (value: unknown): value is AssetLoader => typeof value === 'function';
+const readAssetLoader = (options: object): AssetLoader | undefined => {
+  const value: unknown = Object.getOwnPropertyDescriptor(options, 'assetLoader')?.value;
+  return isAssetLoader(value) ? value : undefined;
+};
 
 export type HostSource = 'renderer' | 'preview';
 export type FrameSnapshot = Readonly<{
@@ -130,10 +155,16 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
   let rootAttached = false;
   let wake = Promise.withResolvers<void>();
   const queue: Request[] = [];
+  let notifyAssetChange = () => {};
+  const registry = createAssetRegistry({
+    load: readAssetLoader(options) ?? loadRegisteredAsset,
+    onChange: () => notifyAssetChange(),
+  });
 
   const signalChange = () => {
     wake.resolve();
     wake = Promise.withResolvers<void>();
+    registry.poke();
   };
   const emit = () => {
     for (const listener of listeners) listener();
@@ -147,6 +178,16 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     }
     signalChange();
   };
+  notifyAssetChange = changed;
+  const locationFor = (request: Request): Location => ({
+    compositionId: definition.descriptor.id,
+    frame: request.snapshot.globalFrame,
+    timeSeconds: toSeconds(request.snapshot.presentationTime),
+  });
+  const currentPending = (): PendingAsset[] => [
+    ...registry.pending(),
+    ...[...integrations.values()].flatMap((entry) => [...(entry.pendingAssets?.() ?? [])]),
+  ];
   const live = (request: Request) =>
     !disposed && active === request && request.terminal === undefined;
   const leaseFor = (request: Request): CaptureLease =>
@@ -164,6 +205,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
         ...[...integrations].map(([id, value]) =>
           Object.freeze({ id: `integration:${id}`, version: value.version }),
         ),
+        ...registry.versions().map((value) => Object.freeze(value)),
       ]),
     });
 
@@ -208,13 +250,24 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     try {
       const settled = new Map<IntegrationRegistration, number>();
       while (live(request)) {
-        if (
-          [...contents.values()].some(
-            (content) => content.generation !== request.snapshot.generation,
-          )
-        ) {
-          await wake.promise;
-          continue;
+        const readiness = await registry.whenReady({
+          signal: request.controller.signal,
+          ...(options.externalDeadline === true ? { timeoutMs: frameTimeoutMs } : {}),
+          configuredTimeoutMs: frameTimeoutMs,
+          location: locationFor(request),
+          generation: request.snapshot.generation,
+          committed: () =>
+            [...contents.values()].every(
+              (content) => content.generation === request.snapshot.generation,
+            ),
+        });
+        if (!live(request)) return;
+        if (!readiness.ok) {
+          if ('aborted' in readiness) return;
+          const [first, ...rest] = readiness.error;
+          if (first === undefined) return;
+          terminate(request, { status: 'failed', diagnostics: [first, ...rest] });
+          return;
         }
         const revision = resourceRevision;
         for (const integration of integrations.values()) {
@@ -242,6 +295,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
           )
         )
           continue;
+        if (registry.pending().length > 0) continue;
         request.settledRevision = resourceRevision;
         request.result.resolve({ status: 'ready', lease: leaseFor(request) });
         return;
@@ -262,14 +316,24 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     clearTimeout(request.queueTimer);
     // This budget is never restarted by readiness, capture, or resource re-settlement.
     if (options.externalDeadline !== true)
-      request.frameTimer = setTimeout(
-        () =>
-          terminate(
-            request,
-            failed('Composition frame settlement or capture timed out.', 'render.frame-timeout'),
-          ),
-        frameTimeoutMs,
-      );
+      request.frameTimer = setTimeout(() => {
+        const assets = currentPending();
+        terminate(
+          request,
+          assets.length > 0
+            ? {
+                status: 'failed',
+                diagnostics: [
+                  assetNotReadyDiagnostic({
+                    assets,
+                    timeoutMs: frameTimeoutMs,
+                    location: locationFor(request),
+                  }),
+                ],
+              }
+            : failed('Composition frame settlement or capture timed out.', 'render.frame-timeout'),
+        );
+      }, frameTimeoutMs);
     snapshot = Object.freeze({ ...request.snapshot, resourceRevision });
     request.snapshot = snapshot;
     emit();
@@ -307,6 +371,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     } finally {
       integrations.clear();
       contents.clear();
+      registry.dispose();
       snapshot = null;
       try {
         emit();
@@ -463,7 +528,8 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     pump();
     return request.result.promise;
   };
-  return Object.freeze({
+  const runtime = Object.freeze({
+    assetRegistry: registry,
     definition,
     compositionRealm,
     instance,
@@ -496,7 +562,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     dispose,
     pendingAssets: (requestId: string): PendingAsset[] => {
       if (active?.requestId !== requestId || !live(active)) return [];
-      return [...integrations.values()].flatMap((entry) => [...(entry.pendingAssets?.() ?? [])]);
+      return currentPending();
     },
     warnings: (): Diagnostic[] =>
       [...integrations.values()]
@@ -511,5 +577,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
       if (active !== undefined) terminate(active, { status: 'failed', diagnostics: [diagnostic] });
     },
   });
+  assetRegistries.set(runtime, registry);
+  return runtime;
 };
 export type CompositionRuntime = ReturnType<typeof createCompositionRuntime>;

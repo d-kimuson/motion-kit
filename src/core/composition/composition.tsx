@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 
+import { isAssetLoadError } from '../assets/diagnostics.ts';
 import {
+  assetsOf,
   type CompositionRuntime,
   type ContentRegistration,
   type FrameSnapshot,
@@ -27,12 +29,17 @@ export const useCompositionFrame = (): FrameSnapshot => {
   return context.snapshot;
 };
 
-/** Internal adapter access; registrations belong to this mounted Composition. */
-export const useCompositionRuntime = (): CompositionRuntime => {
+const requireRuntime = (hook: string): CompositionRuntime => {
   const context = useContext(RuntimeContext);
-  if (context === null) throw new Error('Integration requires a Composition provider.');
+  if (context === null) throw new Error(`${hook} requires a Composition provider.`);
   return context.runtime;
 };
+
+/** Internal adapter access; registrations belong to this mounted Composition. */
+export const useCompositionRuntime = (): CompositionRuntime => requireRuntime('Integration');
+
+/** Internal asset-hook access. Not a package-root export. */
+export const useAssetRuntime = (): CompositionRuntime => requireRuntime('useAsset');
 
 /** Internal metadata access for the public timeline hooks and Sequence boundary. */
 export const useCompositionDefinition = (): PreparedComposition => {
@@ -69,6 +76,7 @@ const RootContent = ({
   snapshot: FrameSnapshot;
 }) => {
   useLayoutEffect(() => {
+    assetsOf(runtime).endPass();
     runtime.acknowledgeContent('composition-root', snapshot.generation, '1');
   }, [runtime, snapshot]);
   return definition.render();
@@ -82,7 +90,11 @@ class ContentErrorBoundary extends Component<
   static getDerivedStateFromError() {
     return { failed: true };
   }
-  override componentDidCatch() {
+  override componentDidCatch(error: unknown) {
+    if (isAssetLoadError(error)) {
+      this.props.runtime.fail(error.diagnostic);
+      return;
+    }
     this.props.runtime.fail({
       code: 'render.page-error',
       severity: 'error',
@@ -115,6 +127,7 @@ export const Composition = ({
   if (definition !== compositionRuntime.definition)
     throw new Error("Composition definition must be the runtime's validated selection.");
   if (snapshot === null) return null;
+  assetsOf(compositionRuntime).beginPass();
   return (
     <RuntimeContext.Provider value={{ runtime: compositionRuntime, snapshot }}>
       <ContentErrorBoundary runtime={compositionRuntime}>

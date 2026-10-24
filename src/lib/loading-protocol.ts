@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
 import { DiagnosticSchema } from './diagnostic.ts';
-import { type FramePage, type Ownership } from './frame-protocol.ts';
+import {
+  type AssetReadinessSnapshot,
+  type AssetSettlement,
+  type FramePage,
+  type Ownership,
+} from './frame-protocol.ts';
 import { type Result } from './result.ts';
 
 export const loadingProtocolVersion = 1;
@@ -48,6 +53,10 @@ export type LoadingPage = FramePage & {
   ) => Promise<Result<undefined>>;
   mount: (request: unknown) => Promise<Result<MountReceipt>>;
   dispose: () => Result<undefined>;
+  /** Registered-resource snapshot for a later inspect command. Not a package export. */
+  assetReadiness: () => AssetReadinessSnapshot;
+  /** Same registry settlement the frame barrier awaits. Not a package export. */
+  whenReady: (timeoutMs: number) => Promise<AssetSettlement>;
 };
 declare global {
   // Interface merging is required for the browser global.
