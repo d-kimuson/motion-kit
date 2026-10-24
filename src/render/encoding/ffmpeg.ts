@@ -187,9 +187,9 @@ type FrameRead =
 type PumpResult = {
   readonly encodedFrames: number;
   readonly size: { readonly width: number; readonly height: number } | undefined;
+  /** Why the handover stopped; `frames-end` is the only one that lets the child finish alone. */
+  readonly stop: 'frames-end' | 'capture-failure' | 'aborted' | 'child-gone';
   readonly failure: readonly Diagnostic[] | undefined;
-  /** True when the child is expected to finish on its own because stdin ended normally. */
-  readonly stdinEnded: boolean;
 };
 
 /** Hands the PNG stream to the child and stops at the first failed frame, abort, or over-long stream. */
@@ -202,7 +202,7 @@ const pump = async (options: {
   const { child, request, stop, aborted } = options;
   const stdin = child.stdin;
   if (stdin === null)
-    return { encodedFrames: 0, size: undefined, failure: undefined, stdinEnded: false };
+    return { encodedFrames: 0, size: undefined, stop: 'child-gone', failure: undefined };
   // A broken pipe is reported through the write callback; an unhandled 'error' would throw.
   stdin.on('error', () => {});
   const iterator = request.frames[Symbol.asyncIterator]();
@@ -213,10 +213,13 @@ const pump = async (options: {
   let encodedFrames = 0;
   let size: { width: number; height: number } | undefined;
   let failure: readonly Diagnostic[] | undefined;
-  let stdinEnded = false;
+  let stop_ = 'child-gone' as PumpResult['stop'];
 
   while (true) {
-    if (aborted()) break;
+    if (aborted()) {
+      stop_ = 'aborted';
+      break;
+    }
     const pending = iterator.next();
     // The pending read outlives an abort or a dead child; never let its rejection escape.
     pending.catch(() => {});
@@ -226,15 +229,24 @@ const pump = async (options: {
       ),
       stop,
     ]);
-    if (read === 'stop' || aborted()) break;
+    if (read === 'stop') break;
+    if (aborted()) {
+      stop_ = 'aborted';
+      break;
+    }
     if (read.kind === 'end') {
-      stdinEnded = true;
+      stop_ = 'frames-end';
       break;
     }
     const element = read.element;
     if (!element.ok) {
       // An aborted element is aborted control flow, exactly like a caller cancellation.
-      if (!('aborted' in element)) failure = element.error;
+      if ('aborted' in element) {
+        stop_ = 'aborted';
+        break;
+      }
+      failure = element.error;
+      stop_ = 'capture-failure';
       break;
     }
     const frame = element.value;
@@ -247,19 +259,20 @@ const pump = async (options: {
           'Render one Composition with a fixed viewport; a resolution change inside one mount is a bug.',
         ),
       ];
+      stop_ = 'capture-failure';
       break;
     }
     if (!(await write(frame.png))) break;
     encodedFrames += 1;
     request.onProgress?.({ encodedFrames, frameCount: request.frameCount });
     if (encodedFrames >= request.frameCount) {
-      stdinEnded = true;
+      stop_ = 'frames-end';
       break;
     }
   }
   void iterator.return?.().catch(() => {});
-  if (stdinEnded) stdin.end();
-  return { encodedFrames, size, failure, stdinEnded };
+  if (stop_ === 'frames-end') stdin.end();
+  return { encodedFrames, size, stop: stop_, failure };
 };
 
 const durationSecondsOf = (request: EncodeRequest): number | undefined => {
@@ -365,7 +378,7 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
 
   const written = await pump({ child, request, stop: stopped, aborted: () => aborted });
   signal?.removeEventListener('abort', onAbort);
-  if (written.stdinEnded) await closed;
+  if (written.stop === 'frames-end') await closed;
   else await terminate(child, closed);
 
   const fail = (diagnostics: readonly Diagnostic[]): EncodeOutcome => {
@@ -374,7 +387,8 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
   };
   if (spawnError !== undefined && isMissingBinary(spawnError))
     return fail([ffmpegNotFoundDiagnostic(binary)]);
-  if (aborted) {
+  // An aborted element is aborted control flow, exactly like a caller cancellation.
+  if (aborted || written.stop === 'aborted') {
     removeSibling(temporary);
     return abortedOutcome;
   }
@@ -383,7 +397,7 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
   // not an FFmpeg failure: the reason is observable from the request, not from the exit.
   if (exitCode !== 0 && written.encodedFrames === 0)
     return fail([outputInvalidDiagnostic({ output, reason: 'no-frames' })]);
-  if (exitCode !== 0) {
+  if (exitCode !== 0 || exitSignal !== null) {
     // The child's own report is the only evidence of why it gave up after a frame.
     return fail([
       ffmpegFailedDiagnostic({
