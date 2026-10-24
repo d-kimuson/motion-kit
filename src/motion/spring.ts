@@ -50,36 +50,91 @@ const finiteFailure = (): Result<never> => {
   throw new Error('Non-finite diagnostic invariant');
 };
 
-// C and S are the exponentially scaled cosine/cosh and sine/sinh divided by q.
-// See docs/contexts/motion/adr/20261024-closed-form-spring.accepted.md.
-const basis = (t: number, m: Model): { c: number; s: number } => {
+// Keep decay separate until initial conditions and the time/frequency scale
+// have been applied. S = exp(exponent) * s * scale (or s / scale).
+type Basis = { c: number; s: number; scale: number; divide: boolean; exponent: number };
+const basis = (t: number, m: Model): Basis => {
   const z = m.q * t;
   if (Math.abs(z) < 0.001) {
     // Near-critical means small discriminant * elapsed time, not a fixed
     // damping-ratio window. Keep the signed terms, rather than snapping regimes.
     const z2 = m.regime * z * z;
-    const decay = Math.exp(-m.a * t);
     return {
-      c: decay * (1 + z2 / 2 + (z2 * z2) / 24 + (z2 * z2 * z2) / 720),
-      s: decay * t * (1 + z2 / 6 + (z2 * z2) / 120 + (z2 * z2 * z2) / 5040),
+      c: 1 + z2 / 2 + (z2 * z2) / 24 + (z2 * z2 * z2) / 720,
+      s: 1 + z2 / 6 + (z2 * z2) / 120 + (z2 * z2 * z2) / 5040,
+      scale: t,
+      divide: false,
+      exponent: -m.a * t,
     };
   }
   if (m.regime === -1) {
-    const decay = Math.exp(-m.a * t);
-    if (decay === 0) return { c: 0, s: 0 };
-    return { c: decay * Math.cos(z), s: (decay * Math.sin(z)) / m.q };
+    return { c: Math.cos(z), s: Math.sin(z), scale: m.q, divide: true, exponent: -m.a * t };
   }
   // Never multiply an overflowing cosh by an underflowing exponential.
-  const slow = Math.exp(-m.slow * t);
   const fastRatio = Math.exp(-2 * z);
-  return { c: (slow * (1 + fastRatio)) / 2, s: (slow * (-Math.expm1(-2 * z) / 2)) / m.q };
+  return {
+    c: (1 + fastRatio) / 2,
+    s: -Math.expm1(-2 * z) / 2,
+    scale: m.q,
+    divide: true,
+    exponent: -m.slow * t,
+  };
+};
+
+// Log products retain contributions even when the decay or an intermediate
+// coefficient alone is subnormal/zero. Zero factors must precede log(0).
+const decayedProduct = (exponent: number, ...factors: number[]): number => {
+  if (factors.some((factor) => factor === 0)) return 0;
+  let sign = 1;
+  let magnitude = exponent;
+  for (const factor of factors) {
+    sign *= Math.sign(factor);
+    magnitude += Math.log(Math.abs(factor));
+  }
+  return sign * Math.exp(magnitude);
+};
+
+const scaledState = (t: number, s: Spring, m: Model, b: Basis): SpringState => {
+  const displacement = s.from - s.to;
+  const half = !Number.isFinite(displacement);
+  const y = half ? s.from / 2 - s.to / 2 : displacement;
+  const v0 = half ? s.velocity / 2 : s.velocity;
+  const exponent = b.exponent + (half ? Math.LN2 : 0);
+  const sineExponent = exponent + (b.divide ? -Math.log(b.scale) : Math.log(b.scale));
+  const realRoots = m.regime === 1 && m.q * t >= 0.001;
+  const rate = realRoots ? m.slow : m.a;
+  const cy = decayedProduct(exponent, realRoots ? 1 : b.c, y);
+  const sy = decayedProduct(sineExponent, rate, b.s, y);
+  const sv = decayedProduct(sineExponent, b.s, v0);
+  const velocity = realRoots
+    ? decayedProduct(exponent, -m.slow, y) +
+      decayedProduct(sineExponent, -m.slow, m.slow, b.s, y) +
+      decayedProduct(sineExponent, -m.slow, b.s, v0) +
+      decayedProduct(exponent - 2 * m.q * t, v0) +
+      decayedProduct(exponent - 2 * m.q * t, m.slow, y)
+    : decayedProduct(sineExponent, -m.w, m.w, b.s, y) +
+      decayedProduct(exponent, b.c, v0) +
+      decayedProduct(sineExponent, -m.a, b.s, v0);
+  return { position: s.to + cy + sy + sv, velocity };
 };
 
 const evaluate = (t: number, s: Spring, m: Model): SpringState => {
   if (s.from === s.to && s.velocity === 0) return { position: s.to, velocity: 0 };
-  const { c, s: sine } = basis(t, m);
+  const b = basis(t, m);
+  // An overflowing decay exponent dominates every finite input scale, even
+  // if an under-damped phase also overflows and cannot be sent to sin/cos.
+  if (b.exponent === -Infinity) return { position: s.to, velocity: 0 };
+  // Switch well before subnormal decay loses relative accuracy. Ordinary
+  // magnitudes retain direct arithmetic, avoiding unnecessary log roundoff.
+  const sineLogScale = b.divide ? -Math.log(b.scale) : Math.log(b.scale);
+  if (b.exponent < -500 || (t > 0 && b.exponent + sineLogScale < -500))
+    return scaledState(t, s, m, b);
+  const decay = Math.exp(b.exponent);
+  const c = decay * b.c;
+  const sine = b.divide ? (decay * b.s) / b.scale : decay * b.scale * b.s;
   const realRoots = m.regime === 1 && m.q * t >= 0.001;
   const slowDecay = Math.exp(-m.slow * t);
+  const fastExponent = -m.slow * t - 2 * m.q * t;
   const fastDecay = realRoots ? slowDecay * Math.exp(-2 * m.q * t) : 0;
   const p = realRoots ? slowDecay + m.slow * sine : c + m.a * sine;
   const v = -m.w * (m.w * sine);
@@ -90,8 +145,12 @@ const evaluate = (t: number, s: Spring, m: Model): SpringState => {
     // (underflow): the final velocity can still be large and representable.
     return (
       -m.slow * (p * displacement + sine * initialVelocity) +
-      fastDecay * initialVelocity +
-      m.slow * (fastDecay * displacement)
+      (fastExponent < -500
+        ? decayedProduct(fastExponent, initialVelocity)
+        : fastDecay * initialVelocity) +
+      (fastExponent < -500
+        ? decayedProduct(fastExponent, m.slow, displacement)
+        : m.slow * (fastDecay * displacement))
     );
   };
   const displacement = s.from - s.to;

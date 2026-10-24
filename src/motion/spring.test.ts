@@ -78,6 +78,104 @@ describe('closed-form spring', () => {
       expect(state.velocity / (-rate * 1e108)).toBeCloseTo(0.36787944117144233, 14);
     }
   });
+  it('preserves scaled states after the bare exponential underflows in every regime', () => {
+    // Independently evaluated with Ruby BigMath at 80 decimal digits.
+    // u=a*t=750, a=1e-200, v0=1e200, y0=0:
+    // critical: x=v0*t*e^-u, v=v0*(1-u)*e^-u;
+    // under: x=v0/a*e^-u*sin(u), v=v0*e^-u*(cos(u)-sin(u));
+    // over (roots -a,-3a): x=v0/(2a)*(e^-u-e^-3u),
+    // v=v0/2*(-e^-u+3e^-3u).
+    const cases = [
+      [1e-200, 2, 1.4262637226062548e77, -1.4243620376427798e-123],
+      [2e-200, 2, 1.4168940262623077e74, -2.6852855346890724e-126],
+      [3e-200, 4, 9.508424817375032e73, -9.508424817375032e-127],
+    ] as const;
+    for (const [stiffness, damping, x, v] of cases) {
+      const s = { ...base, from: 0, velocity: 1e200, stiffness, damping, mass: 1e200 };
+      const actual = value(springState(7.5e202, s));
+      expect(actual.position / x).toBeCloseTo(1, 11);
+      expect(actual.velocity / v).toBeCloseTo(1, 11);
+      expect(position(7.5e202, s)).toBe(actual.position);
+    }
+    // The fast over-damped velocity mode can remain representable even when
+    // its exponential underflows; the slow exponent alone is not sufficient.
+    // Roots round to -1e-200 and -1e200. x=1e108, while
+    // v=1e308*e^-750 - 1e-92 (the slow contribution is negligible).
+    const fastMode = value(
+      springState(7.5e-198, {
+        ...base,
+        from: 0,
+        velocity: 1e308,
+        damping: 1e200,
+      }),
+    );
+    expect(fastMode.position / 1e108).toBeCloseTo(1, 11);
+    expect(fastMode.velocity / 1.9016849634750064e-18).toBeCloseTo(1, 11);
+    // A representable decay can also underflow after division by q, before
+    // multiplication by v0. Roots -1,-1e308 give x=e^-100, v=-e^-100.
+    const smallBasis = value(
+      springState(100, {
+        ...base,
+        from: 0,
+        velocity: 1e308,
+        stiffness: 1e308,
+        damping: 1e308,
+      }),
+    );
+    expect(smallBasis.position / 3.720075976020836e-44).toBeCloseTo(1, 11);
+    expect(smallBasis.velocity / -3.720075976020836e-44).toBeCloseTo(1, 11);
+    // Displacement, not only initial velocity, must survive the same scaling.
+    const state = value(springState(750, { ...base, from: 1e308 }));
+    expect(state.position / 1.42816540756973e-15).toBeCloseTo(1, 11);
+    expect(state.velocity / -1.4262637226062548e-15).toBeCloseTo(1, 11);
+    expect(value(springState(1e308, { ...base, stiffness: 8, damping: 4 }))).toEqual({
+      position: 0,
+      velocity: 0,
+    });
+  });
+  it('matches independently split-decay references for random representable scaled states', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('under', 'critical', 'over'),
+        fc.integer({ min: 750, max: 800 }),
+        fc.integer({ min: 0, max: 200 }),
+        fc.integer({ min: 100, max: 200 }),
+        fc.integer({ min: 1, max: 4 }),
+        fc.constantFrom(-1, 1),
+        (regime, u, rateExponent, velocityExponent, multiplier, sign) => {
+          const rate = 10 ** -rateExponent;
+          const v0 = sign * 10 ** velocityExponent;
+          const k = regime === 'under' ? 2 : regime === 'over' ? 3 : 1;
+          const c = regime === 'over' ? 4 : 2;
+          const s = {
+            ...base,
+            from: 0,
+            velocity: v0,
+            stiffness: k * rate * multiplier,
+            damping: c * multiplier,
+            mass: 10 ** rateExponent * multiplier,
+          };
+          // Similarity solutions above, but split exp(-u) into two safe
+          // halves instead of the implementation's logarithmic products.
+          // The e^-3u mode in the over-damped case is < 1e-650 relative.
+          const halfDecay = Math.exp(-u / 2);
+          const amplitude = v0 * halfDecay;
+          const xFactor = regime === 'critical' ? u : regime === 'under' ? Math.sin(u) : 0.5;
+          const vFactor =
+            regime === 'critical' ? 1 - u : regime === 'under' ? Math.cos(u) - Math.sin(u) : -0.5;
+          const x = amplitude * (halfDecay / rate) * xFactor;
+          const v = amplitude * halfDecay * vFactor;
+          const actual = value(springState(u / rate, s));
+          expect(Number.isFinite(x) && x !== 0 && Number.isFinite(v) && v !== 0).toBe(true);
+          expect(actual.position).not.toBe(0);
+          expect(actual.velocity).not.toBe(0);
+          expect(Math.abs(actual.position / x - 1)).toBeLessThan(1e-9);
+          expect(Math.abs(actual.velocity / v - 1)).toBeLessThan(1e-9);
+        },
+      ),
+      { numRuns: 600 },
+    );
+  });
   it('holds before start and preserves the explicit initial velocity at start', () => {
     const s = { ...base, start: 2, velocity: 3 };
     expect(value(springState(-4, s))).toEqual({ position: 1, velocity: 0 });
@@ -125,6 +223,49 @@ describe('closed-form spring', () => {
         expect(next).toMatchObject({ to, start: time, stiffness: 20, mass: 2, damping: s.damping });
         expect(s).toEqual(snapshot);
       }),
+    );
+  });
+  it('inherits all physical parameters and follows the analytic retargeted trajectory', () => {
+    // k=6,c=8,m=2 gives roots -1,-3, not the unit defaults.
+    const s = Object.freeze({ ...base, stiffness: 6, damping: 8, mass: 2 });
+    const next = value(retarget(s, 1, { to: 2 }));
+    expect(next).toMatchObject({ stiffness: 6, damping: 8, mass: 2 });
+    const y = (3 * Math.exp(-1) - Math.exp(-3)) / 2 - 2;
+    const v = (3 * (Math.exp(-3) - Math.exp(-1))) / 2;
+    const a = (v + 3 * y) / 2;
+    const b = -(v + y) / 2;
+    for (const elapsed of [0.5, 2, 10]) {
+      const actual = value(springState(1 + elapsed, next));
+      expect(actual.position).toBeCloseTo(
+        2 + a * Math.exp(-elapsed) + b * Math.exp(-3 * elapsed),
+        13,
+      );
+      expect(actual.velocity).toBeCloseTo(
+        -a * Math.exp(-elapsed) - 3 * b * Math.exp(-3 * elapsed),
+        13,
+      );
+    }
+    for (const override of [{ stiffness: 12 }, { damping: 4 }, { mass: 3 }]) {
+      const changed = value(retarget(s, 1, { to: 2, ...override }));
+      expect(changed).toMatchObject({ stiffness: 6, damping: 8, mass: 2, ...override });
+      const expected = { ...next, ...override };
+      expect(value(springState(3, changed))).toEqual(value(springState(3, expected)));
+    }
+  });
+  it('preserves the future original trajectory when retargeting an active spring to the same target', () => {
+    fc.assert(
+      fc.property(springs, positive, positive, (s, switchDelay, elapsed) => {
+        const at = s.start + switchDelay;
+        const next = value(retarget(Object.freeze(s), at, { to: s.to }));
+        expect(next).toMatchObject({ stiffness: s.stiffness, damping: s.damping, mass: s.mass });
+        for (const delay of [elapsed, 2, 10, 30]) {
+          const original = value(springState(at + delay, s));
+          const changed = value(springState(at + delay, next));
+          expect(changed.position).toBeCloseTo(original.position, 9);
+          expect(changed.velocity).toBeCloseTo(original.velocity, 9);
+        }
+      }),
+      { numRuns: 300 },
     );
   });
   it('is byte-identical under shuffled evaluation and interleaved different inputs', () => {
