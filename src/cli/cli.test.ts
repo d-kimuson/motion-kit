@@ -163,6 +163,12 @@ describe('motion-kit CLI', () => {
       expect(existsSync(join(output, `frame-${String(frame).padStart(5, '0')}.png`))).toBe(true);
   }, 60_000);
 
+  it('prints usage and exits 0 for --help', async () => {
+    const result = await run(['--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Usage: motion-kit');
+  });
+
   it('prints a human summary instead of JSON when --json is absent', async () => {
     const output = join(outputRoot, 'human.png');
     const result = await run([

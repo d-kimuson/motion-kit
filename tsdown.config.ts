@@ -1,7 +1,9 @@
 import { defineConfig } from 'tsdown';
 
-// One entry per public subpath. Adding a subpath is one line here plus one
-// line in `package.json#exports` (see docs/contexts/render/CONTEXT.md).
+// One entry per public subpath. Adding a subpath touches four places: an entry
+// here, a condition block in `package.json#exports`, an alias line in
+// `vitest.config.ts`, and a `paths` entry in `tsconfig.json` (see
+// docs/contexts/render/CONTEXT.md).
 export default defineConfig({
   entry: {
     index: 'src/index.ts',

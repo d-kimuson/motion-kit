@@ -12,7 +12,8 @@ import { bootstrapId, entryId, entrySource } from './entry-source.ts';
 // entries; in the built `dist/` output they are the bundled `.js` entries. The
 // built output is detected by the module's own URL so the same source works
 // everywhere. `./browser` is a private build artifact until TASK-190.
-const builtRoot = import.meta.url.includes('/dist/');
+export const isBuiltOutput = (url: string): boolean => url.includes('/dist/');
+const builtRoot = isBuiltOutput(import.meta.url);
 export const packageEntry = builtRoot
   ? join(dirname(fileURLToPath(import.meta.url)), 'index.js')
   : fileURLToPath(new URL('../../index.ts', import.meta.url));
