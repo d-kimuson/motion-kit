@@ -1,3 +1,30 @@
+export {
+  defineComposition,
+  defineCompositions,
+  type CompositionDefinition,
+  type CompositionDescriptor,
+  type CompositionRegistry,
+  type PreparedComposition,
+  type MountCompositionOptions,
+} from './core/composition/registry.ts';
+export {
+  createCompositionRuntime,
+  type CompositionRuntime,
+  type CompositionRuntimeOptions,
+  type FrameSnapshot,
+  type CaptureLease,
+  type FrameOutcome,
+  type CaptureValidation,
+  type CaptureCompletion,
+  type ContentRegistration,
+  type IntegrationRegistration,
+  type HostSource,
+} from './core/runtime/composition-runtime.ts';
+export {
+  Composition,
+  CompositionContent,
+  useCompositionFrame,
+} from './core/composition/composition.tsx';
 export type { Clock } from './lib/clock.ts';
 export type { Result } from './lib/result.ts';
 export {

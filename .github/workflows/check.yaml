@@ -39,6 +39,9 @@ jobs:
           test: false
           lint: false
 
+      - name: Install Chromium for minimal Composition DOM tests
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Run tests
         run: pnpm test
 
