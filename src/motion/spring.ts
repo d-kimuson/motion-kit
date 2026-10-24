@@ -44,6 +44,8 @@ const model = (s: Spring): Result<Model> => {
   return { ok: true, value: { a, w, q, slow, regime } };
 };
 
+// The requested output OR a required model/solver computation could not be
+// represented. This does not assert that the mathematical output overflows.
 const finiteFailure = (): Result<never> => {
   const result = finiteResult(NaN);
   if (!result.ok) return result;
@@ -99,7 +101,9 @@ const scaledState = (t: number, s: Spring, m: Model, b: Basis): SpringState => {
   const half = !Number.isFinite(displacement);
   const y = half ? s.from / 2 - s.to / 2 : displacement;
   const v0 = half ? s.velocity / 2 : s.velocity;
-  const exponent = b.exponent + (half ? Math.LN2 : 0);
+  // Combine opposing contributions before undoing the displacement scaling.
+  // Restoring the full scale in each product can overflow even when the sum fits.
+  const exponent = b.exponent;
   const sineExponent = exponent + (b.divide ? -Math.log(b.scale) : Math.log(b.scale));
   const realRoots = m.regime === 1 && m.q * t >= 0.001;
   const rate = realRoots ? m.slow : m.a;
@@ -107,15 +111,19 @@ const scaledState = (t: number, s: Spring, m: Model, b: Basis): SpringState => {
   const sy = decayedProduct(sineExponent, rate, b.s, y);
   const sv = decayedProduct(sineExponent, b.s, v0);
   const velocity = realRoots
-    ? decayedProduct(exponent, -m.slow, y) +
+    ? // Combine slow*y*(exp(-2*q*t)-1) via the basis's expm1 before
+      // taking logs; subtracting two independently rounded products loses it.
+      decayedProduct(exponent, -m.slow, 2 * b.s, y) +
       decayedProduct(sineExponent, -m.slow, m.slow, b.s, y) +
       decayedProduct(sineExponent, -m.slow, b.s, v0) +
-      decayedProduct(exponent - 2 * m.q * t, v0) +
-      decayedProduct(exponent - 2 * m.q * t, m.slow, y)
+      decayedProduct(exponent - 2 * m.q * t, v0)
     : decayedProduct(sineExponent, -m.w, m.w, b.s, y) +
       decayedProduct(exponent, b.c, v0) +
       decayedProduct(sineExponent, -m.a, b.s, v0);
-  return { position: s.to + cy + sy + sv, velocity };
+  return {
+    position: (s.to / (half ? 2 : 1) + cy + sy + sv) * (half ? 2 : 1),
+    velocity: velocity * (half ? 2 : 1),
+  };
 };
 
 const evaluate = (t: number, s: Spring, m: Model): SpringState => {

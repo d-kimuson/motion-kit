@@ -32,6 +32,34 @@ Reproduce the reference with `ruby -rbigdecimal -rbigdecimal/math`, decimal-stri
 
 The 600-case property varies regime, dimensionless time (750–800), rate (1–1e-200), signed initial velocity (1e100–1e200) and a common physical-parameter multiplier. Its reference splits the decay into two representable `exp(-u/2)` factors, using the reduced solutions above rather than log-domain products. It asserts finite/nonzero reference values, nonzero results and relative error below `1e-9` for both state components. A large-displacement fixture (`from=1e308`, unit critical parameters, `t=750`) also retains its nonzero position and velocity. Two further over-damped fixtures cover fast-mode decay underflow with a still-significant velocity (`v0=1e308,c=1e200,k=m=1,t=7.5e-198`, velocity approximately `1.9016849634750064e-18`) and sine-basis division underflow despite a normal decay (`v0=k=c=1e308,m=1,t=100`, position `exp(-100)`, velocity `-exp(-100)`).
 
+## Half-scaled cancellation regression (round 3)
+
+When `from-to` overflows, retain `from/2-to/2`, `velocity/2`, and `to/2` through all signed products and sums; multiply the final position and velocity by two only after cancellation. Adding `LN2` to each product exponent restored the full displacement too soon. The scaled real-root velocity also combines `slow*y*(exp(-2*q*t)-1)` using the basis's `expm1`, instead of subtracting independently log-rounded products. Direct ordinary-magnitude arithmetic is unchanged.
+
+For `start=0,k=c=1e308,m=1,t=1e-310`, all six rows below returned `motion.non-finite-result` from both `springState` and `spring` at `955cde6`. `spring` now equals the position component of the successful state. Independent roots round to `-1,-1e308`; the position change is below its ULP, and the reduced velocity is `from*(2*expm1(-0.01)) + velocity*exp(-0.01)` without ever forming `2*from`.
+
+| From, to       | Initial velocity | Position after            | Velocity after           | Independent velocity      |
+| -------------- | ---------------- | ------------------------- | ------------------------ | ------------------------- |
+| `1e308,-1e308` | `0`              | `1.0000000000000272e308`  | `-1.990033250166452e306` | `-1.9900332501663895e306` |
+| `1e308,-1e308` | `1e308`          | `1.0000000000000272e308`  | `9.701495012474678e307`  | `9.701495012475043e307`   |
+| `1e308,-1e308` | `-1e308`         | `1.0000000000000272e308`  | `-1.009950166250797e308` | `-1.009950166250832e308`  |
+| `-1e308,1e308` | `0`              | `-1.0000000000000272e308` | `1.990033250166452e306`  | `1.9900332501663895e306`  |
+| `-1e308,1e308` | `-1e308`         | `-1.0000000000000272e308` | `-9.701495012474678e307` | `-9.701495012475043e307`  |
+| `-1e308,1e308` | `1e308`          | `-1.0000000000000272e308` | `1.009950166250797e308`  | `1.009950166250832e308`   |
+
+`combines half-scaled endpoints and velocity before restoring their magnitude` requires both outputs within `1e-12` relative error against those references. `combines nearly equal scaled velocity modes with expm1` uses `t=2.001e-311`, just above the series boundary; reverting the grouping produces relative error `2.481581606872396e-11`, exceeding its `2e-13` tolerance.
+
+The [joint numeric domain](../CONTEXT.md#spring-numeric-domain) replaces an impossible uniform relative-error promise with a mixed error bound. Boundary tests exercise `1e308`, common physical scales `2**-1022` and `1e308`, and `omega*t=2**20`, each multiplied by `1-EPSILON`, `1`, and `1+EPSILON`; both sides of `q*t=0.001`; coalescing roots; finite versus overflowing model rates; and position-only success when velocity overflows. Outside-domain samples are deliberately best-effort, not clamped or rejected merely for crossing a precision boundary.
+
+### Spread comparison against `8d53ca4`
+
+The previous scratch grid was not retained, so this round records its reproducible 26,880-state author-side spread explicitly: stiffness `[0.01,0.1,1,2,3,10,100,1000]`, damping `[0.0001,0.01,0.1,1,2,4,10,1000]`, mass `[0.1,1,10]`, `(from,to,velocity)` in `[(1,0,0),(-100,100,30),(0,1,-10),(10,10,1),(0,0,100)]`, `start=0`, and `time=20*i/27` for integer `i=0..27`. Import `git show 8d53ca4:src/motion/spring.ts` with its diagnostic import redirected to the current source and compare both state components.
+
+- All 26,880 states succeeded in both versions. No component of magnitude at least `1e-200` changed at all.
+- Maximum relative difference among nonzero normal components: **`1.533763464979795e-13`**, using `abs(old-new)/max(abs(old),abs(new))`; below the previously reported `2.9e-13`.
+- Maximum difference with denominator `max(1,abs(old),abs(new))`: **`8.968426898586096e-236`**.
+- 49 components changed, all tiny decayed tails. Including subnormals, the raw relative ratio reaches `1.6923076923076923`; this is not an ordinary-regime relative-accuracy claim. The normal-number floor and absolute term in the contract are intentional.
+
 ## Properties and determinism
 
 `src/motion/spring.test.ts` checks exact initial position, position and velocity continuity at Retarget, original-description immutability, shuffled call order, interleaved translated descriptions, absolute-tolerance monotonicity, and sustained settling. The settle property checks 501 later samples per case, including times well beyond the boundary, plus a point just before the last entry. A dedicated oscillatory fixture checks 10,001 later samples and proves its earlier target crossing is not the settle time. Monotone critical/over-damped fixtures also check several strictly shorter durations remain outside tolerance.
@@ -42,9 +70,9 @@ Repeated samples compare the eight binary64 bytes, not rounded decimal strings. 
 
 ## Mutation matrix
 
-All thirteen distinct mutations were re-run individually in this revision and restored after each run. Eight are the original matrix; the reviewer's four are explicitly marked below (velocity reset and series snapping overlap the original matrix). Three additional mutations cover premature decay, fast-mode velocity and sine-basis scale underflow. All were killed by assertions, not timeout, compilation or setup; no survivor remains.
+All fifteen distinct mutations were re-run individually in round 3 and restored after each run. Eight are the original matrix; the reviewer's four are explicitly marked below (velocity reset and series snapping overlap the original matrix). Three round-2 mutations cover premature decay, fast-mode velocity and sine-basis scale underflow; two round-3 mutations cover premature rescaling and subtraction of log-rounded velocity modes. All were killed by assertions, not timeout, compilation or setup; no survivor remains.
 
-The named tests ran with `pnpm vitest run src/motion/spring.test.ts --project unit -t '<name>'`. The previously surviving default-stiffness mutation additionally ran the complete `pnpm test` suite: 2 assertion failures, 338 passes (340 total). Restored full-suite results are recorded in the PR body.
+The named tests ran with `pnpm vitest run src/motion/spring.test.ts --project unit -t '<name>'`. The previously surviving default-stiffness mutation additionally ran the complete `pnpm test` suite: 2 assertion failures, 343 passes (345 total). Restored full-suite results are recorded in the PR body.
 
 | Mutant                                                                                          | Killing test                                                                                                                  | Observed failure                                                                                             |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -57,16 +85,18 @@ The named tests ran with `pnpm vitest run src/motion/spring.test.ts --project un
 | Reintroduce a module-level history cache keyed only by time                                     | `is byte-identical under shuffled evaluation and interleaved different inputs`                                                | Cached zero returned for translated equilibrium whose position is one                                        |
 | Force stiff velocity back to `C-aS`                                                             | `preserves stiff analytic velocity without cancellation or coefficient underflow`                                             | Normalized velocity is zero instead of `0.36787944117144233`                                                 |
 | Forward Euler with step at most `1e-4` for ordinary inputs (reviewer)                           | All three independent regime fixtures, plus `inherits all physical parameters and follows the analytic retargeted trajectory` | Under quarter-cycle error `3.2656e-5`; new later-retarget analytic error `2.6071e-5`                         |
-| Insert `stiffness: 1` between `...s` and `...options` in Retarget (reviewer; previous survivor) | Both new inherited-parameter and future same-target tests                                                                     | Expected inherited stiffness 6, received 1; complete suite: 2 failed, 338 passed                             |
+| Insert `stiffness: 1` between `...s` and `...options` in Retarget (reviewer; previous survivor) | Both new inherited-parameter and future same-target tests                                                                     | Expected inherited stiffness 6, received 1; complete suite: 2 failed, 343 passed                             |
 | Remove scaled-state dispatch, restoring premature exponential underflow                         | Both new scaled-state fixture and split-decay reference property                                                              | Normalized position zero instead of one; property shrinks to under-damped `u=750`, rate 1, velocity `-1e100` |
 | Restore early fast-exponential underflow in over-damped velocity                                | New scaled-state fixture                                                                                                      | Normalized velocity approximately `-5.26e-75` instead of one                                                 |
 | Ignore sine-basis scale when dispatching to scaled evaluation                                   | New scaled-state fixture                                                                                                      | Normalized position zero instead of one                                                                      |
+| Restore full magnitude in each half-scaled product before cancellation                          | `combines half-scaled endpoints and velocity before restoring their magnitude`                                                | Expected successful state, received Diagnostic (`false` instead of `true`)                                   |
+| Subtract independently rounded slow/fast velocity products instead of `expm1` grouping          | `combines nearly equal scaled velocity modes with expm1`                                                                      | Relative error `2.481581606872396e-11` exceeded `2e-13`                                                      |
 
 Euler uses the reviewer's bounded domain (`t<=20`, `stiffness,damping<=100`, `mass>=1`), retaining closed-form fallback elsewhere. The failures are analytic mismatches, not the reviewer's earlier dense-property timeout. The stiffness mutant is now killed rather than merely documented as surviving.
 
 ## Residuals
 
 - Binary64 quantization limits tolerances at very large targets. Cross-engine transcendental last-bit identity is not guaranteed.
-- Non-representable rates, solver intermediates, durations or an under-damped last-peak index outside the safe-integer range return Diagnostics. This is not an arbitrary cycle scan cap.
+- Outside the documented joint domain, sampling is best-effort. Non-representable rates, solver intermediates, durations or an under-damped last-peak index outside the safe-integer range return Diagnostics; they do not prove mathematical output overflow. This is not an arbitrary cycle scan cap.
 - `/motion` packaging remains the existing package-layout deferral: export-map entry, build wiring and consumer smoke test.
 - Lean validates existing core specs; no claim is made that the floating-point oscillator is formally proved.

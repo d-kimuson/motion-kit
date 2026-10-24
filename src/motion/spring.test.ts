@@ -133,6 +133,106 @@ describe('closed-form spring', () => {
       velocity: 0,
     });
   });
+  it('combines half-scaled endpoints and velocity before restoring their magnitude', () => {
+    // Roots round to -1,-1e308. At t=1e-310 the position change is
+    // below its ULP; v=2*from*expm1(-0.01)+v0*exp(-0.01).
+    // Reduce before multiplying: neither 2*from nor a full modal term fits.
+    for (const sign of [-1, 1]) {
+      for (const initialVelocity of [0, -1e308, 1e308]) {
+        const s = {
+          ...base,
+          from: sign * 1e308,
+          to: -sign * 1e308,
+          velocity: sign * initialVelocity,
+          stiffness: 1e308,
+          damping: 1e308,
+        };
+        const expectedVelocity =
+          sign * (1e308 * (2 * Math.expm1(-0.01)) + initialVelocity * Math.exp(-0.01));
+        const sampled = springState(1e-310, s);
+        expect(sampled.ok).toBe(true);
+        const actual = value(sampled);
+        expect(Math.abs(actual.position / s.from - 1)).toBeLessThan(1e-12);
+        expect(Math.abs(actual.velocity / expectedVelocity - 1)).toBeLessThan(1e-12);
+        expect(position(1e-310, s)).toBe(actual.position);
+      }
+    }
+  });
+  it('combines nearly equal scaled velocity modes with expm1', () => {
+    // q*t lies just above the real-root/series boundary. The independent
+    // expm1 reduction must survive cancellation of the two large modes.
+    const s = { ...base, from: 1e308, to: -1e308, stiffness: 1e308, damping: 1e308 };
+    const t = 2.001e-311;
+    const expected = 1e308 * (2 * Math.expm1(-1e308 * t));
+    expect(Math.abs(value(springState(t, s)).velocity / expected - 1)).toBeLessThan(2e-13);
+  });
+  it('walks the joint numeric-domain magnitude and rate boundaries without imposing a clamp', () => {
+    // CONTEXT.md: magnitudes <=1e308; positive normal physical parameters;
+    // omega*t <=2**20. Outside is best-effort, not a validation error.
+    const lower = 2 ** -1022;
+    for (const multiplier of [1 - Number.EPSILON, 1, 1 + Number.EPSILON]) {
+      for (const magnitude of [lower * multiplier, 1e308 * multiplier]) {
+        // Common physical scaling leaves x''+x'+x=0 unchanged.
+        const s = { ...base, stiffness: magnitude, damping: magnitude, mass: magnitude };
+        const q = Math.sqrt(3) / 2;
+        const reference = Math.exp(-0.5) * (Math.cos(q) + Math.sin(q) / (2 * q));
+        expect(position(1, s)).toBeCloseTo(reference, 14);
+      }
+      for (const sign of [-1, 1]) {
+        const magnitude = sign * 1e308 * multiplier;
+        const s = {
+          ...base,
+          from: magnitude,
+          to: magnitude,
+          velocity: magnitude,
+          start: magnitude,
+        };
+        expect(value(springState(magnitude, s))).toEqual({
+          position: magnitude,
+          velocity: magnitude,
+        });
+        expect(value(springState(magnitude, { ...s, velocity: 0 }))).toEqual({
+          position: magnitude,
+          velocity: 0,
+        });
+      }
+      // q differs from omega=1 by <1e-24: phase uncertainty <1e-18 here.
+      const time = 2 ** 20 * multiplier;
+      const a = 1e-12;
+      const actual = value(springState(time, { ...base, damping: 2 * a, velocity: -a }));
+      const x = Math.exp(-a * time) * Math.cos(time);
+      const v = Math.exp(-a * time) * (-Math.sin(time) - a * Math.cos(time));
+      expect(Math.abs(actual.position - x)).toBeLessThanOrEqual(1e-8 * (Math.abs(x) + 1));
+      expect(Math.abs(actual.velocity - v)).toBeLessThanOrEqual(1e-8 * (Math.abs(v) + 1));
+    }
+  });
+  it('walks both sides of the signed-series conditioning boundary and the repeated root', () => {
+    for (const multiplier of [1 - Number.EPSILON, 1, 1 + Number.EPSILON]) {
+      const t = 0.001 * multiplier; // q=1 on both sides, so |q*t|=0.001.
+      const under = { ...base, stiffness: 2, velocity: -1 };
+      expect(position(t, under)).toBeCloseTo(Math.exp(-t) * Math.cos(t), 14);
+      const over = { ...base, stiffness: 3, damping: 4 };
+      expect(position(t, over)).toBeCloseTo((3 * Math.exp(-t) - Math.exp(-3 * t)) / 2, 14);
+      const critical = { ...base, stiffness: multiplier };
+      expect(position(1, critical)).toBeCloseTo(2 / Math.E, 14);
+    }
+  });
+  it('distinguishes an unrepresentable computation from mathematical output overflow', () => {
+    // Exact initial state is {1,0}, but sqrt(k/m) cannot be represented.
+    const unsupported = springState(0, { ...base, stiffness: 1e308, mass: 1e-310, damping: 1 });
+    expect(unsupported.ok).toBe(false);
+    if (unsupported.ok) throw new Error('Expected non-representable model diagnostic');
+    expect(unsupported.error.code).toBe('motion.non-finite-result');
+    // Walk the binary64 model-rate limit with an exactly known equilibrium.
+    for (const exponent of [1022, 1023, 1024]) {
+      const s = { ...base, from: 0, stiffness: 2 ** 1023, mass: 2 ** (1023 - 2 * exponent) };
+      expect(springState(0, s).ok).toBe(exponent < 1024);
+    }
+    // A finite position does not imply a representable analytic velocity.
+    const s = { ...base, from: 1e308, stiffness: 100 };
+    expect(spring(0.1, s).ok).toBe(true);
+    expect(springState(0.1, s).ok).toBe(false);
+  });
   it('matches independently split-decay references for random representable scaled states', () => {
     fc.assert(
       fc.property(
