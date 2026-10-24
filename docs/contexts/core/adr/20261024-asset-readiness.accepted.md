@@ -37,6 +37,14 @@ The opt-in mutation round is `node scripts/mutate-asset-readiness.ts`. Each muta
 | Copy loader exception text       | `redacts credentials signed queries and loader exception text`          |
 | Timeout lists one asset          | `lists every pending registration and timeoutMs`                        |
 | Map load failure to not-ready    | `maps font and image load failures to asset.load-failed`                |
+| Keep userinfo                    | `redacts credentials signed queries and loader exception text`          |
+| Image key ignores source         | `shares a load for the same source and distinguishes weight and source` |
+| Confirm ignores new pending      | `keeps the barrier waiting when a registration appears during confirmation` |
+| Timeout before failure           | `prefers asset.load-failed when the deadline flag and a rejection are both visible` |
+| Pending includes failed          | `reports load-failed when a rejection and a still-pending registration coexist` |
+| Publish only the first diagnostic | `publishes every asset diagnostic from a failed settlement`            |
+
+`drop-entry-identity-stale-check` is not a survivor. The object-identity comparison was removed because release, retry and dispose increment `attempt` before a replacement entry can settle. A stale completion already fails the attempt check, so the identity line had no separate behavior to pin.
 
 ## Alternatives
 

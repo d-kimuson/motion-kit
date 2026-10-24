@@ -2,8 +2,18 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 /** Opt-in destructive negative controls for TASK-158. Run alone; sources are restored. */
-const unit = 'src/core/assets/registry.test.ts';
-const mutants = [
+const unit = ['src/core/assets/registry.test.ts'];
+const frame = ['src/render/capture/frame.test.ts'];
+type Mutant = {
+  name: string;
+  file: string;
+  before: string;
+  after: string;
+  test: string;
+  project?: string;
+  files?: readonly string[];
+};
+const mutants: Mutant[] = [
   {
     name: 'register-after-suspend',
     file: 'src/core/assets/use-asset.ts',
@@ -70,7 +80,66 @@ const mutants = [
     after: "code: 'asset.not-ready',",
     test: 'maps font and image load failures to asset.load-failed',
   },
+  {
+    name: 'keep-userinfo',
+    file: 'src/core/assets/diagnostics.ts',
+    before: "url.username = '';\n    url.password = '';",
+    after: '/* userinfo retained */',
+    test: 'redacts credentials signed queries and loader exception text',
+  },
+  {
+    name: 'image-key-ignores-source',
+    file: 'src/core/assets/registry.ts',
+    before: "if (descriptor.kind === 'image') return `image\\u0000${descriptor.source}`;",
+    after: "if (descriptor.kind === 'image') return 'image';",
+    test: 'shares a load for the same source and distinguishes weight and source',
+  },
+  {
+    name: 'confirm-ignores-new-pending',
+    file: 'src/core/assets/registry.ts',
+    before:
+      "revision === confirmedRevision &&\n            liveEntries().every((entry) => entry.status === 'ready')",
+    after: 'revision === confirmedRevision',
+    test: 'keeps the barrier waiting when a registration appears during confirmation',
+  },
+  {
+    name: 'timeout-before-failure',
+    file: 'src/core/assets/registry.ts',
+    before:
+      'const failed = failedEntries();\n        if (failed.length > 0) return failureResult(request, failed);\n        if (timedOut) return timeoutResult(request);',
+    after:
+      'if (timedOut) return timeoutResult(request);\n        const failed = failedEntries();\n        if (failed.length > 0) return failureResult(request, failed);',
+    test: 'prefers asset.load-failed when the deadline flag and a rejection are both visible',
+  },
+  {
+    name: 'pending-includes-failed',
+    file: 'src/core/assets/registry.ts',
+    before:
+      "const pendingRegistrations = (): PendingAsset[] =>\n    liveEntries()\n      .filter((entry) => entry.status === 'pending' || entry.status === 'idle')",
+    after:
+      "const pendingRegistrations = (): PendingAsset[] =>\n    liveEntries()\n      .filter((entry) => entry.status !== 'ready')",
+    test: 'reports load-failed when a rejection and a still-pending registration coexist',
+  },
+  {
+    name: 'publish-first-diagnostic',
+    file: 'src/render/capture/frame.ts',
+    before: 'finish({ ok: false, error: settled.diagnostics });',
+    after: 'finish({ ok: false, error: [settled.diagnostics[0]] });',
+    project: 'frame-transport',
+    files: frame,
+    test: 'publishes every asset diagnostic from a failed settlement',
+  },
 ];
+/** Removed because it is equivalent to the attempt counter. Not a survivor. */
+const equivalent = [
+  {
+    name: 'drop-entry-identity-stale-check',
+    reason:
+      'release, retry and dispose bump attempt before a replacement can settle; no path replaces the entry object without that bump',
+  },
+];
+
+for (const row of equivalent) process.stdout.write(`EQUIVALENT ${row.name}: ${row.reason}\n`);
 
 for (const mutant of mutants) {
   const original = readFileSync(mutant.file, 'utf8');
@@ -80,7 +149,16 @@ for (const mutant of mutants) {
     writeFileSync(mutant.file, original.replace(mutant.before, mutant.after));
     const result = spawnSync(
       'pnpm',
-      ['vitest', 'run', '--project', 'unit', unit, '-t', mutant.test, '--reporter=verbose'],
+      [
+        'vitest',
+        'run',
+        '--project',
+        mutant.project ?? 'unit',
+        ...(mutant.files ?? unit),
+        '-t',
+        mutant.test,
+        '--reporter=verbose',
+      ],
       { encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
     );
     const output = result.stdout + result.stderr;
