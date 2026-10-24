@@ -164,7 +164,7 @@ describe('qualified Chromium PNG transport', () => {
       const renderer = await open(mode, 500);
       const owned = session();
       const result = await renderer.renderFrame({ frame: 2 });
-      expect(result).toMatchObject({ ok: false, error: { code } });
+      expect(result).toMatchObject({ ok: false, error: [{ code }] });
       expect(JSON.stringify(result)).not.toContain('secret');
       await assertGone(owned);
     },
@@ -187,7 +187,7 @@ describe('qualified Chromium PNG transport', () => {
     });
     expect(await renderer.renderFrame({ frame: 2 })).toMatchObject({
       ok: false,
-      error: { code: 'render.frame-timeout' },
+      error: [{ code: 'render.frame-timeout' }],
     });
     await assertGone(owned);
   }, 60_000);
@@ -309,9 +309,14 @@ describe('qualified Chromium PNG transport', () => {
       const renderer = await open();
       const owned = session();
       const result = await renderer.renderFrame({ frame: number });
-      expect(result).toMatchObject({ ok: false, error: { code: 'composition.props-invalid' } });
+      expect(result).toMatchObject({
+        ok: false,
+        error: [{ code: 'composition.props-invalid' }],
+      });
       if (result.ok || !('error' in result)) throw new Error('Expected invalid frame diagnostic');
-      expect(result.error.location?.frame).toBe(Number.isSafeInteger(number) ? number : undefined);
+      expect(result.error[0]?.location?.frame).toBe(
+        Number.isSafeInteger(number) ? number : undefined,
+      );
       await assertGone(owned);
     },
     60_000,

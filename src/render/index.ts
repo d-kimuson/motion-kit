@@ -9,3 +9,4 @@ export {
   type RenderOutcome,
   type RenderedFrame,
 } from './renderer.ts';
+export type { FrameCaptureResult } from './capture/frame.ts';

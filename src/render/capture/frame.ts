@@ -3,7 +3,6 @@ import { createFrameRate, frameToTime, toSeconds } from '../../core/timeline/tim
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type Ownership } from '../../lib/frame-protocol.ts';
 import { type MountReceipt } from '../../lib/loading-protocol.ts';
-import { type LoadingOutcome } from '../loading/session.ts';
 import { type FrameTransport } from './transport.ts';
 
 export type RenderedFrame = Readonly<{
@@ -13,10 +12,15 @@ export type RenderedFrame = Readonly<{
   png: Buffer;
   diagnostics: readonly Diagnostic[];
 }>;
+/** Failure carries every diagnostic. Codes are not dropped or merged. */
+export type FrameCaptureResult =
+  | { readonly ok: true; readonly value: RenderedFrame }
+  | { readonly ok: false; readonly error: readonly Diagnostic[] }
+  | { readonly ok: false; readonly aborted: true };
 export type FrameJob = {
   grant: (ownership: Ownership) => boolean;
-  run: (transport: FrameTransport) => Promise<LoadingOutcome<RenderedFrame>>;
-  result: Promise<LoadingOutcome<RenderedFrame>>;
+  run: (transport: FrameTransport) => Promise<FrameCaptureResult>;
+  result: Promise<FrameCaptureResult>;
   pending: () => boolean;
 };
 const aborted = { ok: false, aborted: true } as const;
@@ -33,7 +37,7 @@ export const createFrameJob = (options: {
   dispose: () => Promise<unknown>;
 }): FrameJob => {
   const { receipt, frame, requestId } = options;
-  const result = Promise.withResolvers<LoadingOutcome<RenderedFrame>>();
+  const result = Promise.withResolvers<FrameCaptureResult>();
   let terminal = false;
   let running = false;
   let ownership: Ownership | undefined;
@@ -45,7 +49,11 @@ export const createFrameJob = (options: {
   if (!rate.ok) throw new Error('A mounted composition must have a validated frame rate.');
   const time = frameToTime(BigInt(frame), rate.value);
   const location = { compositionId: receipt.descriptor.id, frame, timeSeconds: toSeconds(time) };
-  const finish = (outcome: LoadingOutcome<RenderedFrame>) => {
+  const locate = (diagnostic: Diagnostic): Diagnostic => ({
+    ...diagnostic,
+    location: { ...diagnostic.location, ...location },
+  });
+  const finish = (outcome: FrameCaptureResult) => {
     if (terminal) return;
     terminal = true;
     clearTimeout(timer);
@@ -53,10 +61,7 @@ export const createFrameJob = (options: {
     // A failed/canceled active operation never hands a poisoned realm to another job.
     const located =
       !outcome.ok && 'error' in outcome
-        ? {
-            ...outcome,
-            error: { ...outcome.error, location: { ...outcome.error.location, ...location } },
-          }
+        ? { ...outcome, error: outcome.error.map(locate) }
         : outcome;
     if (!outcome.ok && running) void options.dispose().then(() => result.resolve(located));
     else result.resolve(located);
@@ -97,7 +102,7 @@ export const createFrameJob = (options: {
             hint: 'Check content, integration and GPU acknowledgements or increase frameTimeoutMs.',
           };
     await options.dispose();
-    result.resolve({ ok: false, error: diagnostic });
+    result.resolve({ ok: false, error: [diagnostic] });
   };
   timer = setTimeout(cancel, options.queueTimeoutMs);
   options.signal?.addEventListener('abort', cancel, { once: true });
@@ -150,7 +155,7 @@ export const createFrameJob = (options: {
               return;
             }
             if (settled.status === 'failed') {
-              finish({ ok: false, error: settled.diagnostics[0] });
+              finish({ ok: false, error: settled.diagnostics });
               return;
             }
             const lease = settled.lease;
@@ -180,7 +185,7 @@ export const createFrameJob = (options: {
               return;
             }
             if (validation.status === 'failed') {
-              finish({ ok: false, error: validation.diagnostics[0] });
+              finish({ ok: false, error: validation.diagnostics });
               return;
             }
             const diagnostics = await driver.warnings();
@@ -198,7 +203,7 @@ export const createFrameJob = (options: {
               return;
             }
             if (completion.status === 'failed') {
-              finish({ ok: false, error: completion.diagnostics[0] });
+              finish({ ok: false, error: completion.diagnostics });
               return;
             }
             finish({
@@ -220,13 +225,15 @@ export const createFrameJob = (options: {
           if (!expired())
             finish({
               ok: false,
-              error: {
-                code: 'render.page-error',
-                severity: 'error',
-                location,
-                message: 'The frame transport or page failed.',
-                hint: 'Fix the Composition or browser connection and create a new renderer.',
-              },
+              error: [
+                {
+                  code: 'render.page-error',
+                  severity: 'error',
+                  location,
+                  message: 'The frame transport or page failed.',
+                  hint: 'Fix the Composition or browser connection and create a new renderer.',
+                },
+              ],
             });
         }
       })();

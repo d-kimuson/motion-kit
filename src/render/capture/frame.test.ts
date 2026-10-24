@@ -99,7 +99,7 @@ describe('host frame lease', () => {
     driver.capture = vi.fn(() => screenshot.promise);
     const result = job.run(driver);
     await vi.advanceTimersByTimeAsync(100);
-    expect(await result).toMatchObject({ ok: false, error: { code: 'render.frame-timeout' } });
+    expect(await result).toMatchObject({ ok: false, error: [{ code: 'render.frame-timeout' }] });
     screenshot.resolve(Buffer.from('late'));
     await vi.advanceTimersByTimeAsync(0);
     expect(driver.complete).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ describe('host frame lease', () => {
     });
     const result = job.run(driver);
     await vi.advanceTimersByTimeAsync(100);
-    expect(await result).toMatchObject({ ok: false, error: { code: 'render.frame-timeout' } });
+    expect(await result).toMatchObject({ ok: false, error: [{ code: 'render.frame-timeout' }] });
     expect(driver.resettle).toHaveBeenCalledWith(lease);
   });
   it('discards changed-version pixels then publishes only accepted replacement bytes', async () => {
@@ -182,6 +182,35 @@ describe('host frame lease', () => {
     expect(driver.complete).not.toHaveBeenCalled();
     expect(dispose).toHaveBeenCalledOnce();
   });
+  it('publishes every asset diagnostic from a failed settlement', async () => {
+    const { job, driver } = make();
+    const diagnostic = (source: string) => ({
+      code: 'asset.load-failed' as const,
+      severity: 'error' as const,
+      message: 'The required image failed to decode.',
+      hint: 'Check the image source and file format.',
+      details: { assets: [{ kind: 'image', source, phase: 'decode' }] },
+    });
+    driver.settle = vi.fn<FrameTransport['settle']>(() => {
+      job.grant(ownership);
+      return Promise.resolve({
+        status: 'failed',
+        diagnostics: [diagnostic('/one.png'), diagnostic('/two.png')],
+      });
+    });
+    const result = await job.run(driver);
+    expect(result.ok).toBe(false);
+    if (result.ok || !('error' in result)) throw new Error('expected diagnostics');
+    expect(result.error.map((item) => item.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    expect(result.error.map((item) => item.details)).toEqual([
+      { assets: [{ kind: 'image', source: '/one.png', phase: 'decode' }] },
+      { assets: [{ kind: 'image', source: '/two.png', phase: 'decode' }] },
+    ]);
+    expect(driver.capture).not.toHaveBeenCalled();
+  });
   it('reports current assets at deadline, redacts sources and preserves the configured budget', async () => {
     vi.useFakeTimers();
     const { job, driver } = make();
@@ -200,10 +229,12 @@ describe('host frame lease', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(await result).toMatchObject({
       ok: false,
-      error: {
-        code: 'asset.not-ready',
-        details: { timeoutMs: 100, assets: [{ source: 'https://example.com/image' }] },
-      },
+      error: [
+        {
+          code: 'asset.not-ready',
+          details: { timeoutMs: 100, assets: [{ source: 'https://example.com/image' }] },
+        },
+      ],
     });
   });
   it('does not invent an asset inventory for an unresponsive RPC', async () => {
@@ -216,6 +247,6 @@ describe('host frame lease', () => {
     driver.pendingAssets = vi.fn<FrameTransport['pendingAssets']>(() => new Promise(() => {}));
     const result = job.run(driver);
     await vi.advanceTimersByTimeAsync(200);
-    expect(await result).toMatchObject({ ok: false, error: { code: 'render.frame-timeout' } });
+    expect(await result).toMatchObject({ ok: false, error: [{ code: 'render.frame-timeout' }] });
   });
 });
