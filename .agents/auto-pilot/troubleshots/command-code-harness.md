@@ -21,14 +21,14 @@ available:
 Keep the auto-pilot loop, with these substitutions until the integrations are
 available:
 
-| Guideline mechanism     | Command Code form                                                                                                                                     |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backlog (taskroom)      | Local mirror `.agents/auto-pilot/backlog.md`, reconstructed from `context.md`. Treat it as the board; do not invent task ids that the mirror does not record. |
-| Team channel (Slack)    | Ask the user in the session reply. Record the question in `context.md` under "Questions to the user" and keep working on other items.                  |
-| Independent Agent       | `agent({ subagent_type: "general", run_in_background: true })`; tell it to create a persistent `git worktree` under `/Users/kaito/repos/worktrees/motion-kit/<name>` and commit/push early. |
-| SubAgent (review/QA)    | `agent({ subagent_type: "general" })` with the verbatim instruction from `docs/guidelines/delegate.md`.                                                |
-| Wait                    | `cron_create` with a one-shot prompt, or `sleep` for the interval.                                                                                     |
-| `compact` at clean-up   | End the turn; the next turn starts from `docs/guidelines/auto-pilot.md` and `.agents/auto-pilot/context.md`.                                          |
+| Guideline mechanism   | Command Code form                                                                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backlog (taskroom)    | Local mirror `.agents/auto-pilot/backlog.md`, reconstructed from `context.md`. Treat it as the board; do not invent task ids that the mirror does not record.                               |
+| Team channel (Slack)  | Ask the user in the session reply. Record the question in `context.md` under "Questions to the user" and keep working on other items.                                                       |
+| Independent Agent     | `agent({ subagent_type: "general", run_in_background: true })`; tell it to create a persistent `git worktree` under `/Users/kaito/repos/worktrees/motion-kit/<name>` and commit/push early. |
+| SubAgent (review/QA)  | `agent({ subagent_type: "general" })` with the verbatim instruction from `docs/guidelines/delegate.md`.                                                                                     |
+| Wait                  | `cron_create` with a one-shot prompt, or `sleep` for the interval.                                                                                                                          |
+| `compact` at clean-up | End the turn; the next turn starts from `docs/guidelines/auto-pilot.md` and `.agents/auto-pilot/context.md`.                                                                                |
 
 A finished `agent` run keeps nothing: whatever lives in its worktree persists on
 disk, so a second round is a new run pointed at the same worktree path.
