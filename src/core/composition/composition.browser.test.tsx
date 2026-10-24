@@ -7,7 +7,7 @@ import {
   useCompositionFrame,
   type ContentRegistration,
   type Result,
-} from 'motion-kit';
+} from '@kimuson/motion-kit';
 import { Component, forwardRef, lazy, memo, Suspense, use } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';

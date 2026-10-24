@@ -1,4 +1,3 @@
-import fc from 'fast-check';
 import {
   Composition,
   createCompositionRuntime,
@@ -21,7 +20,8 @@ import {
   type TransitionProps,
   type TransitionSceneProps,
   type TransitionSeriesProps,
-} from 'motion-kit';
+} from '@kimuson/motion-kit';
+import fc from 'fast-check';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';

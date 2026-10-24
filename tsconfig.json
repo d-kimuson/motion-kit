@@ -15,6 +15,17 @@
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
 
+    // Development resolution: the repository's own tests import the public package name, which
+    // resolves to src/ so that nominal (symbol-branded) types and module-level singletons stay
+    // identical between package-name and relative imports. The published package resolves the same
+    // name to dist/ through `package.json#exports`; scripts/check-browser-graph.test.ts verifies
+    // that built layout. See docs/contexts/render/CONTEXT.md.
+    "paths": {
+      "@kimuson/motion-kit": ["./src/index.ts"],
+      "@kimuson/motion-kit/render": ["./src/render/index.ts"],
+      "@kimuson/motion-kit/agent": ["./src/agent/cli-output.ts"]
+    },
+
     // TypeChecking
     "exactOptionalPropertyTypes": false,
     "allowJs": true,

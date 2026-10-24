@@ -68,6 +68,7 @@ const commands: Readonly<Record<'render' | 'frame', Command>> = {
 type ParseOutcome =
   | { readonly kind: 'no-command' }
   | { readonly kind: 'help' }
+  | { readonly kind: 'usage' }
   | {
       readonly kind: 'invalid';
       readonly command: 'render' | 'frame';
@@ -81,8 +82,8 @@ const isCommandName = (value: unknown): value is 'render' | 'frame' =>
 
 const parseRaw = (argv: readonly string[]): ParseOutcome => {
   const name = argv[0];
-  if (name === undefined || name === 'help') return { kind: 'no-command' };
-  if (!isCommandName(name)) return { kind: 'no-command' };
+  if (name === 'help' || name === '--help' || name === '-h') return { kind: 'usage' };
+  if (name === undefined || !isCommandName(name)) return { kind: 'no-command' };
   const command = commands[name];
   try {
     command.parse(['node', 'motion-kit', ...argv.slice(1)], { from: 'node' });
@@ -306,6 +307,12 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
   const parsed = parseRaw(argv);
 
   if (parsed.kind === 'help') return 0;
+  if (parsed.kind === 'usage') {
+    process.stdout.write(
+      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a frame sequence to PNG files\n\nRun `motion-kit <command> --help` for command options.\n',
+    );
+    return 0;
+  }
   if (parsed.kind === 'no-command') {
     process.stderr.write(
       'Usage: motion-kit <render|frame> <entry> [options]\nRun motion-kit --help for usage.\n',

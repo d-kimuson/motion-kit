@@ -1,5 +1,5 @@
+import { DiagnosticCodeSchema, DiagnosticSchema, LocationSchema } from '@kimuson/motion-kit';
 import fc from 'fast-check';
-import { DiagnosticCodeSchema, DiagnosticSchema, LocationSchema } from 'motion-kit';
 import { describe, expect, it } from 'vitest';
 
 const finding = { code: 'asset.load-failed', message: 'The image could not be loaded.' };

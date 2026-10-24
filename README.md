@@ -5,13 +5,13 @@ A type-safe toolkit for motion timing primitives.
 ## Installation
 
 ```bash
-pnpm add motion-kit
+pnpm add @kimuson/motion-kit
 ```
 
 ## Usage
 
 ```ts
-import { currentTimestamp } from 'motion-kit';
+import { currentTimestamp } from '@kimuson/motion-kit';
 
 const startedAt = currentTimestamp();
 ```

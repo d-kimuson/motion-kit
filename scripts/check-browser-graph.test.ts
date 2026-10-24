@@ -1,5 +1,4 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,7 +7,6 @@ import { entrySource } from '../src/render/loading/entry-source.ts';
 import { loadingPlugin } from '../src/render/loading/resolution.ts';
 import { checkBrowserGraph } from './check-browser-graph.ts';
 
-const require = createRequire(import.meta.url);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 const parsedPackage: unknown = JSON.parse(
@@ -25,10 +23,11 @@ describe('resolved package-root browser graph', () => {
       new URL('./fixtures/browser-root.ts', import.meta.url).pathname,
     );
     expect(graph.some((file) => file.endsWith('/react/index.js'))).toBe(true);
-    expect(graph.some((file) => file.endsWith('/composition.tsx'))).toBe(true);
-    // The root entry is the condition-free authoring surface, never the Node renderer.
-    expect(graph.some((file) => file.endsWith('/src/index.ts'))).toBe(true);
-    expect(graph.some((file) => file.includes('/src/render/'))).toBe(false);
+    // The root entry resolves to the built authoring surface, never the Node renderer or CLI.
+    expect(graph.some((file) => file.endsWith('/dist/index.js'))).toBe(true);
+    expect(graph.some((file) => file.includes('/dist/render.js'))).toBe(false);
+    expect(graph.some((file) => file.includes('/dist/cli.js'))).toBe(false);
+    expect(graph.some((file) => file.includes('/dist/agent.js'))).toBe(false);
   }, 60_000);
 
   it('checks the internal browser entry and emitted wrapper using production loading resolution', async () => {
@@ -86,15 +85,24 @@ describe('resolved package-root browser graph', () => {
   }, 60_000);
 });
 
-describe('flat export map and Node resolution', () => {
-  it('keeps the root condition-free and pins ./render and ./agent', () => {
-    expect(packageExports?.['.']).toBe('./src/index.ts');
-    expect(packageExports?.['./render']).toBe('./src/render/index.ts');
-    expect(packageExports?.['./agent']).toBe('./src/agent/cli-output.ts');
+describe('package layout and dist resolution', () => {
+  it('pins types and import to dist for ., ./render and ./agent', () => {
+    expect(packageExports?.['.']).toEqual({
+      types: './dist/index.d.ts',
+      import: './dist/index.js',
+    });
+    expect(packageExports?.['./render']).toEqual({
+      types: './dist/render.d.ts',
+      import: './dist/render.js',
+    });
+    expect(packageExports?.['./agent']).toEqual({
+      types: './dist/agent.d.ts',
+      import: './dist/agent.js',
+    });
   });
 
-  it('resolves the root to src/index.ts and ./render to src/render/index.ts from Node', () => {
-    expect(require.resolve('motion-kit')).toMatch(/[/\\]src[/\\]index\.ts$/);
-    expect(require.resolve('motion-kit/render')).toMatch(/[/\\]src[/\\]render[/\\]index\.ts$/);
+  it('resolves the root and ./render to dist from Node', () => {
+    expect(import.meta.resolve('@kimuson/motion-kit')).toMatch(/[/\\]dist[/\\]index\.js$/);
+    expect(import.meta.resolve('@kimuson/motion-kit/render')).toMatch(/[/\\]dist[/\\]render\.js$/);
   });
 });

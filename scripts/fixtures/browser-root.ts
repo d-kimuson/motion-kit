@@ -1,1 +1,1 @@
-export * from 'motion-kit';
+export * from '@kimuson/motion-kit';

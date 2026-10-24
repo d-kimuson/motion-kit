@@ -3,7 +3,7 @@ import {
   defineComposition,
   defineCompositions,
   type Result,
-} from 'motion-kit';
+} from '@kimuson/motion-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

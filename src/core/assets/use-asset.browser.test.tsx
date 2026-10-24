@@ -5,7 +5,7 @@ import {
   defineCompositions,
   useAsset,
   type Result,
-} from 'motion-kit';
+} from '@kimuson/motion-kit';
 import { Suspense, useLayoutEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';

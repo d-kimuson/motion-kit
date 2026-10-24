@@ -1,28 +1,40 @@
 {
-  "name": "motion-kit",
+  "name": "@kimuson/motion-kit",
   "version": "0.0.0",
+  "private": true,
   "description": "A type-safe toolkit for motion timing primitives.",
   "license": "MIT",
   "bin": {
-    "motion-kit": "./src/cli/main.js"
+    "motion-kit": "./dist/cli.js"
   },
   "files": [
-    "src",
-    "!src/**/*.test.ts",
-    "!src/**/*.test.tsx",
-    "!src/**/*.lean",
-    "!src/**/*.lean.md"
+    "dist"
   ],
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
-    "./render": "./src/render/index.ts",
-    "./agent": "./src/agent/cli-output.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js"
+    },
+    "./agent": {
+      "types": "./dist/agent.d.ts",
+      "import": "./dist/agent.js"
+    }
   },
   "scripts": {
+    "build": "tsdown",
+    "prelint": "pnpm build",
+    "pretypecheck": "pnpm build",
+    "pretest": "pnpm build",
     "lint": "run-p lint:*",
     "lint:oxlint": "oxlint --ignore-path .gitignore --no-error-on-unmatched-pattern",
+    "lint:publint": "publint --pack=pnpm",
+    "lint:attw": "attw --pack --profile esm-only",
     "lint:oxfmt": "pnpm fix:oxfmt --check",
     "lint:licenses": "node scripts/check-licenses.ts",
     "lint:tsconfig": "node scripts/check-tsconfig-coverage.ts",
@@ -50,6 +62,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@react-three/fiber": "9.8.2",
     "@tsconfig/strictest": "2.0.8",
     "@types/node": "26.6.5",
@@ -66,9 +79,11 @@
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "oxlint-tsgolint": "7.0.2004",
+    "publint": "0.3.25",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "three": "0.186.1",
+    "tsdown": "0.23.1",
     "typescript": "7.0.2",
     "vitest": "5.0.5"
   },
