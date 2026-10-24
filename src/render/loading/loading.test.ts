@@ -588,6 +588,11 @@ export default defineConfig({});`);
         'optimizeDeps.esbuildOptions',
       ]),
     ),
+    ...['client', 'ssr'].map((environment) => [
+      `configEnvironment ${environment} unsupported plugin list`,
+      `export default {plugins:[{name:'environment-plugins',configEnvironment(name){if(name===${JSON.stringify(environment)})return {plugins:[]};}}]}`,
+      'plugins',
+    ]),
     [
       'late optimizer option',
       `export default {plugins:[{name:'late-key',configResolved(c){c.optimizeDeps.esbuildOptions={outdir:'ignored'};}}]}`,

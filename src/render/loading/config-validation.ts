@@ -176,7 +176,13 @@ const snapshot = (value: unknown, seen = new Map<object, unknown>()): unknown =>
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === 'object' && value !== null ? Object.fromEntries(Object.entries(value)) : {};
 
-const project = (value: unknown, before: unknown, path: string, environment = false): unknown => {
+const project = (
+  value: unknown,
+  before: unknown,
+  path: string,
+  environment = false,
+  generatedHooks = true,
+): unknown => {
   const allowed = keys[path];
   if (allowed === undefined) return value;
   const result: Record<string, unknown> = {};
@@ -184,8 +190,13 @@ const project = (value: unknown, before: unknown, path: string, environment = fa
   const defaults = record(before);
   for (const key of new Set([...Object.keys(current), ...Object.keys(defaults)])) {
     const child = current[key];
-    // Vite assembles these internal hook lists after the snapshot callback.
-    if (path === '' && ['plugins', 'getSortedPlugins', 'getSortedPluginHooks'].includes(key))
+    // Vite assembles these internal hook lists after the resolved snapshot.
+    // Raw configEnvironment options must not receive this exemption.
+    if (
+      generatedHooks &&
+      path === '' &&
+      ['plugins', 'getSortedPlugins', 'getSortedPluginHooks'].includes(key)
+    )
       continue;
     if (path === '' && key === 'environments' && !environment) continue;
     const name = path === '' ? key : `${path}.${key}`;
@@ -206,7 +217,8 @@ export const environmentConfigValidator = (
   projectRoot: string,
 ): ((current: EnvironmentOptions) => void) => {
   const baseline = snapshot(config);
-  return (current) => validateConfig(record(project(current, baseline, '', true)), projectRoot);
+  return (current) =>
+    validateConfig(record(project(current, baseline, '', true, false)), projectRoot);
 };
 
 export const resolvedConfigValidator = (
