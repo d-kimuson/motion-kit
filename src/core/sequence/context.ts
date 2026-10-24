@@ -1,0 +1,19 @@
+import { createContext, useContext } from 'react';
+
+import { useCompositionDefinition } from '../composition/composition.tsx';
+import { frameToTime, zeroTime } from '../timeline/time.ts';
+import { type SequenceInterval } from './interval.ts';
+
+/** Internal context stores exact global endpoints, never the lossy public hook values. */
+export const SequenceIntervalContext = createContext<SequenceInterval | null>(null);
+
+export const useSequenceInterval = (): SequenceInterval => {
+  const interval = useContext(SequenceIntervalContext);
+  const { descriptor, frameRate } = useCompositionDefinition();
+  return (
+    interval ?? {
+      start: zeroTime,
+      end: frameToTime(BigInt(descriptor.durationInFrames), frameRate),
+    }
+  );
+};
