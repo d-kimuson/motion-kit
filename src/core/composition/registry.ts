@@ -1,5 +1,5 @@
 import { createElement, type ComponentType, type ReactNode } from 'react';
-import { z } from 'zod';
+import { type z } from 'zod';
 
 import { type DiagnosticCode } from '../../lib/diagnostic.ts';
 import { type Result } from '../../lib/result.ts';
@@ -12,7 +12,8 @@ export type CompositionDescriptor = Readonly<{
   fps: RationalInput;
   durationInFrames: number;
 }>;
-export type JsonObject = z.output<typeof jsonObjectSchema>;
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+export type JsonObject = { [key: string]: JsonValue };
 
 /** A page-local, validated selection. Creating it does not mount a React tree. */
 export type PreparedComposition = Readonly<{
@@ -84,40 +85,61 @@ const propsFailure = (id: string, issues: readonly z.core.$ZodIssue[]): Result<n
   },
 });
 
-// Reject cycles and exotic objects before z.json traverses them; never invoke toJSON/getters.
-const jsonShapeIssue = (
+// Rebuild every own data property, including __proto__; record validators can skip that key.
+// Never invoke getters/toJSON, and never retain an unchecked value from the schema output.
+const rebuildJson = (
   value: unknown,
   path: (string | number)[] = [],
   ancestors = new Set<object>(),
-): z.core.$ZodIssue | undefined => {
-  if (typeof value !== 'object' || value === null) return undefined;
+): { ok: true; value: JsonValue } | { ok: false; issue: z.core.$ZodIssue } => {
+  const invalid = (): { ok: false; issue: z.core.$ZodIssue } => ({
+    ok: false,
+    issue: { code: 'custom', path, message: 'Expected JSON data properties.' },
+  });
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value))
+  )
+    return { ok: true, value };
+  if (typeof value !== 'object') return invalid();
+  const array = Array.isArray(value);
   const prototype: unknown = Object.getPrototypeOf(value);
+  const names = Object.getOwnPropertyNames(value);
   if (
     ancestors.has(value) ||
-    (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null)
-  ) {
-    return { code: 'custom', path, message: 'Expected JSON data.' };
-  }
+    (array
+      ? prototype !== Array.prototype
+      : prototype !== Object.prototype && prototype !== null) ||
+    Object.getOwnPropertySymbols(value).length !== 0 ||
+    (array && names.length !== value.length + 1)
+  )
+    return invalid();
+  const rebuilt: JsonObject | JsonValue[] = array ? [] : {};
   ancestors.add(value);
-  for (const key of Reflect.ownKeys(value)) {
-    if (Array.isArray(value) && key === 'length') continue;
+  for (const key of names) {
+    if (array && key === 'length') continue;
     const property = Object.getOwnPropertyDescriptor(value, key);
     if (
-      typeof key === 'symbol' ||
       (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) ||
       property === undefined ||
       !('value' in property) ||
       property.enumerable !== true
-    ) {
-      return { code: 'custom', path, message: 'Expected JSON data properties.' };
-    }
-    const issue = jsonShapeIssue(property.value, [...path, key], ancestors);
-    if (issue !== undefined) return issue;
+    )
+      return invalid();
+    const child = rebuildJson(property.value, [...path, key], ancestors);
+    if (!child.ok) return child;
+    Object.defineProperty(rebuilt, key, {
+      value: child.value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   ancestors.delete(value);
-  return undefined;
+  return { ok: true, value: rebuilt };
 };
-const jsonObjectSchema = z.record(z.string(), z.json());
 
 const parseProps = async <S extends z.ZodType<object>>(
   schema: S,
@@ -145,22 +167,24 @@ const parseProps = async <S extends z.ZodType<object>>(
     try {
       const parsed = await schema.safeParseAsync(input);
       if (!parsed.success) return propsFailure(id, parsed.error.issues);
-      const issue = jsonShapeIssue(parsed.data);
-      if (issue !== undefined) return propsFailure(id, [issue]);
-      const json = jsonObjectSchema.safeParse(parsed.data);
-      if (!json.success)
-        return propsFailure(
-          id,
-          json.error.issues.map((issue) => ({
-            code: 'custom',
-            path: issue.path,
-            message: 'Expected JSON-valued output props.',
-          })),
-        );
-      // Shape and JSON validation above establish JsonObject for the original output too.
-      // Keep that checked object, not Zod's clone, for both consumers.
+      for (const field of ['key', 'ref', '__self', '__source', '__proto__']) {
+        if (Object.hasOwn(parsed.data, field))
+          return compositionFailure(
+            'composition.props-invalid',
+            `Composition props cannot contain the top-level field "${field}".`,
+            `Rename "${field}": React consumes or copies this reserved field and cannot deliver it faithfully.`,
+            id,
+          );
+      }
+      const rebuilt = rebuildJson(parsed.data);
+      if (!rebuilt.ok) return propsFailure(id, [rebuilt.issue]);
+      const json = rebuilt.value;
+      if (json === null || typeof json !== 'object' || Array.isArray(json))
+        return propsFailure(id, [{ code: 'custom', path: [], message: 'Expected a JSON object.' }]);
+      // Rebuilding preserves the schema's values while removing reliance on its mutable output.
+      // React makes a top-level copy; nested references come from this checked tree.
       // oxlint-disable-next-line no-unsafe-type-assertion
-      return { ok: true, value: { typed: parsed.data, json: parsed.data as JsonObject } };
+      return { ok: true, value: { typed: json as z.output<S>, json } };
     } catch {
       return pageFailure(id);
     }

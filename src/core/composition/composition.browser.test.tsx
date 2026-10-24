@@ -26,7 +26,109 @@ const metadata = {
   durationInFrames: 10,
 };
 
+// Inspect all own descriptors, not JSON.stringify (which silently omits unsupported values).
+const expectJsonTree = (value: unknown): void => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number') {
+    expect(Number.isFinite(value)).toBe(true);
+    return;
+  }
+  expect(typeof value).toBe('object');
+  if (typeof value !== 'object' || value === null) throw new Error('non-JSON value');
+  expect(Object.getOwnPropertySymbols(value)).toEqual([]);
+  expect(Object.getPrototypeOf(value)).toBe(
+    Array.isArray(value) ? Array.prototype : Object.prototype,
+  );
+  for (const name of Object.getOwnPropertyNames(value)) {
+    if (Array.isArray(value) && name === 'length') continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, name);
+    expect(descriptor).toHaveProperty('value');
+    expect(descriptor?.enumerable).toBe(true);
+    expectJsonTree(descriptor?.value);
+  }
+};
+
 describe('Composition provider', () => {
+  it('delivers deep-equal checked JSON at the component boundary, including nested own __proto__', async () => {
+    const nested: unknown = JSON.parse(
+      '{"__proto__":{"values":[1,null,true,"title"]},"key":"nested","ref":2,"__self":3,"__source":4}',
+    );
+    const output = { nested, values: [1, 2] };
+    let received: unknown;
+    const Scene = (props: typeof output) => {
+      received = props;
+      return <p>checked</p>;
+    };
+    const definition = unwrap(
+      await unwrap(
+        defineCompositions([
+          defineComposition({
+            ...metadata,
+            schema: z.object({}).transform(() => output),
+            component: Scene,
+          }),
+        ]),
+      ).mount({ revision: 'r1' }),
+    );
+    const runtime = createCompositionRuntime({
+      definition,
+      instance: 'json',
+      compositionRealm: 'iframe',
+    });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(<Composition definition={definition} compositionRuntime={runtime} />),
+      );
+      const settled = await runtime.settleFrame(0, { source: 'renderer', requestId: 'json' });
+      expect(settled.status).toBe('ready');
+      expect(container.textContent).toBe('checked');
+      expect(received).toEqual(output);
+      expect(received).toEqual(definition.props);
+      expect(received).not.toBe(definition.props);
+      expect(received).toHaveProperty('nested', definition.props['nested']);
+      if (typeof received !== 'object' || received === null || !('nested' in received))
+        throw new Error('missing props');
+      expect(received.nested).toBe(definition.props['nested']);
+      expect(Object.getOwnPropertyDescriptor(received.nested, '__proto__')?.value).toEqual({
+        values: [1, null, true, 'title'],
+      });
+      expectJsonTree(received);
+    } finally {
+      flushSync(() => root.unmount());
+      runtime.dispose();
+      container.remove();
+    }
+  });
+
+  it.each(['key', 'ref', '__self', '__source', '__proto__'])(
+    'rejects the reserved top-level field %s before mounting',
+    async (field) => {
+      const render = vi.fn(() => <p>invalid</p>);
+      const output = Object.defineProperty({ values: [1] }, field, {
+        value: 'scene-title',
+        enumerable: true,
+      });
+      const registry = unwrap(
+        defineCompositions([
+          defineComposition({
+            ...metadata,
+            schema: z.object({}).transform(() => output),
+            component: render,
+          }),
+        ]),
+      );
+      const result = await registry.mount({ revision: 'r1' });
+      expect(result).toMatchObject({ ok: false, error: { code: 'composition.props-invalid' } });
+      if (result.ok) throw new Error('accepted reserved prop');
+      expect(result.error.message).toContain(field);
+      expect(result.error.hint).toContain(field);
+      expect(result.error.hint).toContain('React');
+      expect(render).not.toHaveBeenCalled();
+    },
+  );
   it('renders only validated selected props at owned time without parsing per frame', async () => {
     const parse = vi.fn((props: { title: string }) => props);
     const schema = z.object({ title: z.string().default('Hello') }).transform(parse);

@@ -128,6 +128,40 @@ describe('Composition registry', () => {
       'non-index array function properties',
       () => ({ values: Object.assign([1], { callback: () => 'not JSON' }) }),
     ],
+    ['numeric extra array properties', () => ({ values: Object.assign([1], { label: 42 }) })],
+    ['string extra array properties', () => ({ values: Object.assign([1], { label: 'text' }) })],
+    [
+      'symbol-keyed array properties',
+      () => ({ values: Object.assign([1], { [Symbol('label')]: 42 }) }),
+    ],
+    [
+      'nested numeric extra array properties',
+      () => ({ values: [Object.assign([1], { label: 42 })] }),
+    ],
+    [
+      'nested string extra array properties',
+      () => ({ values: [Object.assign([1], { label: 'text' })] }),
+    ],
+    [
+      'nested symbol-keyed array properties',
+      () => ({ values: [Object.assign([1], { [Symbol('label')]: 'text' })] }),
+    ],
+    [
+      'own __proto__ function',
+      () => Object.defineProperty({}, '__proto__', { value: () => 'not JSON', enumerable: true }),
+    ],
+    [
+      'nested own __proto__ function',
+      () => ({
+        value: Object.defineProperty({}, '__proto__', {
+          value: () => 'not JSON',
+          enumerable: true,
+        }),
+      }),
+    ],
+    ['accessors', () => Object.defineProperty({}, 'value', { get: () => 1, enumerable: true })],
+    ['non-enumerable properties', () => Object.defineProperty({}, 'value', { value: 1 })],
+    ['sparse arrays', () => ({ values: Object.assign([], { length: 2 }) })],
     ['non-JSON numbers', () => ({ value: Number.POSITIVE_INFINITY })],
     [
       'cycles',
@@ -167,7 +201,7 @@ describe('Composition registry', () => {
     expect(render).not.toHaveBeenCalled();
   });
 
-  it('retains the same checked JSON output for prepared props and rendering', async () => {
+  it('rebuilds checked JSON values for prepared props and rendering', async () => {
     const output = { values: [1] };
     const registry = unwrap(
       defineCompositions([
@@ -181,7 +215,11 @@ describe('Composition registry', () => {
     const prepared = unwrap(await registry.mount({ revision: 'v1' }));
     const rendered = prepared.render();
     if (!isValidElement<{ values: number[] }>(rendered)) throw new Error('not an element');
-    expect(prepared.props).toBe(output);
+    expect(prepared.props).toEqual(output);
+    expect(prepared.props).not.toBe(output);
+    expect(prepared.props['values']).not.toBe(output.values);
+    expect(rendered.props).toEqual(prepared.props);
+    expect(rendered.props).not.toBe(prepared.props);
     expect(rendered.props.values).toBe(prepared.props['values']);
   });
 
