@@ -16,6 +16,32 @@ import { currentTimestamp } from 'motion-kit';
 const startedAt = currentTimestamp();
 ```
 
+## CLI
+
+The `motion-kit` bin renders Compositions from a registry entry file. Both commands
+accept `--json`, which writes exactly one [versioned envelope](docs/contexts/agent/adr/20261024-cli-output-contract.accepted.md)
+to stdout; without it, the same data is printed as a short human summary.
+
+```bash
+# Capture one frame as a PNG.
+motion-kit frame <entry> [--composition <id>] --frame <n> --out <png>
+
+# Render a whole Composition.
+motion-kit render <entry> [--composition <id>] --out <dir> [--props <json>] [--json]
+```
+
+`--composition` may be omitted only when the registry exports exactly one
+Composition; otherwise the command fails with `cli.invalid-arguments` naming the
+available ids.
+
+Encoding is not implemented yet (TASK-150/159), so `render` produces a directory of
+PNG frames plus a `manifest.json` and reports `"format": "frames"` in `data` — never a
+fake MP4.
+
+Exit codes: `0` success, `1` domain failure (e.g. invalid props), `2` invocation error
+(e.g. missing entry or unknown id), `3` unexpected internal error. Failures are always
+Diagnostics in the envelope.
+
 ## Clock boundary
 
 Application code never reads the global `Date`; everything goes through the clock

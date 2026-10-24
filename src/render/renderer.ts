@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { validateOutputFrame } from '../core/timeline/time.ts';
-import { type MountReceipt } from '../lib/loading-protocol.ts';
+import { type MountReceipt, type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type Result } from '../lib/result.ts';
 import { createFrameJob, type FrameCaptureResult, type FrameJob } from './capture/frame.ts';
 import { pageTransport } from './capture/transport.ts';
@@ -23,6 +23,8 @@ export type Renderer = {
   renderFrames: (options: RenderFramesOptions) => AsyncIterable<FrameCaptureResult>;
   /** Fresh realm/props revision, same Vite session. Serialized with frame requests. */
   select: (selection: Selection) => Promise<RenderOutcome<MountReceipt>>;
+  /** The mounted descriptor; reflects the latest select without a fresh realm. */
+  descriptor: () => LoadingDescriptor;
   dispose: () => Promise<Result<undefined>>;
 };
 
@@ -160,6 +162,7 @@ export const createRenderer = async (
     value: {
       dispose,
       renderFrame,
+      descriptor: () => receipt.descriptor,
       select: (selection) =>
         enqueue(async () => {
           if (disposed) return { ok: false, aborted: true };

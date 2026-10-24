@@ -1,7 +1,7 @@
 import { createElement, type ComponentType, type ReactNode } from 'react';
 import { type z } from 'zod';
 
-import { type DiagnosticCode } from '../../lib/diagnostic.ts';
+import { type Diagnostic, type DiagnosticCode } from '../../lib/diagnostic.ts';
 import { type Result } from '../../lib/result.ts';
 import { createFrameRate, type FrameRate, type RationalInput } from '../timeline/time.ts';
 
@@ -44,6 +44,7 @@ export const compositionFailure = (
   message: string,
   hint: string,
   id?: string,
+  details?: NonNullable<Diagnostic['details']>,
 ): Result<never> => ({
   ok: false,
   error: {
@@ -52,6 +53,7 @@ export const compositionFailure = (
     message,
     hint,
     ...(id === undefined ? {} : { location: { compositionId: id } }),
+    ...(details === undefined ? {} : { details }),
   },
 });
 const pageFailure = (id?: string) =>
@@ -68,7 +70,7 @@ const propsFailure = (id: string, issues: readonly z.core.$ZodIssue[]): Result<n
     code: 'composition.props-invalid',
     severity: 'error',
     message: 'Composition props must satisfy the schema and produce a JSON object.',
-    hint: 'Make the schema accept {} with defaults and return only JSON-valued object props.',
+    hint: 'Supply the required props or declare per-property schema defaults and return only JSON-valued object props.',
     location: { compositionId: id },
     // Messages, custom params, input, expected values and exceptions can contain secrets.
     details: {
@@ -351,7 +353,6 @@ export type MountCompositionOptions = {
 export type CompositionRegistry<D extends readonly Result<CompositionEntry>[]> = Readonly<{
   definitions: D;
   listCompositions: () => readonly CompositionDescriptor[];
-  validateDefaults: (revision: string, loadingTimeoutMs?: number) => Promise<Result<undefined>>;
   mount: (options: MountCompositionOptions) => Promise<Result<PreparedComposition>>;
 }>;
 
@@ -369,24 +370,6 @@ export const defineCompositions = <const D extends readonly Result<CompositionEn
     }
     if (entries.size === 0) return pageFailure();
     const descriptors = Object.freeze([...entries.values()].map((entry) => entry.descriptor));
-    const defaults = new Map<string, Promise<Result<undefined>>>();
-    const validateDefaults = (revision: string, timeoutMs = 30_000): Promise<Result<undefined>> => {
-      const cached = defaults.get(revision);
-      if (cached !== undefined) return cached;
-      const validate = async (): Promise<Result<undefined>> => {
-        for (const entry of entries.values()) {
-          const result = await entry.prepare({}, revision, timeoutMs);
-          if (!result.ok) return result;
-        }
-        return { ok: true, value: undefined };
-      };
-      const pending = validate().then((result) => {
-        if (!result.ok) defaults.delete(revision);
-        return result;
-      });
-      defaults.set(revision, pending);
-      return pending;
-    };
     // Freeze the caller's tuple as well: its exact heterogeneous type remains available.
     Object.freeze(definitions);
     return {
@@ -394,7 +377,6 @@ export const defineCompositions = <const D extends readonly Result<CompositionEn
       value: Object.freeze({
         definitions,
         listCompositions: () => descriptors,
-        validateDefaults,
         mount: async ({
           compositionId,
           props = {},
@@ -407,6 +389,8 @@ export const defineCompositions = <const D extends readonly Result<CompositionEn
               'cli.invalid-arguments',
               'Select a Composition from this registry.',
               `Supply a composition id from: ${descriptors.map((item) => item.id).join(', ')}.`,
+              undefined,
+              { ids: descriptors.map((item) => item.id) },
             );
           const entry = entries.get(id);
           if (entry === undefined)
@@ -415,8 +399,6 @@ export const defineCompositions = <const D extends readonly Result<CompositionEn
               'The selected Composition does not exist.',
               'Use an exact case-sensitive id returned by listCompositions.',
             );
-          const validated = await validateDefaults(revision, loadingTimeoutMs);
-          if (!validated.ok) return validated;
           return entry.prepare(props, revision, loadingTimeoutMs);
         },
       }),

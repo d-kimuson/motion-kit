@@ -46,11 +46,6 @@ export type MountReceipt = z.infer<typeof mountReceiptSchema>;
 export type LoadingPage = FramePage & {
   protocolVersion: typeof loadingProtocolVersion;
   listCompositions: () => Result<readonly LoadingDescriptor[]>;
-  validateDefault: (
-    index: number,
-    revision: string,
-    timeoutMs: number,
-  ) => Promise<Result<undefined>>;
   mount: (request: unknown) => Promise<Result<MountReceipt>>;
   dispose: () => Result<undefined>;
   /** Registered-resource snapshot for a later inspect command. Not a package export. */

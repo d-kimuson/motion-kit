@@ -5,13 +5,13 @@
       "$ref": "#/$defs/__schema0"
     },
     {
-      "$ref": "#/$defs/__schema13"
-    },
-    {
-      "$ref": "#/$defs/__schema14"
+      "$ref": "#/$defs/__schema16"
     },
     {
       "$ref": "#/$defs/__schema17"
+    },
+    {
+      "$ref": "#/$defs/__schema20"
     }
   ],
   "allOf": [
@@ -84,58 +84,86 @@
         "data": {
           "anyOf": [
             {
-              "type": "object",
-              "properties": {
-                "output": {
-                  "$ref": "#/$defs/__schema10"
-                },
-                "format": {
-                  "type": "string",
-                  "const": "mp4"
-                },
-                "width": {
-                  "$ref": "#/$defs/__schema11"
-                },
-                "height": {
-                  "$ref": "#/$defs/__schema12"
-                },
-                "fps": {
+              "oneOf": [
+                {
                   "type": "object",
                   "properties": {
-                    "numerator": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991
+                    "output": {
+                      "$ref": "#/$defs/__schema10"
                     },
-                    "denominator": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991
+                    "format": {
+                      "type": "string",
+                      "const": "mp4"
+                    },
+                    "width": {
+                      "$ref": "#/$defs/__schema11"
+                    },
+                    "height": {
+                      "$ref": "#/$defs/__schema12"
+                    },
+                    "fps": {
+                      "$ref": "#/$defs/__schema13"
+                    },
+                    "frameCount": {
+                      "$ref": "#/$defs/__schema14"
+                    },
+                    "durationSeconds": {
+                      "$ref": "#/$defs/__schema15"
                     }
                   },
-                  "required": ["numerator", "denominator"],
+                  "required": [
+                    "output",
+                    "format",
+                    "width",
+                    "height",
+                    "fps",
+                    "frameCount",
+                    "durationSeconds"
+                  ],
                   "additionalProperties": false
                 },
-                "frameCount": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 9007199254740991
-                },
-                "durationSeconds": {
-                  "type": "number",
-                  "minimum": 0
+                {
+                  "type": "object",
+                  "properties": {
+                    "output": {
+                      "$ref": "#/$defs/__schema10"
+                    },
+                    "format": {
+                      "type": "string",
+                      "const": "frames"
+                    },
+                    "manifest": {
+                      "$ref": "#/$defs/__schema10"
+                    },
+                    "width": {
+                      "$ref": "#/$defs/__schema11"
+                    },
+                    "height": {
+                      "$ref": "#/$defs/__schema12"
+                    },
+                    "fps": {
+                      "$ref": "#/$defs/__schema13"
+                    },
+                    "frameCount": {
+                      "$ref": "#/$defs/__schema14"
+                    },
+                    "durationSeconds": {
+                      "$ref": "#/$defs/__schema15"
+                    }
+                  },
+                  "required": [
+                    "output",
+                    "format",
+                    "manifest",
+                    "width",
+                    "height",
+                    "fps",
+                    "frameCount",
+                    "durationSeconds"
+                  ],
+                  "additionalProperties": false
                 }
-              },
-              "required": [
-                "output",
-                "format",
-                "width",
-                "height",
-                "fps",
-                "frameCount",
-                "durationSeconds"
-              ],
-              "additionalProperties": false
+              ]
             },
             {
               "type": "null"
@@ -368,6 +396,32 @@
     "__schema13": {
       "type": "object",
       "properties": {
+        "numerator": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "denominator": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["numerator", "denominator"],
+      "additionalProperties": false
+    },
+    "__schema14": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema15": {
+      "type": "number",
+      "minimum": 0
+    },
+    "__schema16": {
+      "type": "object",
+      "properties": {
         "schemaVersion": {
           "$ref": "#/$defs/__schema1"
         },
@@ -424,7 +478,7 @@
       "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
       "additionalProperties": false
     },
-    "__schema14": {
+    "__schema17": {
       "type": "object",
       "properties": {
         "schemaVersion": {
@@ -446,7 +500,7 @@
         "data": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema18"
             },
             {
               "type": "null"
@@ -457,16 +511,16 @@
       "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
       "additionalProperties": false
     },
-    "__schema15": {
+    "__schema18": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/__schema16"
+        "$ref": "#/$defs/__schema19"
       }
     },
-    "__schema16": {
+    "__schema19": {
       "anyOf": [
         {
           "type": "string"
@@ -483,7 +537,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema19"
           }
         },
         {
@@ -492,12 +546,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema19"
           }
         }
       ]
     },
-    "__schema17": {
+    "__schema20": {
       "type": "object",
       "properties": {
         "schemaVersion": {
@@ -519,7 +573,7 @@
         "data": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema18"
             },
             {
               "type": "null"

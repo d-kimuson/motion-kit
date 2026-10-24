@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "A type-safe toolkit for motion timing primitives.",
   "license": "MIT",
+  "bin": {
+    "motion-kit": "./src/cli/main.js"
+  },
   "files": [
     "src",
     "!src/**/*.test.ts",
@@ -42,6 +45,7 @@
     "prepare": "lefthook install"
   },
   "dependencies": {
+    "commander": "15.0.0",
     "playwright": "1.64.1",
     "semver": "7.7.3",
     "vite": "7.3.7",

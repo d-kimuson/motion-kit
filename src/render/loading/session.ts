@@ -225,19 +225,6 @@ export const openLoadingSession = async (
     if (!result.ok) throw new LoadingError(result.error);
     return result.value;
   };
-  const defaults = async (compositions: readonly LoadingDescriptor[], revision: string) => {
-    for (let index = 0; index < compositions.length; index++) {
-      await deadline(`defaults parse ${compositions[index]?.id ?? ''}`, async () => {
-        const value: unknown = await page?.evaluate(
-          ({ index, revision, timeoutMs }) =>
-            window.__motionKit?.validateDefault(index, revision, timeoutMs),
-          { index, revision, timeoutMs },
-        );
-        const result = resultSchema(z.undefined()).parse(value);
-        if (!result.ok) throw new LoadingError(result.error);
-      });
-    }
-  };
   try {
     const started = process.hrtime.bigint();
     const initial = await deadline('startup', async () => {
@@ -291,7 +278,6 @@ export const openLoadingSession = async (
       return { url, compositions };
     });
     const revision = randomUUID();
-    await defaults(initial.compositions, revision);
     const pid = child?.pid;
     if (pid === undefined || workspace === undefined) throw new Error('Service ownership missing');
     const browserPid = owned?.server.process().pid;
@@ -327,7 +313,6 @@ export const openLoadingSession = async (
               await context?.close();
               return loadRealm(initial.url);
             });
-            await defaults(initial.compositions, revision);
             const instance = randomUUID();
             const receipt = await deadline('props parse and mount', async () => {
               const value: unknown = await page?.evaluate(

@@ -64,7 +64,12 @@ TASK-152 adds `motion.invalid-input` for invalid Pure Motion inputs (including n
 
 ### Command data
 
-- `render`: `output` is an absolute file path, `format` is `mp4`, `width` and `height` are positive integers, `fps` is `{ numerator, denominator }` with positive integer components, `frameCount` is a nonnegative integer, and `durationSeconds` is finite and nonnegative. Always serialize FPS as a rational, including integer rates such as `{ "numerator": 30, "denominator": 1 }`.
+- `render`: `data` is a discriminated union on `format`. Both variants share `output` (an absolute file path), `width` and `height` (positive integers), `fps` (`{ numerator, denominator }` with positive integer components), `frameCount` (a nonnegative integer), and `durationSeconds` (finite and nonnegative). Always serialize FPS as a rational, including integer rates such as `{ "numerator": 30, "denominator": 1 }`. The variants are:
+  - `format: "frames"`: `output` names the directory the PNG frame sequence was written into, and `manifest` is the absolute path of the JSON file in that directory describing the sequence (`format`, `composition`, `width`, `height`, `fps`, `frameCount`, and the frame file `files`). This is the only variant the current CLI produces.
+  - `format: "mp4"`: reserved for when encoding lands (TASK-150/TASK-159); no producer emits it yet.
+
+  _Amended 2026-10-24:_ the original text said `format` was the literal `mp4`. The amendment reflects that encoding does not exist yet and the CLI must not claim video output it cannot produce, so the `frames` variant and its `manifest` field were added to `RenderDataSchema` and the committed JSON Schema without bumping `schemaVersion` (an added union value is compatible).
+
 - `frame`: `output` is an absolute PNG file path, `format` is `png`, `frame` is a nonnegative integer Global Frame, `timeSeconds` is its finite nonnegative Presentation Time, and `width` and `height` are positive integers. Image bytes never go to stdout.
 - `inspect` and `validate`: reserve a JSON object for usable data. Their tasks define the contents later without changing the envelope or Diagnostic. This placeholder is not a claim that an empty object is a complete implementation of either command.
 

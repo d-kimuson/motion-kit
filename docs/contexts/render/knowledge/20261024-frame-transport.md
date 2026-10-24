@@ -51,19 +51,21 @@ Every listed comparison passed. The test separately asserts **frame 0 differs fr
 
 ## Mutation matrix
 
-Nine mutants were executed individually against the named tests; all nine were killed by assertions, then the restored suite passed. No survivors were accepted.
+Eleven mutants were executed individually against the named tests; all eleven were killed by assertions, then the restored suite passed. No survivors were accepted.
 
-| Mutant                                | Killing test                                                                                                                                |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Capture before settlement             | `awaits readiness and validates both sides of dimensioned capture`                                                                          |
-| Skip pre-capture validation           | `awaits readiness and validates both sides of dimensioned capture`                                                                          |
-| Charge the frame budget while queued  | `does not charge queue residence to the frame budget`                                                                                       |
-| Omit generation comparison            | `suppresses a stale generation before screenshot`                                                                                           |
-| Crop one pixel too narrow             | `captures exact DOM CSS SVG Canvas pixels at the composition crop`                                                                          |
-| Ignore caller cancellation            | `suppresses a canceled generation even when screenshot finishes late`                                                                       |
-| Publish without completion acceptance | `discards changed-version pixels then publishes only accepted replacement bytes`                                                            |
-| Constant frame fixture                | `matches sequential single random reverse repeated fresh-realm and held-session bytes with nonconstant frames` (different-frame inequality) |
-| History-dependent fixture output      | The same determinism test (traversal byte equality)                                                                                         |
+| Mutant                                      | Killing test                                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Capture before settlement                   | `awaits readiness and validates both sides of dimensioned capture`                                                                          |
+| Skip pre-capture validation                 | `awaits readiness and validates both sides of dimensioned capture`                                                                          |
+| Charge the frame budget while queued        | `does not charge queue residence to the frame budget`                                                                                       |
+| Omit generation comparison                  | `suppresses a stale generation before screenshot`                                                                                           |
+| Crop one pixel too narrow                   | `captures exact DOM CSS SVG Canvas pixels at the composition crop`                                                                          |
+| Ignore caller cancellation                  | `suppresses a canceled generation even when screenshot finishes late`                                                                       |
+| Publish without completion acceptance       | `discards changed-version pixels then publishes only accepted replacement bytes`                                                            |
+| Constant frame fixture                      | `matches sequential single random reverse repeated fresh-realm and held-session bytes with nonconstant frames` (different-frame inequality) |
+| History-dependent fixture output            | The same determinism test (traversal byte equality)                                                                                         |
+| Validate every composition with empty props | `mounts a selected composition without validating an unselected required-prop sibling`                                                      |
+| Fail on any watched file                    | `ignores non-source files added to the project root and keeps the session healthy`                                                          |
 
 ## Runtime observations
 
