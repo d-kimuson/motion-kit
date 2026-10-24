@@ -36,7 +36,7 @@ Core's existing browser-context import restrictions also reject `src/render/load
 
 ## Renderer API
 
-The Node condition of the existing package root exports `createRenderer` and its public types from `src/render/index.ts`; the browser/default condition keeps `src/index.ts` free of host dependencies. NodeNext consumers resolve the Node API automatically; a bundler-mode TypeScript host must enable `customConditions: ["node"]`. No package subpath is added. The loading session and browser bootstrap remain internal; the loader privately resolves `@kimuson/motion-kit/browser`. The current package name is `motion-kit`.
+The root is condition-free and is the authoring surface: `@kimuson/motion-kit` resolves to `src/index.ts` everywhere. The renderer entry is the `./render` subpath (`motion-kit/render`), which exports only `createRenderer` and its public types from `src/render/index.ts`. `./agent` is the CLI/agent contract (`src/agent/cli-output.ts`); `./browser` arrives with TASK-190. The loading session and browser bootstrap remain internal; the loader privately resolves `@kimuson/motion-kit/browser`. The current package name is `motion-kit`.
 
 - `await createRenderer({ projectRoot, entry, compositionId?, props?, loadingTimeoutMs?, queueTimeoutMs?, frameTimeoutMs?, signal?, ...browserOptions })` returns `Result<Renderer>` or `{ ok: false, aborted: true }`. Props are JSON objects, validated once per selection in the page.
 - `renderer.renderFrame({ frame, signal? })` returns PNG `Buffer` bytes with `frame`, `width`, `height`, and warning `diagnostics`, only after capture completion accepts the lease. Invalid output frames use the Time Module's `composition.props-invalid`; `location.frame` is supplied only for safe integers.

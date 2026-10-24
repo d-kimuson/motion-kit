@@ -11,7 +11,7 @@ pnpm test --project frame-transport
 DIRENV_DISABLE=1 timeout 600 node scripts/mutate-frame-transport.ts
 ```
 
-The checked fixture is `src/core/runtime/fixtures/capture.tsx`; host assertions are in `src/render/renderer.test.ts` and `src/render/capture/frame.test.ts`. Browser tests explicitly have 60-second timeouts. CI installs Chromium and runs `frame-transport` alongside the existing projects.
+The checked fixture is `src/core/runtime/fixtures/capture.tsx`; host assertions are in `src/render/renderer.test.ts` and `src/render/capture/frame.test.ts`, importing `createRenderer` from the `motion-kit/render` subpath. Browser tests explicitly have 60-second timeouts. CI installs Chromium and runs `frame-transport` alongside the existing projects.
 
 ## Pixels and comparison modes
 

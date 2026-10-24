@@ -1,4 +1,4 @@
-import { createRenderer, type Renderer, type RenderedFrame } from 'motion-kit';
+import { createRenderer, type Renderer, type RenderedFrame } from 'motion-kit/render';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
