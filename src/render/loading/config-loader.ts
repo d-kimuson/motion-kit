@@ -2,27 +2,17 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire, registerHooks } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { satisfies } from 'semver';
-import { z } from 'zod';
 
 import { LoadingConfigError } from './diagnostics.ts';
 
 const require = createRequire(import.meta.url);
-const manifestSchema = z.object({
-  name: z.string(),
-  version: z.string().optional(),
-  peerDependencies: z.object({ vite: z.string().optional() }).optional(),
-  dependencies: z.object({ vite: z.string().optional() }).optional(),
-  optionalDependencies: z.object({ vite: z.string().optional() }).optional(),
-});
 
 /** Child-process-only adapter for pinned Vite 7.3.7.
  * Stage 1 registers BEFORE externalize-deps' project lookup (also inspecting
  * absolute/relative bypasses). Stage 2 intercepts externalized ESM AND CJS.
  * The guarded in-memory patch never changes an installed package or user tree.
  */
-export const installBundledVite = (workspace: string, projectRoot: string) => {
-  const projectDirectory = realpathSync(projectRoot);
+export const installBundledVite = (workspace: string) => {
   const viteRoot = dirname(require.resolve('vite/package.json'));
   const paths: Record<string, string> = {
     vite: require.resolve('vite'),
@@ -46,26 +36,18 @@ export const installBundledVite = (workspace: string, projectRoot: string) => {
     while (directory !== dirname(directory)) {
       if (checked.has(directory)) return;
       checked.add(directory);
-      let manifest: z.infer<typeof manifestSchema>;
+      let manifest: { name?: unknown; version?: unknown };
       try {
-        manifest = manifestSchema.parse(
-          JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')),
-        );
+        const parsed: unknown = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
+        manifest = typeof parsed === 'object' && parsed !== null ? parsed : {};
       } catch {
         directory = dirname(directory);
         continue;
       }
-      // The application's own Vite may coexist; compatibility binds imported
-      // plugin/dependency packages, not local config helpers in the project.
-      if (directory !== projectDirectory)
-        for (const range of [
-          manifest.peerDependencies?.vite,
-          manifest.dependencies?.vite,
-          manifest.optionalDependencies?.vite,
-        ])
-          if (range !== undefined && !satisfies('7.3.7', range)) reject(manifest.name);
+      // A resolved package named "vite" that is not the bundled copy is a detected
+      // second Vite; reject it rather than loading two Vite runtimes.
       if (manifest.name === 'vite' && directory !== viteRoot)
-        reject(`vite@${manifest.version ?? 'unknown'}`);
+        reject(`vite@${typeof manifest.version === 'string' ? manifest.version : 'unknown'}`);
       return;
     }
   };

@@ -4,6 +4,8 @@ saveExact: true
 enableGlobalVirtualStore: true
 allowBuilds:
   lefthook: true
+  # esbuild's postinstall downloads its binary; pnpm already supplies it through
+  # the platform-specific optional dependency, so the download script is denied.
   esbuild: false
 
 minimumReleaseAge: 1440

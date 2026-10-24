@@ -1,11 +1,16 @@
-import type { Plugin, UserConfig } from 'vite';
+import type { Alias, AliasOptions, Plugin, UserConfig } from 'vite';
 
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { normalizeAliases } from './config-validation.ts';
 import { bootstrapId, entryId, entrySource } from './entry-source.ts';
+
+const isAliasArray = (value: AliasOptions): value is readonly Alias[] => Array.isArray(value);
+const normalizeAliases = (aliases: AliasOptions = {}): readonly Alias[] =>
+  isAliasArray(aliases)
+    ? aliases
+    : Object.entries(aliases).map(([find, replacement]) => ({ find, replacement }));
 
 // The loading plugin aliases the public package entries to files on disk. In the
 // source tree (and the installed-child test's copied src/) those are the `.ts`

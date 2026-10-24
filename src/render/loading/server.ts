@@ -7,13 +7,6 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 import { installBundledVite } from './config-loader.ts';
-import {
-  checkPreprocessorFile,
-  environmentConfigValidator,
-  preprocessorFailure,
-  resolvedConfigValidator,
-  validateConfig,
-} from './config-validation.ts';
 import { configFailure, LoadingConfigError, loadingFailure } from './diagnostics.ts';
 import { htmlShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
@@ -37,12 +30,11 @@ let configPath =
   ['js', 'mjs', 'ts', 'cjs', 'mts', 'cts']
     .map((extension) => join(input.projectRoot, `vite.config.${extension}`))
     .find(existsSync) ?? join(input.projectRoot, 'vite.config.ts');
-const adapter = installBundledVite(input.workspace, input.projectRoot);
+const adapter = installBundledVite(input.workspace);
 const send = (message: unknown) => process.send?.(message);
 const report = (error: unknown) => {
   const name =
     adapter.rejectedName() ??
-    preprocessorFailure(error) ??
     (error instanceof LoadingConfigError
       ? error.key
       : typeof error === 'object' &&
@@ -53,7 +45,7 @@ const report = (error: unknown) => {
         : undefined);
   send({
     type: 'failure',
-    error: name === undefined ? loadingFailure('configuration') : configFailure(name, configPath),
+    error: configFailure(name ?? 'configuration', configPath),
   });
 };
 try {
@@ -82,9 +74,7 @@ try {
   );
   configPath = loaded?.path ?? configPath;
   const config = loaded?.config ?? {};
-  validateConfig(config, input.projectRoot);
   let enforceOwned: (() => void) | undefined;
-  const validateEnvironments = new Map<string, ReturnType<typeof environmentConfigValidator>>();
   const resolved = await vite.resolveConfig(
     {
       ...config,
@@ -92,19 +82,6 @@ try {
       root: resolve(input.projectRoot, config.root ?? '.'),
       mode: 'development',
       plugins: [
-        {
-          name: 'motion-kit-loading-environment-baseline',
-          enforce: 'pre',
-          configEnvironment: {
-            order: 'pre',
-            handler(name, environment) {
-              validateEnvironments.set(
-                name,
-                environmentConfigValidator(environment, input.projectRoot),
-              );
-            },
-          },
-        },
         loadingPlugin(entry),
         ...(await namedPlugins(config.plugins ?? [], report)),
         {
@@ -114,7 +91,6 @@ try {
           config: {
             order: 'post',
             handler(final) {
-              validateConfig(final, input.projectRoot);
               const react = reactResolution(input.projectRoot, final);
               const root = resolve(input.projectRoot, final.root ?? '.');
               return {
@@ -152,14 +128,6 @@ try {
               };
             },
           },
-          configEnvironment: {
-            order: 'post',
-            handler(name, environment) {
-              const validate = validateEnvironments.get(name);
-              if (validate === undefined) throw new LoadingConfigError('environments');
-              validate(environment);
-            },
-          },
           transform: {
             order: 'pre',
             handler(code, id) {
@@ -170,12 +138,6 @@ try {
                 if (code.split(connect).length !== 2)
                   throw new LoadingConfigError('bundled Vite client adapter');
                 return code.replace(connect, '');
-              }
-              try {
-                checkPreprocessorFile(id, input.projectRoot);
-              } catch (error) {
-                report(error);
-                throw error;
               }
               return undefined;
             },
@@ -199,7 +161,6 @@ try {
         customLogger: resolved.customLogger,
         clearScreen: resolved.clearScreen,
       };
-      const validateResolved = resolvedConfigValidator(resolved, input.projectRoot);
       const environmentNames = Object.keys(resolved.environments);
       const aliases = resolved.resolve.alias.map((alias) => ({ ...alias }));
       const allow = [...resolved.server.fs.allow];
@@ -236,7 +197,6 @@ try {
           client.optimizeDeps.entries = [entry];
           client.optimizeDeps.include = include;
         }
-        validateResolved();
       };
     },
   );
