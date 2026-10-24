@@ -7,7 +7,7 @@ Diagnostic than asserted. The text the loader matches on is wrapped in ANSI SGR 
 
 ```
 +     "message": "Loading configuration failed.",
--     "message": "Loading configuration failed for \"configuration\" with bundled Vite 7.3.7.",
+-     "message": "Vite's dependency optimizer failed with bundled Vite 7.3.7.",
 ```
 
 `\u001b[31m` precedes the first word of Vite's message (for example Vite's
