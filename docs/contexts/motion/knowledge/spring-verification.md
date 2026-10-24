@@ -89,7 +89,7 @@ Replaying the `85784c6` tests confirms the coverage gaps: its boundary test pass
 
 Retarget coverage now explicitly asserts inherited stiffness, damping and mass without overrides, plus individual overrides. For `k=6,c=8,m=2`, the roots are -1 and -3; the no-override trajectory is checked against independent exponential coefficients at 0.5, 2 and 10 seconds after switching. A 300-case property compares both position and velocity against the original trajectory at arbitrary later times and 2, 10 and 30 seconds after a same-target switch. It scopes identity to active switches (`atTime > start`), not the distinct pre-start hold/restart semantics, and freezes the original description.
 
-Repeated samples compare the eight binary64 bytes, not rounded decimal strings. `scripts/spring-determinism.test.ts` compares position/velocity bytes from separate Node processes, including reversed evaluation order, all three regimes, near-critical inputs and stiff damping. This verifies same-runtime determinism, not cross-engine identity.
+Repeated samples compare the eight binary64 bytes, not rounded decimal strings. `src/motion/spring-determinism.test.ts` compares position/velocity bytes from separate Node processes, including reversed evaluation order, all three regimes, near-critical inputs and stiff damping. This verifies same-runtime determinism, not cross-engine identity.
 
 ## Mutation matrix
 

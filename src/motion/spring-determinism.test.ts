@@ -1,5 +1,9 @@
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+
+// Child processes load `./src/motion/index.ts` from the repository root, not this file's directory.
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 it('returns byte-identical spring states in separate Node processes and reversed order', () => {
   const run = (reverse: boolean): string =>
@@ -24,7 +28,7 @@ it('returns byte-identical spring states in separate Node processes and reversed
     process.stdout.write(JSON.stringify([...values].sort()));
   `,
       ],
-      { encoding: 'utf8', timeout: 10000 },
+      { cwd: repoRoot, encoding: 'utf8', timeout: 10000 },
     );
   expect(run(false)).toBe(run(false));
   expect(run(true)).toBe(run(false));
