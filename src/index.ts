@@ -34,6 +34,15 @@ export {
   type SequenceContext,
 } from './core/timeline/hooks.ts';
 export { Sequence, type SequenceProps } from './core/sequence/sequence.tsx';
+export {
+  TransitionSeries,
+  TransitionScene,
+  Transition,
+  useTransitionProgress,
+  type TransitionSeriesProps,
+  type TransitionSceneProps,
+  type TransitionProps,
+} from './core/transition/transition-series.tsx';
 export { useAsset } from './core/assets/use-asset.ts';
 export type {
   AssetDescriptor,

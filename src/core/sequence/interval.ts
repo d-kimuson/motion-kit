@@ -24,6 +24,16 @@ export const createSequence = (
   return { ok: true, value: Object.freeze({ start, end: addTime(start, duration) }) };
 };
 
+/** Translate a local interval to absolute placement without converting either endpoint. */
+export const offsetSequence = (
+  sequence: SequenceInterval,
+  offset: TimelineTime,
+): SequenceInterval =>
+  Object.freeze({
+    start: addTime(offset, sequence.start),
+    end: addTime(offset, sequence.end),
+  });
+
 /** Derived from Sequence.contains: no conversion to seconds or integer frames occurs here. */
 export const sequenceContains = (sequence: SequenceInterval, time: TimelineTime): boolean =>
   compareTime(sequence.start, time) <= 0 && compareTime(time, sequence.end) < 0;
