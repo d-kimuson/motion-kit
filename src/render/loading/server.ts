@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { installBundledVite } from './config-loader.ts';
 import {
   checkPreprocessorFile,
+  environmentConfigValidator,
   preprocessorFailure,
   resolvedConfigValidator,
   validateConfig,
@@ -22,6 +23,15 @@ const input = z
   .object({ projectRoot: z.string(), entry: z.string(), workspace: z.string() })
   .parse(JSON.parse(process.argv[2] ?? '{}'));
 const entry = resolve(input.projectRoot, input.entry);
+// Only React membership is owned; keep each environment's project policy/order.
+// Normalize again after Vite's array merges and all project hooks have finished.
+const withReactDedupe = (dedupe: readonly string[]) => [
+  ...new Set([
+    ...dedupe.filter((name) => name !== 'react' && name !== 'react-dom'),
+    'react',
+    'react-dom',
+  ]),
+];
 // Diagnostic location before evaluation; discovery/evaluation still belongs to Vite.
 let configPath =
   ['js', 'mjs', 'ts', 'cjs', 'mts', 'cts']
@@ -74,6 +84,7 @@ try {
   const config = loaded?.config ?? {};
   validateConfig(config, input.projectRoot);
   let enforceOwned: (() => void) | undefined;
+  const validateEnvironments = new Map<string, ReturnType<typeof environmentConfigValidator>>();
   const resolved = await vite.resolveConfig(
     {
       ...config,
@@ -81,6 +92,19 @@ try {
       root: resolve(input.projectRoot, config.root ?? '.'),
       mode: 'development',
       plugins: [
+        {
+          name: 'motion-kit-loading-environment-baseline',
+          enforce: 'pre',
+          configEnvironment: {
+            order: 'pre',
+            handler(name, environment) {
+              validateEnvironments.set(
+                name,
+                environmentConfigValidator(environment, input.projectRoot),
+              );
+            },
+          },
+        },
         loadingPlugin(entry),
         ...(await namedPlugins(config.plugins ?? [], report)),
         {
@@ -104,7 +128,7 @@ try {
                 resolve: {
                   ...final.resolve,
                   alias: react.aliases,
-                  dedupe: [...new Set([...(final.resolve?.dedupe ?? []), 'react', 'react-dom'])],
+                  dedupe: withReactDedupe(final.resolve?.dedupe ?? []),
                 },
                 optimizeDeps: { ...final.optimizeDeps, entries: [entry], include: react.include },
                 server: {
@@ -126,6 +150,14 @@ try {
                   },
                 },
               };
+            },
+          },
+          configEnvironment: {
+            order: 'post',
+            handler(name, environment) {
+              const validate = validateEnvironments.get(name);
+              if (validate === undefined) throw new LoadingConfigError('environments');
+              validate(environment);
             },
           },
           transform: {
@@ -170,7 +202,6 @@ try {
       const validateResolved = resolvedConfigValidator(resolved, input.projectRoot);
       const environmentNames = Object.keys(resolved.environments);
       const aliases = resolved.resolve.alias.map((alias) => ({ ...alias }));
-      const dedupe = [...resolved.resolve.dedupe];
       const allow = [...resolved.server.fs.allow];
       const include = [...(resolved.optimizeDeps.include ?? [])];
       enforceOwned = () => {
@@ -184,7 +215,7 @@ try {
         });
         resolved.server.fs.allow = allow;
         resolved.resolve.alias = aliases;
-        resolved.resolve.dedupe = dedupe;
+        resolved.resolve.dedupe = withReactDedupe(resolved.resolve.dedupe);
         resolved.optimizeDeps.entries = [entry];
         resolved.optimizeDeps.include = include;
         // Vite has already forked environment options. The optimizer and module
@@ -195,7 +226,10 @@ try {
         )
           throw new LoadingConfigError('environments');
         for (const environment of Object.values(resolved.environments)) {
-          Object.assign(environment.resolve, { alias: aliases, dedupe });
+          Object.assign(environment.resolve, {
+            alias: aliases,
+            dedupe: withReactDedupe(environment.resolve.dedupe),
+          });
         }
         const client = resolved.environments['client'];
         if (client !== undefined) {

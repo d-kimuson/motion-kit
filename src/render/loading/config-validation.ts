@@ -1,4 +1,4 @@
-import type { Alias, AliasOptions, ResolvedConfig, UserConfig } from 'vite';
+import type { Alias, AliasOptions, EnvironmentOptions, ResolvedConfig, UserConfig } from 'vite';
 
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -176,34 +176,44 @@ const snapshot = (value: unknown, seen = new Map<object, unknown>()): unknown =>
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === 'object' && value !== null ? Object.fromEntries(Object.entries(value)) : {};
 
+const project = (value: unknown, before: unknown, path: string, environment = false): unknown => {
+  const allowed = keys[path];
+  if (allowed === undefined) return value;
+  const result: Record<string, unknown> = {};
+  const current = record(value);
+  const defaults = record(before);
+  for (const key of new Set([...Object.keys(current), ...Object.keys(defaults)])) {
+    const child = current[key];
+    // Vite assembles these internal hook lists after the snapshot callback.
+    if (path === '' && ['plugins', 'getSortedPlugins', 'getSortedPluginHooks'].includes(key))
+      continue;
+    if (path === '' && key === 'environments' && !environment) continue;
+    const name = path === '' ? key : `${path}.${key}`;
+    if (
+      !allowed.includes(key) ||
+      (environment && path === '' && !['resolve', 'optimizeDeps', 'define'].includes(key))
+    ) {
+      if (!(key in defaults) || !isDeepStrictEqual(child, defaults[key]))
+        throw new LoadingConfigError(name);
+    } else result[key] = project(child, defaults[key], name);
+  }
+  return result;
+};
+// Capture inherited environment options before configEnvironment hooks, not
+// their output: later normalization must not bless project additions as defaults.
+export const environmentConfigValidator = (
+  config: EnvironmentOptions,
+  projectRoot: string,
+): ((current: EnvironmentOptions) => void) => {
+  const baseline = snapshot(config);
+  return (current) => validateConfig(record(project(current, baseline, '', true)), projectRoot);
+};
+
 export const resolvedConfigValidator = (
   config: ResolvedConfig,
   projectRoot: string,
 ): (() => void) => {
   const baseline = record(snapshot(config));
-  const project = (value: unknown, before: unknown, path: string, environment = false): unknown => {
-    const allowed = keys[path];
-    if (allowed === undefined) return value;
-    const result: Record<string, unknown> = {};
-    const current = record(value);
-    const defaults = record(before);
-    for (const key of new Set([...Object.keys(current), ...Object.keys(defaults)])) {
-      const child = current[key];
-      // Vite assembles these internal hook lists after the snapshot callback.
-      if (path === '' && ['plugins', 'getSortedPlugins', 'getSortedPluginHooks'].includes(key))
-        continue;
-      if (path === '' && key === 'environments' && !environment) continue;
-      const name = path === '' ? key : `${path}.${key}`;
-      if (
-        !allowed.includes(key) ||
-        (environment && path === '' && !['resolve', 'optimizeDeps', 'define'].includes(key))
-      ) {
-        if (!(key in defaults) || !isDeepStrictEqual(child, defaults[key]))
-          throw new LoadingConfigError(name);
-      } else result[key] = project(child, defaults[key], name);
-    }
-    return result;
-  };
   return () => {
     validateConfig(record(project(config, baseline, '')), projectRoot);
     const environments = record(baseline['environments']);

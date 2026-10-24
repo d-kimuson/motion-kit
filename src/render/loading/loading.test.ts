@@ -123,6 +123,68 @@ for(const name of ['react','react-dom'])if(!s.environments.client.config.resolve
     expect(await open(root)).toMatchObject({ ok: true });
   });
 
+  it.each(['config', 'configEnvironment', 'configResolved'])(
+    'preserves project singleton identity and React dedupe supplied through %s',
+    async (hook) => {
+      const policy = `resolve:{dedupe:['scene-singleton','other-singleton','scene-singleton']}`;
+      const root =
+        fixture(`export default {optimizeDeps:{exclude:['linked-scene','scene-singleton']},plugins:[{
+name:'project-dedupe',${hook === 'configResolved' ? `configResolved(c){for(const e of Object.values(c.environments))e.resolve.dedupe=['scene-singleton','other-singleton','scene-singleton'];c.resolve.dedupe=['scene-singleton','other-singleton'];}` : `${hook}(){return {${policy}};}`},
+configureServer(s){s.middlewares.use('/dedupe-policy',(_req,res)=>res.end(JSON.stringify({top:s.config.resolve.dedupe,...Object.fromEntries(Object.entries(s.environments).map(([name,e])=>[name,e.config.resolve.dedupe]))})));}
+}]};`);
+      const linked = mkdtempSync(join(tmpdir(), 'motion-kit-linked-'));
+      directories.push(linked);
+      for (const name of ['scene-singleton', 'react', 'react-dom']) {
+        const dependency = join(linked, 'node_modules', name);
+        mkdirSync(dependency, { recursive: true });
+        writeFileSync(
+          join(dependency, 'package.json'),
+          JSON.stringify({ name, type: 'module', main: 'index.js' }),
+        );
+        writeFileSync(join(dependency, 'index.js'), `throw Error('duplicate ${name} singleton');`);
+      }
+      const singleton = join(root, 'node_modules/scene-singleton');
+      mkdirSync(singleton);
+      writeFileSync(
+        join(singleton, 'package.json'),
+        '{"name":"scene-singleton","type":"module","main":"index.js"}',
+      );
+      writeFileSync(join(singleton, 'index.js'), `export const identity={project:true};`);
+      writeFileSync(
+        join(linked, 'package.json'),
+        '{"name":"linked-scene","type":"module","main":"index.js"}',
+      );
+      writeFileSync(
+        join(linked, 'index.js'),
+        `export {identity} from 'scene-singleton';export {createElement} from 'react';export {flushSync} from 'react-dom';`,
+      );
+      symlinkSync(linked, join(root, 'node_modules/linked-scene'));
+      writeFileSync(
+        join(root, 'entry.tsx'),
+        `import {identity} from 'scene-singleton';import {createElement} from 'react';import {flushSync} from 'react-dom';import * as linked from 'linked-scene';
+if(identity!==linked.identity||!identity.project||createElement!==linked.createElement||flushSync!==linked.flushSync)throw Error('module identity split');
+${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+      );
+      const result = await open(root);
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) throw Error('Loading failed');
+      const policies: unknown = await (
+        await fetch(new URL('/dedupe-policy', result.value.url))
+      ).json();
+      expect(policies).toEqual(
+        Object.fromEntries(
+          ['top', 'client', 'ssr'].map((name) => [
+            name,
+            name === 'top' && hook === 'configEnvironment'
+              ? ['react', 'react-dom']
+              : ['scene-singleton', 'other-singleton', 'react', 'react-dom'],
+          ]),
+        ),
+      );
+      expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
+    },
+  );
+
   it('applies supported late client conditions and define while restoring optimizer entries and includes', async () => {
     const root = fixture(`export default {plugins:[{name:'late-environment',configResolved(c){
 const e=c.environments.client;e.resolve.conditions=['audit-condition'];e.define={__AUDIT_TOKEN__:JSON.stringify('defined-ok')};
@@ -519,6 +581,13 @@ export default defineConfig({});`);
       `export default {optimizeDeps:{esbuildOptions:{futureOption:true}}}`,
       'optimizeDeps.esbuildOptions',
     ],
+    ...['client', 'ssr'].flatMap((environment) =>
+      ['return', 'mutate'].map((operation) => [
+        `configEnvironment ${environment} ${operation} optimizer option`,
+        `export default {plugins:[{name:'environment-optimizer',enforce:'${operation === 'return' ? 'post' : 'pre'}',configEnvironment:{order:'${operation === 'return' ? 'post' : 'pre'}',handler(name,c){if(name===${JSON.stringify(environment)})${operation === 'return' ? `return {optimizeDeps:{esbuildOptions:{outdir:'ignored'}}}` : `c.optimizeDeps={...c.optimizeDeps,esbuildOptions:{outdir:'ignored'}}`};}}}]}`,
+        'optimizeDeps.esbuildOptions',
+      ]),
+    ),
     [
       'late optimizer option',
       `export default {plugins:[{name:'late-key',configResolved(c){c.optimizeDeps.esbuildOptions={outdir:'ignored'};}}]}`,
