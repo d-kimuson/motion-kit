@@ -275,10 +275,23 @@ try {
     ...(loaded?.dependencies ?? []),
     ...(loaded === null ? [] : [loaded.path]),
   ]);
-  for (const event of ['change', 'unlink', 'add'] as const)
-    server.watcher.on(event, () =>
-      send({ type: 'failure', error: loadingFailure('source changed; start a fresh session') }),
+  const sourceFiles = new Set(
+    [entry, ...(loaded?.dependencies ?? []), ...(loaded === null ? [] : [loaded.path])].map(
+      (path) => vite.normalizePath(path),
+    ),
+  );
+  const isSource = (path: unknown): boolean => {
+    if (typeof path !== 'string') return false;
+    const normalized = vite.normalizePath(path);
+    return (
+      sourceFiles.has(normalized) || server.moduleGraph.getModulesByFile(normalized) !== undefined
     );
+  };
+  for (const event of ['change', 'unlink', 'add'] as const)
+    server.watcher.on(event, (path) => {
+      if (isSource(path))
+        send({ type: 'failure', error: loadingFailure('source changed; start a fresh session') });
+    });
   process.on('message', (message) => {
     if (message === 'dispose')
       void (async () => {

@@ -466,6 +466,17 @@ return original(path);};}}]};`,
     });
   });
 
+  it('ignores non-source files added to the project root and keeps the session healthy', async () => {
+    const root = fixture();
+    const result = await open(root);
+    if (!result.ok) throw new Error('Loading failed');
+    writeFileSync(join(root, 'frame-00000.png'), 'not a source module');
+    writeFileSync(join(root, 'manifest.json'), '{}');
+    await new Promise((done) => setTimeout(done, 300));
+    expect(existsSync(result.value.workspace)).toBe(true);
+    expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
+  }, 30_000);
+
   it('loads no-config TSX without project Vite; reuses one server, replaces realms and tears down handles/directories', async () => {
     const root = fixture();
     writeFileSync(
