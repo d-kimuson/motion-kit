@@ -20,7 +20,7 @@ motion-kit uses a library-neutral asset registry and explicit frame/commit/integ
 
 The same asset state can support preview Suspense and deterministic capture without conflating their responsibilities. theme supplies font requirements; three registers library-neutral readiness work; render owns await-before-capture. GPU failures and late asset discovery remain observable instead of silently yielding fallback pixels.
 
-TASK-158 implements this accepted strategy; the public `useAsset` API is not shipped yet, and the spike's local types are illustrative only. Implementation work includes public signatures, registration lifetime, cache keys, cancellation, retries, concurrent frames, frame generations and commit/discovery stabilization, with tests for nested Suspense and changing sources. It must not copy the spike's single-resource `Promise.all` snapshot as a production drain algorithm. The deadline must also cover commit/GPU settlement and browser RPCs, not just asset promises. The experiment does not resolve whether `gl.finish()` is the best production GPU strategy.
+TASK-158 implements this accepted strategy in the [core asset readiness ADR](../contexts/core/adr/20261024-asset-readiness.accepted.md). The spike's local types remain illustrative only. The production drain must not copy this spike's single-resource `Promise.all` snapshot. The deadline must also cover commit/GPU settlement and browser RPCs, not just asset promises. The experiment does not resolve whether `gl.finish()` is the best production GPU strategy.
 
 ## Alternatives
 

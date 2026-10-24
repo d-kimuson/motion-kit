@@ -4,23 +4,23 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 
 ## Ubiquitous Language
 
-| Term                     | Code                             | Definition                                                                                                                                                               |
-| ------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Composition              | `Composition`                    | The root of a video: fps, duration, resolution, and a tree of scenes placed in time.                                                                                     |
-| Global Frame             | `globalFrame`                    | The integer index of an output frame, counted from 0 over the whole Composition.                                                                                         |
-| Timeline Time            | `TimelineTime`                   | A time on the Composition timeline, kept as an exact rational value until the Time Module converts it.                                                                   |
-| Local Time               | `sequenceLocalTime`              | Time relative to the start of a Sequence, returned as exact rational seconds in a `TimelineTime`.                                                                        |
-| Presentation Time        | `presentationTime`               | The timeline time at which an output frame is sampled.                                                                                                                   |
-| Frame generation         | `FrameSnapshot.generation`       | The monotonically increasing per-realm request identity shared by React, asset and integration acknowledgements, distinct even for repeated requests for the same frame. |
-| Frame Rate               | `FrameRate`                      | A positive rational number of frames per second; boundary input uses safe integer `numerator` and `denominator`.                                                         |
-| Sequence Interval        | `SequenceInterval`               | Exact start and exclusive end times for a Sequence; zero duration is permitted.                                                                                          |
-| Transition Series Timing | `TransitionSeriesTiming`         | Exact scene and overlap intervals and the total duration, without scene content or visual effects.                                                                       |
-| Transition Sample        | `TransitionSample`               | Whether an overlap is active and its exact, clamped progress at a supplied time.                                                                                         |
-| Time Module              | `src/core/timeline`              | The only place that converts seconds, timeline time, and frames, and defines rounding and comparison. Specified in Lean.                                                 |
-| Sequence                 | `Sequence`                       | A scene's display period on the timeline, the half-open interval `[start, end)`.                                                                                         |
-| Transition               | `Transition`                     | A period in which two adjacent scenes of a `TransitionSeries` are mounted at once and share a progress value.                                                            |
-| Seekability Tier         | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                       |
-| Asset Readiness          | `useAsset`                       | Whether every asset a frame needs (font, image, video frame, model, texture) is loaded, reported before capture; a failure is a diagnostic, not a silent skip.           |
+| Term                     | Code                             | Definition                                                                                                                                                                              |
+| ------------------------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition              | `Composition`                    | The root of a video: fps, duration, resolution, and a tree of scenes placed in time.                                                                                                    |
+| Global Frame             | `globalFrame`                    | The integer index of an output frame, counted from 0 over the whole Composition.                                                                                                        |
+| Timeline Time            | `TimelineTime`                   | A time on the Composition timeline, kept as an exact rational value until the Time Module converts it.                                                                                  |
+| Local Time               | `sequenceLocalTime`              | Time relative to the start of a Sequence, returned as exact rational seconds in a `TimelineTime`.                                                                                       |
+| Presentation Time        | `presentationTime`               | The timeline time at which an output frame is sampled.                                                                                                                                  |
+| Frame generation         | `FrameSnapshot.generation`       | The monotonically increasing per-realm request identity shared by React, asset and integration acknowledgements, distinct even for repeated requests for the same frame.                |
+| Frame Rate               | `FrameRate`                      | A positive rational number of frames per second; boundary input uses safe integer `numerator` and `denominator`.                                                                        |
+| Sequence Interval        | `SequenceInterval`               | Exact start and exclusive end times for a Sequence; zero duration is permitted.                                                                                                         |
+| Transition Series Timing | `TransitionSeriesTiming`         | Exact scene and overlap intervals and the total duration, without scene content or visual effects.                                                                                      |
+| Transition Sample        | `TransitionSample`               | Whether an overlap is active and its exact, clamped progress at a supplied time.                                                                                                        |
+| Time Module              | `src/core/timeline`              | The only place that converts seconds, timeline time, and frames, and defines rounding and comparison. Specified in Lean.                                                                |
+| Sequence                 | `Sequence`                       | A scene's display period on the timeline, the half-open interval `[start, end)`.                                                                                                        |
+| Transition               | `Transition`                     | A period in which two adjacent scenes of a `TransitionSeries` are mounted at once and share a progress value.                                                                           |
+| Seekability Tier         | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                                      |
+| Asset Readiness          | `useAsset`                       | Whether every required registered font or image has settled for the active frame generation; undeclared assets are not assumed ready, and a failure is a diagnostic, not a silent skip. |
 
 The registry, provider, realm-local coordinator, public timeline hooks and Sequence implement TASK-154. TASK-157 adds the browser bootstrap and the supervised frame transport/capture host.
 
@@ -114,7 +114,40 @@ declare function Sequence(props: SequenceProps): React.JSX.Element | null;
 - Defaults and props each receive a fresh configurable 30-second loading timeout. Schema failure and non-JSON output use `composition.props-invalid`; custom messages/input/params are omitted from sanitized issues. Thrown callbacks/loading expiry and invalid width/height/FPS use `render.page-error`; invalid duration uses `composition.duration-invalid`. Invalid output-frame requests are mapped to `render.page-error` at this runtime boundary, leaving the Time Module's existing standalone mapping unchanged.
 - React and ReactDOM are host peers at `^19.0.0`; dev versions remain pinned for tests. The implementation uses React 19-compatible APIs, and the tsconfig requires no narrower runtime range. No React implementation is bundled into this source-distributed package.
 
-`registry.test.ts`, `composition-runtime.test.ts`, and the Chromium `composition.browser.test.tsx` and `timeline-hooks.browser.test.tsx` cover the TASK-154 matrix. Asset acquisition/inventory and GPU integration remain TASK-158 and later adapters; full capture and host termination qualification remains TASK-157/158. The public root, browser subpath and emitted loading entry are checked in `scripts/check-browser-graph.test.ts` using bundled Vite and the production loading resolver.
+`registry.test.ts`, `composition-runtime.test.ts`, and the Chromium `composition.browser.test.tsx` and `timeline-hooks.browser.test.tsx` cover the TASK-154 matrix. Font and image acquisition is the [asset readiness contract](#asset-readiness) below. GPU upload, models and texture phases remain three adapters; they register library-neutral work and do not enter core. The public root, browser subpath and emitted loading entry are checked in `scripts/check-browser-graph.test.ts` using bundled Vite and the production loading resolver.
+
+## Asset readiness
+
+The [production contract](adr/20261024-asset-readiness.accepted.md) implements the [registry strategy](../../decisions/20261023-asset-readiness-registry.accepted.md) for fonts and images. Preview and render call the same `useAsset`. The registry and `whenReady` stay on the page runtime; they are not package-root exports and there is no new subpath.
+
+```ts
+type FontAssetDescriptor = {
+  kind: 'font';
+  id: string;
+  family: string;
+  source: string;
+  weight?: number | string;
+  style?: string;
+  sceneId?: string;
+  text?: string;
+};
+type ImageAssetDescriptor = {
+  kind: 'image';
+  id: string;
+  source: string;
+  sceneId?: string;
+};
+declare function useAsset(descriptor: FontAssetDescriptor): FontFace;
+declare function useAsset(descriptor: ImageAssetDescriptor): HTMLImageElement;
+```
+
+- Registration is synchronous and happens before a Suspense throw. An effect inside a suspended subtree is not a registration point. Cache identity is kind plus exact source, and for fonts family, weight and style. The caller `id` is diagnostic identity, not cache identity. Equal sources share one load; a different weight or source does not.
+- A successful load is reused by live owners. The last owner releasing aborts that load. A later owner starts a new attempt. `retry` starts a new attempt after failure and does not reuse the failed result. A completion whose attempt was superseded or aborted cannot acknowledge the replacement.
+- `whenReady` drains until the active generation's required registrations are stable: it does not snapshot `Promise.all` once. A commit may register more work; the loop waits for that work under the same frame generation and original deadline. An unregistered font or image is not treated as ready. Suspense fallback is not a content acknowledgement and is not a capture gate.
+- Load failure is `asset.load-failed`, including when the deadline has already expired. A deadline with still-pending registrations is `asset.not-ready`, listing every pending registration and `timeoutMs`. `pending()` does not include failed registrations. A failure is not published while a sibling registration is still pending, unless the deadline has already fired. Diagnostics are produced in one place. The reported source contains scheme, host, path and at most a redacted query marker; fragments and URL userinfo are stripped, and loader exception text is discarded. Redaction is idempotent: a marker or `[asset source]` is returned unchanged, so a host deadline probe of `pending()` does not percent-encode the marker. Schema validation does not redact. `location` carries known composition, scene, frame and time; `details.assets` carries id, kind, redacted source and phase. An error-boundary `asset.load-failed` is merged with every failed registration, deduplicated by source and phase, and does not abort settlement while another registration is still pending.
+- `settleFrame` awaits that settlement before a ready lease. The host capture path still probes `pendingAssets` and will not publish a frame whose registered assets are pending. Three loaders and GPU phases stay outside core and render.
+
+`registry.test.ts` covers ready, pending, failed, cancellation, retry, source change, stale acknowledgement, redaction and the barrier wait. `use-asset.browser.test.tsx` shows registration before the suspended commit. `asset-readiness.test.ts` delays a font and an image and asserts capture pixels and timing only after both load. `node scripts/mutate-asset-readiness.ts` is the opt-in mutation round.
 
 ## Seekability
 

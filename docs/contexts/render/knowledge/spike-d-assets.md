@@ -2,7 +2,7 @@
 
 All four delayed fixtures produced wrong pixels without the Readiness Barrier and matched their settled baselines after it. **32/32 exact DOM + PNG comparisons passed** across reordered/repeated frames, fresh fixtures and Suspense readers. **4/4 asset failures and 4/4 never-settling cases produced named diagnostics**, plus a texture upload/context-loss diagnostic. Suspense alone is insufficient: it holds participating content, but its fallback remains capturable.
 
-TASK-158 implements the accepted library-neutral registry plus frame/commit/integration settlement, not Suspense or `document.fonts.ready` as a complete capture contract. The public `useAsset` API is not implemented yet. See the [accepted cross-context ADR](../../../decisions/20261023-asset-readiness-registry.accepted.md) and [reproduction instructions](../../../../spikes/d-assets/README.md).
+The production contract is the [core asset readiness ADR](../../core/adr/20261024-asset-readiness.accepted.md): fonts and images register through `useAsset` and drain until stable. This spike is not that implementation. Suspense and `document.fonts.ready` are still not a complete capture contract. See the [accepted cross-context ADR](../../../decisions/20261023-asset-readiness-registry.accepted.md) and [reproduction instructions](../../../../spikes/d-assets/README.md).
 
 ## Per-asset result
 

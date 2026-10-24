@@ -1,8 +1,8 @@
+import { assetNotReadyDiagnostic } from '../../core/assets/diagnostics.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type Ownership } from '../../lib/frame-protocol.ts';
 import { type MountReceipt } from '../../lib/loading-protocol.ts';
-import { type LoadingOutcome } from '../loading/session.ts';
 import { type FrameTransport } from './transport.ts';
 
 export type RenderedFrame = Readonly<{
@@ -12,25 +12,18 @@ export type RenderedFrame = Readonly<{
   png: Buffer;
   diagnostics: readonly Diagnostic[];
 }>;
+/** Failure carries every diagnostic. Codes are not dropped or merged. */
+export type FrameCaptureResult =
+  | { readonly ok: true; readonly value: RenderedFrame }
+  | { readonly ok: false; readonly error: readonly Diagnostic[] }
+  | { readonly ok: false; readonly aborted: true };
 export type FrameJob = {
   grant: (ownership: Ownership) => boolean;
-  run: (transport: FrameTransport) => Promise<LoadingOutcome<RenderedFrame>>;
-  result: Promise<LoadingOutcome<RenderedFrame>>;
+  run: (transport: FrameTransport) => Promise<FrameCaptureResult>;
+  result: Promise<FrameCaptureResult>;
   pending: () => boolean;
 };
 const aborted = { ok: false, aborted: true } as const;
-const redactSource = (source: string): string => {
-  try {
-    const url = new URL(source);
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch {
-    return '[asset source]';
-  }
-};
 /** A request's queue watchdog starts at submission. Only a matching host grant
  * replaces it with the single monotonic frame deadline, retained through capture.
  */
@@ -44,7 +37,7 @@ export const createFrameJob = (options: {
   dispose: () => Promise<unknown>;
 }): FrameJob => {
   const { receipt, frame, requestId } = options;
-  const result = Promise.withResolvers<LoadingOutcome<RenderedFrame>>();
+  const result = Promise.withResolvers<FrameCaptureResult>();
   let terminal = false;
   let running = false;
   let ownership: Ownership | undefined;
@@ -56,7 +49,11 @@ export const createFrameJob = (options: {
   if (!rate.ok) throw new Error('A mounted composition must have a validated frame rate.');
   const time = frameToTime(BigInt(frame), rate.value);
   const location = { compositionId: receipt.descriptor.id, frame, timeSeconds: toSeconds(time) };
-  const finish = (outcome: LoadingOutcome<RenderedFrame>) => {
+  const locate = (diagnostic: Diagnostic): Diagnostic => ({
+    ...diagnostic,
+    location: { ...diagnostic.location, ...location },
+  });
+  const finish = (outcome: FrameCaptureResult) => {
     if (terminal) return;
     terminal = true;
     clearTimeout(timer);
@@ -64,10 +61,7 @@ export const createFrameJob = (options: {
     // A failed/canceled active operation never hands a poisoned realm to another job.
     const located =
       !outcome.ok && 'error' in outcome
-        ? {
-            ...outcome,
-            error: { ...outcome.error, location: { ...outcome.error.location, ...location } },
-          }
+        ? { ...outcome, error: outcome.error.map(locate) }
         : outcome;
     if (!outcome.ok && running) void options.dispose().then(() => result.resolve(located));
     else result.resolve(located);
@@ -95,23 +89,11 @@ export const createFrameJob = (options: {
     }
     const diagnostic: Diagnostic =
       assets.length > 0
-        ? {
-            code: 'asset.not-ready',
-            severity: 'error',
+        ? assetNotReadyDiagnostic({
+            assets,
+            timeoutMs: options.frameTimeoutMs,
             location,
-            message: 'Required assets were not ready before the frame deadline.',
-            hint: 'Fix pending asset acquisition, decode or upload, or increase frameTimeoutMs.',
-            details: {
-              timeoutMs: options.frameTimeoutMs,
-              assets: assets.map((asset) => ({
-                ...asset,
-                source: redactSource(asset.source),
-                ...(asset.relatedSources === undefined
-                  ? {}
-                  : { relatedSources: asset.relatedSources.map(redactSource) }),
-              })),
-            },
-          }
+          })
         : {
             code: 'render.frame-timeout',
             severity: 'error',
@@ -120,7 +102,7 @@ export const createFrameJob = (options: {
             hint: 'Check content, integration and GPU acknowledgements or increase frameTimeoutMs.',
           };
     await options.dispose();
-    result.resolve({ ok: false, error: diagnostic });
+    result.resolve({ ok: false, error: [diagnostic] });
   };
   timer = setTimeout(cancel, options.queueTimeoutMs);
   options.signal?.addEventListener('abort', cancel, { once: true });
@@ -173,7 +155,7 @@ export const createFrameJob = (options: {
               return;
             }
             if (settled.status === 'failed') {
-              finish({ ok: false, error: settled.diagnostics[0] });
+              finish({ ok: false, error: settled.diagnostics });
               return;
             }
             const lease = settled.lease;
@@ -203,7 +185,7 @@ export const createFrameJob = (options: {
               return;
             }
             if (validation.status === 'failed') {
-              finish({ ok: false, error: validation.diagnostics[0] });
+              finish({ ok: false, error: validation.diagnostics });
               return;
             }
             const diagnostics = await driver.warnings();
@@ -221,7 +203,7 @@ export const createFrameJob = (options: {
               return;
             }
             if (completion.status === 'failed') {
-              finish({ ok: false, error: completion.diagnostics[0] });
+              finish({ ok: false, error: completion.diagnostics });
               return;
             }
             finish({
@@ -243,13 +225,15 @@ export const createFrameJob = (options: {
           if (!expired())
             finish({
               ok: false,
-              error: {
-                code: 'render.page-error',
-                severity: 'error',
-                location,
-                message: 'The frame transport or page failed.',
-                hint: 'Fix the Composition or browser connection and create a new renderer.',
-              },
+              error: [
+                {
+                  code: 'render.page-error',
+                  severity: 'error',
+                  location,
+                  message: 'The frame transport or page failed.',
+                  hint: 'Fix the Composition or browser connection and create a new renderer.',
+                },
+              ],
             });
         }
       })();

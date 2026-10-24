@@ -34,6 +34,12 @@ export {
   type SequenceContext,
 } from './core/timeline/hooks.ts';
 export { Sequence, type SequenceProps } from './core/sequence/sequence.tsx';
+export { useAsset } from './core/assets/use-asset.ts';
+export type {
+  AssetDescriptor,
+  FontAssetDescriptor,
+  ImageAssetDescriptor,
+} from './core/assets/types.ts';
 export type { Clock } from './lib/clock.ts';
 export type { Result } from './lib/result.ts';
 export {

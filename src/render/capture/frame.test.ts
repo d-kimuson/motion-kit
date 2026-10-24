@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createAssetRegistry } from '../../core/assets/registry.ts';
 import { type CaptureLease, type Ownership } from '../../lib/frame-protocol.ts';
 import { createFrameJob } from './frame.ts';
 import { type FrameTransport } from './transport.ts';
@@ -99,7 +100,7 @@ describe('host frame lease', () => {
     driver.capture = vi.fn(() => screenshot.promise);
     const result = job.run(driver);
     await vi.advanceTimersByTimeAsync(100);
-    expect(await result).toMatchObject({ ok: false, error: { code: 'render.frame-timeout' } });
+    expect(await result).toMatchObject({ ok: false, error: [{ code: 'render.frame-timeout' }] });
     screenshot.resolve(Buffer.from('late'));
     await vi.advanceTimersByTimeAsync(0);
     expect(driver.complete).not.toHaveBeenCalled();
@@ -115,7 +116,7 @@ describe('host frame lease', () => {
     });
     const result = job.run(driver);
     await vi.advanceTimersByTimeAsync(100);
-    expect(await result).toMatchObject({ ok: false, error: { code: 'render.frame-timeout' } });
+    expect(await result).toMatchObject({ ok: false, error: [{ code: 'render.frame-timeout' }] });
     expect(driver.resettle).toHaveBeenCalledWith(lease);
   });
   it('discards changed-version pixels then publishes only accepted replacement bytes', async () => {
@@ -182,6 +183,35 @@ describe('host frame lease', () => {
     expect(driver.complete).not.toHaveBeenCalled();
     expect(dispose).toHaveBeenCalledOnce();
   });
+  it('publishes every asset diagnostic from a failed settlement', async () => {
+    const { job, driver } = make();
+    const diagnostic = (source: string) => ({
+      code: 'asset.load-failed' as const,
+      severity: 'error' as const,
+      message: 'The required image failed to decode.',
+      hint: 'Check the image source and file format.',
+      details: { assets: [{ kind: 'image', source, phase: 'decode' }] },
+    });
+    driver.settle = vi.fn<FrameTransport['settle']>(() => {
+      job.grant(ownership);
+      return Promise.resolve({
+        status: 'failed',
+        diagnostics: [diagnostic('/one.png'), diagnostic('/two.png')],
+      });
+    });
+    const result = await job.run(driver);
+    expect(result.ok).toBe(false);
+    if (result.ok || !('error' in result)) throw new Error('expected diagnostics');
+    expect(result.error.map((item) => item.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    expect(result.error.map((item) => item.details)).toEqual([
+      { assets: [{ kind: 'image', source: '/one.png', phase: 'decode' }] },
+      { assets: [{ kind: 'image', source: '/two.png', phase: 'decode' }] },
+    ]);
+    expect(driver.capture).not.toHaveBeenCalled();
+  });
   it('reports current assets at deadline, redacts sources and preserves the configured budget', async () => {
     vi.useFakeTimers();
     const { job, driver } = make();
@@ -200,11 +230,64 @@ describe('host frame lease', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(await result).toMatchObject({
       ok: false,
-      error: {
-        code: 'asset.not-ready',
-        details: { timeoutMs: 100, assets: [{ source: 'https://example.com/image' }] },
-      },
+      error: [
+        {
+          code: 'asset.not-ready',
+          details: {
+            timeoutMs: 100,
+            assets: [{ source: 'https://example.com/image (+1 query parameter, redacted)' }],
+          },
+        },
+      ],
     });
+  });
+  it('reports the registry source unchanged on the host deadline', async () => {
+    vi.useFakeTimers();
+    const registry = createAssetRegistry({ load: () => new Promise(() => {}) });
+    registry.retain(
+      { kind: 'image', id: 'marked', source: '/a.png?token=secret', sceneId: 'intro' },
+      'marked',
+      { compositionId: 'demo', frame: 2, timeSeconds: 0.1, generation: 1 },
+    );
+    registry.retain(
+      {
+        kind: 'image',
+        id: 'sentinel',
+        source: 'https://cdn.example/%2F%2Fuser%3As3cret%40evil.example%2Fx',
+      },
+      'sentinel',
+      { compositionId: 'demo', frame: 2, timeSeconds: 0.1, generation: 1 },
+    );
+    const reported = registry.pending().map((asset) => asset.source);
+    expect(reported).toEqual(['/a.png (+1 query parameter, redacted)', '[asset source]']);
+    const { job, driver } = make();
+    driver.settle = vi.fn<FrameTransport['settle']>(() => {
+      job.grant(ownership);
+      return new Promise(() => {});
+    });
+    driver.pendingAssets = vi
+      .fn<FrameTransport['pendingAssets']>()
+      .mockResolvedValue([...registry.pending()]);
+    const result = job.run(driver);
+    await vi.advanceTimersByTimeAsync(100);
+    const settled = await result;
+    expect(settled.ok).toBe(false);
+    if (settled.ok || !('error' in settled)) throw new Error('expected diagnostics');
+    const assets = settled.error[0]?.details?.['assets'];
+    const readSource = (value: unknown): string | undefined => {
+      if (typeof value !== 'object' || value === null || !('source' in value)) return undefined;
+      const source = value['source'];
+      return typeof source === 'string' ? source : undefined;
+    };
+    const sources = Array.isArray(assets)
+      ? assets.flatMap((asset) => {
+          const source = readSource(asset);
+          return source === undefined ? [] : [source];
+        })
+      : [];
+    expect(sources).toEqual(reported);
+    expect(sources[0]).toBe(reported[0]);
+    expect(sources[1]).toBe(reported[1]);
   });
   it('does not invent an asset inventory for an unresponsive RPC', async () => {
     vi.useFakeTimers();
@@ -216,6 +299,6 @@ describe('host frame lease', () => {
     driver.pendingAssets = vi.fn<FrameTransport['pendingAssets']>(() => new Promise(() => {}));
     const result = job.run(driver);
     await vi.advanceTimersByTimeAsync(200);
-    expect(await result).toMatchObject({ ok: false, error: { code: 'render.frame-timeout' } });
+    expect(await result).toMatchObject({ ok: false, error: [{ code: 'render.frame-timeout' }] });
   });
 });

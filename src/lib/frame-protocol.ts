@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { DiagnosticSchema } from './diagnostic.ts';
+import { DiagnosticSchema, type Diagnostic } from './diagnostic.ts';
 
 /** Internal plain-data protocol, shared by browser and Node; no host imports. */
 export const captureLeaseSchema = z.object({
@@ -49,14 +49,26 @@ export const ownershipSchema = z.object({
   globalFrame: z.int().nonnegative(),
 });
 export type Ownership = z.infer<typeof ownershipSchema>;
-/** Current required work, supplied by the owning integration, not cached host observations. */
+/** Current required work. Sources are redacted by the asset diagnostic producer. */
 export const pendingAssetSchema = z.object({
+  id: z.string().min(1).optional(),
   kind: z.string(),
   source: z.string(),
   phase: z.string(),
+  sceneId: z.string().min(1).optional(),
   relatedSources: z.array(z.string()).optional(),
 });
 export type PendingAsset = z.infer<typeof pendingAssetSchema>;
+export type AssetReadinessSnapshot = Readonly<{
+  pending: readonly PendingAsset[];
+  failed: readonly PendingAsset[];
+  ready: readonly PendingAsset[];
+}>;
+/** Registry settlement. Cancellation is not a Diagnostic. */
+export type AssetSettlement =
+  | { readonly ok: true; readonly value: undefined }
+  | { readonly ok: false; readonly error: readonly Diagnostic[] }
+  | { readonly ok: false; readonly aborted: true };
 export const frameRequestSchema = z.object({
   source: z.literal('renderer'),
   requestId: z.string(),

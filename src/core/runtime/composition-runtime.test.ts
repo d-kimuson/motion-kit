@@ -7,6 +7,9 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { assetLoadFailed } from '../assets/diagnostics.ts';
+import { assetsOf } from './composition-runtime.ts';
+
 const unwrap = <T>(result: Result<T>): T => {
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
@@ -338,6 +341,115 @@ describe('Composition runtime ownership', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('publishes every failed registration when the boundary fails', async () => {
+    const definition = await prepared();
+    const options = {
+      definition,
+      compositionRealm: 'page',
+      instance: 'boundary',
+      acquire: () => new Promise<void>(() => {}),
+      assetLoader: () => Promise.reject(new Error('missing')),
+    };
+    const runtime = createCompositionRuntime(options);
+    const pending = runtime.settleFrame(0, { source: 'renderer', requestId: 'frame' });
+    await tick();
+    const registry = assetsOf(runtime);
+    const assetContext = { compositionId: 'test', frame: 0, timeSeconds: 0, generation: 1 };
+    registry.retain(
+      { kind: 'image', id: 'fail-a', source: 'http://127.0.0.1:9/fail-a.png' },
+      'owner-a',
+      assetContext,
+    );
+    registry.retain(
+      { kind: 'image', id: 'fail-b', source: '/fail-b.png' },
+      'owner-b',
+      assetContext,
+    );
+    await tick();
+    const thrown = registry.retain(
+      { kind: 'image', id: 'fail-a', source: 'http://127.0.0.1:9/fail-a.png' },
+      'owner-a',
+      assetContext,
+    ).diagnostic;
+    if (thrown === undefined) throw new Error('missing thrown diagnostic');
+    runtime.fail(thrown);
+    const settled = await pending;
+    expect(settled.status).toBe('failed');
+    if (settled.status !== 'failed') throw new Error('expected failure');
+    expect(settled.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    expect(settled.diagnostics.map((diagnostic) => diagnostic.details?.['assets'])).toEqual([
+      [
+        expect.objectContaining({
+          source: 'http://127.0.0.1:9/fail-a.png',
+          phase: 'decode',
+        }),
+      ],
+      [expect.objectContaining({ source: '/fail-b.png', phase: 'decode' })],
+    ]);
+    runtime.dispose();
+  });
+
+  it('merges a loader rejection with a boundary diagnostic without duplicating source and phase', async () => {
+    const definition = await prepared();
+    const options = {
+      definition,
+      compositionRealm: 'page',
+      instance: 'mixed',
+      acquire: () => new Promise<void>(() => {}),
+      assetLoader: () => Promise.reject(new Error('missing')),
+    };
+    const runtime = createCompositionRuntime(options);
+    const pending = runtime.settleFrame(0, { source: 'renderer', requestId: 'frame' });
+    await tick();
+    const registry = assetsOf(runtime);
+    const assetContext = { compositionId: 'test', frame: 0, timeSeconds: 0, generation: 1 };
+    registry.retain(
+      { kind: 'image', id: 'loader-rejected', source: '/loader-rejected.png' },
+      'loader-owner',
+      assetContext,
+    );
+    await tick();
+    const boundary = assetLoadFailed({
+      assets: [
+        { kind: 'image', id: 'boundary', source: '/boundary.png?token=secret', phase: 'decode' },
+      ],
+      cause: new Error('boundary'),
+    });
+    runtime.fail(boundary);
+    runtime.fail(boundary);
+    const settled = await pending;
+    expect(settled.status).toBe('failed');
+    if (settled.status !== 'failed') throw new Error('expected failure');
+    expect(settled.diagnostics).toHaveLength(2);
+    expect(settled.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'asset.load-failed',
+      'asset.load-failed',
+    ]);
+    const readSource = (value: unknown): string | undefined => {
+      if (typeof value !== 'object' || value === null || !('source' in value)) return undefined;
+      const source = value['source'];
+      return typeof source === 'string' ? source : undefined;
+    };
+    const sources: string[] = [];
+    for (const diagnostic of settled.diagnostics) {
+      const assets = diagnostic.details?.['assets'];
+      if (!Array.isArray(assets)) continue;
+      for (const asset of assets) {
+        const source = readSource(asset);
+        if (source !== undefined) sources.push(source);
+      }
+    }
+    expect(sources).toEqual([
+      '/loader-rejected.png',
+      '/boundary.png (+1 query parameter, redacted)',
+    ]);
+    expect(new Set(sources).size).toBe(sources.length);
+    runtime.dispose();
   });
 
   it('rejects zero duration and out-of-range requests before any page mutation', async () => {

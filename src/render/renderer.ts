@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { validateOutputFrame } from '../core/timeline/time.ts';
 import { type MountReceipt } from '../lib/loading-protocol.ts';
 import { type Result } from '../lib/result.ts';
-import { createFrameJob, type FrameJob, type RenderedFrame } from './capture/frame.ts';
+import { createFrameJob, type FrameCaptureResult, type FrameJob } from './capture/frame.ts';
 import { pageTransport } from './capture/transport.ts';
 import {
   openLoadingSession,
@@ -18,9 +18,9 @@ export type RenderFrameOptions = { frame: number; signal?: AbortSignal };
 export type RenderFramesOptions = { from: number; to: number; signal?: AbortSignal };
 export type Renderer = {
   /** PNG bytes, only after capture completion accepts the current lease. */
-  renderFrame: (options: RenderFrameOptions) => Promise<RenderOutcome<RenderedFrame>>;
+  renderFrame: (options: RenderFrameOptions) => Promise<FrameCaptureResult>;
   /** Half-open [from, to); stop at the first failure or cancellation. */
-  renderFrames: (options: RenderFramesOptions) => AsyncIterable<RenderOutcome<RenderedFrame>>;
+  renderFrames: (options: RenderFramesOptions) => AsyncIterable<FrameCaptureResult>;
   /** Fresh realm/props revision, same Vite session. Serialized with frame requests. */
   select: (selection: Selection) => Promise<RenderOutcome<MountReceipt>>;
   dispose: () => Promise<Result<undefined>>;
@@ -92,7 +92,7 @@ export const createRenderer = async (
     // Select is serialized, so a queued frame binds the receipt when dequeued.
     const requestId = randomUUID();
     let queuedExpired = false;
-    const queued = Promise.withResolvers<RenderOutcome<RenderedFrame>>();
+    const queued = Promise.withResolvers<FrameCaptureResult>();
     const abortQueued = () => {
       queuedExpired = true;
       queued.resolve({ ok: false, aborted: true });
@@ -115,7 +115,7 @@ export const createRenderer = async (
       const checked = validateOutputFrame(frame, BigInt(receipt.descriptor.durationInFrames));
       if (!checked.ok) {
         await dispose();
-        queued.resolve(checked);
+        queued.resolve({ ok: false, error: [checked.error] });
         return;
       }
       const job = createFrameJob({
@@ -139,12 +139,14 @@ export const createRenderer = async (
             ? { ok: false, aborted: true }
             : {
                 ok: false,
-                error: {
-                  code: 'render.page-error',
-                  severity: 'error',
-                  message: 'The selected realm is unavailable.',
-                  hint: 'Create a new renderer after fixing the page or changed source.',
-                },
+                error: [
+                  {
+                    code: 'render.page-error',
+                    severity: 'error',
+                    message: 'The selected realm is unavailable.',
+                    hint: 'Create a new renderer after fixing the page or changed source.',
+                  },
+                ],
               },
         );
       } finally {
@@ -174,14 +176,16 @@ export const createRenderer = async (
           !Number.isSafeInteger(from) ||
           from < 0
         ) {
-          const invalid: RenderOutcome<RenderedFrame> = {
+          const invalid: FrameCaptureResult = {
             ok: false,
-            error: {
-              code: 'composition.props-invalid',
-              severity: 'error',
-              message: 'The requested frame range is invalid.',
-              hint: 'Use safe integer endpoints with 0 <= from <= to <= durationInFrames.',
-            },
+            error: [
+              {
+                code: 'composition.props-invalid',
+                severity: 'error',
+                message: 'The requested frame range is invalid.',
+                hint: 'Use safe integer endpoints with 0 <= from <= to <= durationInFrames.',
+              },
+            ],
           };
           await dispose();
           yield invalid;
