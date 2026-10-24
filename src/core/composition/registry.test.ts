@@ -125,6 +125,37 @@ describe('Composition registry', () => {
     },
   );
 
+  it('never executes a side-effecting defaultProps getter across repeated declarations', () => {
+    let calls = 0;
+    const Scene = (_props: z.output<typeof schema>) => null;
+    Object.defineProperty(Scene, 'defaultProps', {
+      get: () => {
+        calls += 1;
+        return {};
+      },
+    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect(defineComposition({ ...metadata, schema, component: Scene })).toMatchObject({
+        ok: false,
+        error: { code: 'render.page-error' },
+      });
+      expect(calls).toBe(0);
+    }
+  });
+
+  it('rejects inherited enumerable keys inside the defaults object', () => {
+    const defaults = {};
+    Object.setPrototypeOf(defaults, { callback: () => 42 });
+    expect(Reflect.ownKeys(defaults)).toEqual([]);
+    const Scene = Object.assign((_props: z.output<typeof schema>) => null, {
+      defaultProps: defaults,
+    });
+    expect(defineComposition({ ...metadata, schema, component: Scene })).toMatchObject({
+      ok: false,
+      error: { code: 'render.page-error' },
+    });
+  });
+
   it('accepts empty component defaultProps', () => {
     const Scene = Object.assign((_props: z.output<typeof schema>) => null, { defaultProps: {} });
     expect(defineComposition({ ...metadata, schema, component: Scene })).toMatchObject({

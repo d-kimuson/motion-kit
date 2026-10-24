@@ -234,6 +234,37 @@ const validateComponentDefaults = (component: object, id: string): Result<undefi
   }
 };
 
+// Validate every layer React resolves, not only the outer wrapper's statics.
+const validateComponent = (component: object, id: string): Result<undefined> => {
+  let current: unknown = component;
+  const visited = new Set<object>();
+  while ((typeof current === 'object' && current !== null) || typeof current === 'function') {
+    if (visited.has(current)) return pageFailure(id);
+    visited.add(current);
+    if ('$$typeof' in current && current.$$typeof === Symbol.for('react.lazy'))
+      return compositionFailure(
+        'render.page-error',
+        'The "component" field is a lazy component and cannot be validated before it resolves.',
+        'Lazy-load inside the component instead of using lazy as the registry entry.',
+        id,
+      );
+    const defaults = validateComponentDefaults(current, id);
+    if (!defaults.ok) return defaults;
+    if ('$$typeof' in current) {
+      if (current.$$typeof === Symbol.for('react.memo')) {
+        current = 'type' in current ? current.type : undefined;
+        continue;
+      }
+      if (current.$$typeof === Symbol.for('react.forward_ref')) {
+        current = 'render' in current ? current.render : undefined;
+        continue;
+      }
+    }
+    return { ok: true, value: undefined };
+  }
+  return pageFailure(id);
+};
+
 /** Declaration errors are data, so a bad entry cannot throw out of module evaluation. */
 export const defineComposition = <S extends z.ZodType<object>>(
   input: CompositionDescriptor & {
@@ -256,7 +287,7 @@ export const defineComposition = <S extends z.ZodType<object>>(
       (typeof component !== 'function' && (typeof component !== 'object' || component === null))
     )
       return pageFailure();
-    const componentDefaults = validateComponentDefaults(component, id);
+    const componentDefaults = validateComponent(component, id);
     if (!componentDefaults.ok) return componentDefaults;
     if (!Number.isSafeInteger(durationInFrames) || durationInFrames < 0)
       return compositionFailure(
