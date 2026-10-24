@@ -1,4 +1,4 @@
-import { defineComposition, defineCompositions } from 'motion-kit';
+import { defineComposition, defineCompositions } from '@kimuson/motion-kit';
 import { z } from 'zod';
 
 export const compositions = defineCompositions([

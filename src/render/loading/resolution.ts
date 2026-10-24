@@ -7,10 +7,11 @@ import { fileURLToPath } from 'node:url';
 import { normalizeAliases } from './config-validation.ts';
 import { bootstrapId, entryId, entrySource } from './entry-source.ts';
 
-export const browserEntry = fileURLToPath(
-  new URL('../../core/runtime/browser-entry.ts', import.meta.url),
-);
-export const packageEntry = fileURLToPath(new URL('../../index.ts', import.meta.url));
+// Resolve the public package entries through the export map so the loading
+// plugin works identically from `src/` during development and from the built
+// `dist/` output. `./browser` is a private build artifact until TASK-190.
+export const packageEntry = fileURLToPath(new URL(import.meta.resolve('@kimuson/motion-kit')));
+export const browserEntry = join(dirname(packageEntry), 'browser.js');
 export const loadingPlugin = (entry: string): Plugin => ({
   name: 'motion-kit-loading',
   enforce: 'pre',

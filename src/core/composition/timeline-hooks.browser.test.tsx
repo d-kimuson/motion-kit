@@ -1,4 +1,3 @@
-import fc from 'fast-check';
 import {
   Composition,
   createCompositionRuntime,
@@ -17,7 +16,8 @@ import {
   type Result,
   type SequenceContext,
   type TimelineContext,
-} from 'motion-kit';
+} from '@kimuson/motion-kit';
+import fc from 'fast-check';
 import { Component, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';

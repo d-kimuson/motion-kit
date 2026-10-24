@@ -36,7 +36,9 @@ Core's existing browser-context import restrictions also reject `src/render/load
 
 ## Renderer API
 
-The root is condition-free and is the authoring surface: `@kimuson/motion-kit` resolves to `src/index.ts` everywhere. The renderer entry is the `./render` subpath (`motion-kit/render`), which exports only `createRenderer` and its public types from `src/render/index.ts`. `./agent` is the CLI/agent contract (`src/agent/cli-output.ts`); `./browser` arrives with TASK-190. The loading session and browser bootstrap remain internal; the loader privately resolves `@kimuson/motion-kit/browser`. The current package name is `motion-kit`.
+The root is the authoring surface: `@kimuson/motion-kit` resolves to `dist/index.js` (`dist/index.d.ts` for types). The renderer entry is the `./render` subpath (`@kimuson/motion-kit/render`), which exports only `createRenderer` and its public types from `src/render/index.ts` (built to `dist/render.js`). `./agent` is the CLI/agent contract (`src/agent/cli-output.ts`); `./browser` arrives with TASK-190. The loading session and browser bootstrap remain internal; the loader privately resolves `@kimuson/motion-kit/browser`.
+
+Source lives in `src/`; `pnpm build` (tsdown) emits the published ESM and `.d.ts` into `dist/`, and `package.json#exports` points `types`/`import` at `dist`. The repository resolves its own name through that built layout, so `prelint`/`pretypecheck`/`pretest` run `pnpm build` first and every check exercises the published package.
 
 - `await createRenderer({ projectRoot, entry, compositionId?, props?, loadingTimeoutMs?, queueTimeoutMs?, frameTimeoutMs?, signal?, ...browserOptions })` returns `Result<Renderer>` or `{ ok: false, aborted: true }`. Props are JSON objects, validated once per selection in the page.
 - `renderer.renderFrame({ frame, signal? })` returns PNG `Buffer` bytes with `frame`, `width`, `height`, and warning `diagnostics`, only after capture completion accepts the lease. Invalid output frames use the Time Module's `composition.props-invalid`; `location.frame` is supplied only for safe integers.

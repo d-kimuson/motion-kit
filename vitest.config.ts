@@ -1,7 +1,20 @@
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
+// Development resolution: tests import the public package name and must resolve it to src/
+// (not the built dist/) so that symbol-branded types and module-level singletons are the same
+// instance as the relative src imports they are mixed with. scripts/check-browser-graph.test.ts
+// resolves the real `package.json#exports` (dist) through its own Vite build and import.meta.resolve.
+const srcEntry = (path: string) => new URL(path, import.meta.url).pathname;
+
 export default defineConfig({
+  resolve: {
+    alias: [
+      { find: /^@kimuson\/motion-kit\/render$/, replacement: srcEntry('./src/render/index.ts') },
+      { find: /^@kimuson\/motion-kit\/agent$/, replacement: srcEntry('./src/agent/cli-output.ts') },
+      { find: /^@kimuson\/motion-kit$/, replacement: srcEntry('./src/index.ts') },
+    ],
+  },
   test: {
     projects: [
       {

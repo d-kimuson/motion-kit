@@ -9,12 +9,12 @@ import { z } from 'zod';
 const require = createRequire(import.meta.url);
 it('boots the supervised source package from node_modules rather than relying on native automatic TS stripping', async () => {
   const root = mkdtempSync(join(tmpdir(), 'motion-kit-installed-'));
-  const installed = join(root, 'node_modules/motion-kit');
+  const installed = join(root, 'node_modules/@kimuson/motion-kit');
   const workspace = join(root, 'workspace');
   mkdirSync(installed, { recursive: true });
   mkdirSync(workspace);
   cpSync(new URL('../../', import.meta.url), join(installed, 'src'), { recursive: true });
-  writeFileSync(join(installed, 'package.json'), '{"name":"motion-kit","type":"module"}');
+  writeFileSync(join(installed, 'package.json'), '{"name":"@kimuson/motion-kit","type":"module"}');
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   for (const name of ['react', 'react-dom', 'zod', 'vite', 'semver'])
     symlinkSync(dirname(require.resolve(`${name}/package.json`)), join(root, 'node_modules', name));

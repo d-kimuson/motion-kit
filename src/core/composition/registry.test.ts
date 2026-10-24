@@ -1,4 +1,9 @@
-import { defineComposition, defineCompositions, DiagnosticSchema, type Result } from 'motion-kit';
+import {
+  defineComposition,
+  defineCompositions,
+  DiagnosticSchema,
+  type Result,
+} from '@kimuson/motion-kit';
 import { isValidElement } from 'react';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';

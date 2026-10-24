@@ -1,4 +1,4 @@
-import { DiagnosticSchema, defineComposition, defineCompositions } from 'motion-kit';
+import { DiagnosticSchema, defineComposition, defineCompositions } from '@kimuson/motion-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

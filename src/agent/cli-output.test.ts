@@ -1,7 +1,12 @@
+// Exercise the package export, rather than making the contract a private deep import.
+import {
+  EnvelopeSchema,
+  FrameDataSchema,
+  RenderDataSchema,
+  type Envelope,
+} from '@kimuson/motion-kit/agent';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import fc from 'fast-check';
-// Exercise the package export, rather than making the contract a private deep import.
-import { EnvelopeSchema, FrameDataSchema, RenderDataSchema, type Envelope } from 'motion-kit/agent';
 import { describe, expect, it } from 'vitest';
 
 import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
