@@ -525,6 +525,58 @@ export default defineConfig({});`);
     });
   });
 
+  it("names a missing preprocessor instead of presenting Vite's internal plugin as a project plugin", async () => {
+    const root = fixture();
+    writeFileSync(join(root, 'style.scss'), '$color:red; body{color:$color}');
+    writeFileSync(
+      join(root, 'entry.tsx'),
+      `import './style.scss';\n${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+    );
+    expect(await open(root)).toEqual({
+      ok: false,
+      error: {
+        code: 'render.page-error',
+        severity: 'error',
+        message: 'Loading configuration failed for "sass" with bundled Vite 7.3.7.',
+        hint: `The project configuration and plugins must work under Vite 7; check ${join(root, 'vite.config.ts')}.`,
+      },
+    });
+  }, 30_000);
+
+  it('keeps a Vite-internal plugin failure out of the configuration Diagnostic', async () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, 'entry.tsx'),
+      `const broken = {;\n${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+    );
+    expect(await open(root)).toEqual({
+      ok: false,
+      error: {
+        code: 'render.page-error',
+        severity: 'error',
+        message: 'Loading configuration failed.',
+        hint: 'Check configuration and the project configuration; the loader uses bundled Vite 7.3.7.',
+      },
+    });
+  }, 30_000);
+
+  it("reports a project config that crashes Vite's dependency optimizer with the bundled version and config path", async () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `export default {optimizeDeps:{esbuildOptions:{outdir:${JSON.stringify(join(root, 'optimizer-output'))}}}};`,
+    );
+    expect(await open(root)).toEqual({
+      ok: false,
+      error: {
+        code: 'render.page-error',
+        severity: 'error',
+        message: 'Loading configuration failed for "configuration" with bundled Vite 7.3.7.',
+        hint: `The project configuration and plugins must work under Vite 7; check ${join(root, 'vite.config.ts')}.`,
+      },
+    });
+  }, 30_000);
+
   it('loads CommonJS config through bundled Vite and reports the discovered config location on early failure', async () => {
     const root = fixture();
     writeFileSync(
@@ -593,7 +645,13 @@ export default {plugins:[react()],test:{environment:'jsdom'},build:{outDir:'dist
     expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
   });
 
-  it.each(['@kimuson/motion-kit/browser', '@kimuson/motion-kit', 'virtual:motion-kit-entry'])(
+  it.each([
+    '@kimuson/motion-kit/browser',
+    '@kimuson/motion-kit',
+    'motion-kit',
+    'virtual:motion-kit-entry',
+    'virtual:motion-kit-user-entry',
+  ])(
     'overrides a project alias of the reserved id %s instead of rejecting the config',
     async (id) => {
       const root = fixture();
@@ -606,6 +664,7 @@ export default {plugins:[react()],test:{environment:'jsdom'},build:{outDir:'dist
       const result = await open(root);
       expect(result).toMatchObject({ ok: true });
       if (!result.ok) throw new Error('Loading failed');
+      expect(result.value.compositions.map((item) => item.id)).toEqual(['one', 'two']);
       expect((await result.value.select({ compositionId: 'one' })).ok).toBe(true);
     },
     30_000,
