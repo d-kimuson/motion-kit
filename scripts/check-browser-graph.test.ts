@@ -43,7 +43,7 @@ describe('resolved package-root browser graph', () => {
       const emitted = await checkBrowserGraph(entry, {}, [
         loadingPlugin(new URL('./fixtures/loading-registry.ts', import.meta.url).pathname),
       ]);
-      expect(emitted.some((file) => file.endsWith('/dist/browser.js'))).toBe(true);
+      expect(emitted.some((file) => file.endsWith('/browser-entry.ts'))).toBe(true);
       expect(emitted.some((file) => file.includes('/src/render/'))).toBe(false);
       writeFileSync(
         join(directory, 'bad.ts'),

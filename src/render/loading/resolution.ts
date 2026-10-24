@@ -7,11 +7,18 @@ import { fileURLToPath } from 'node:url';
 import { normalizeAliases } from './config-validation.ts';
 import { bootstrapId, entryId, entrySource } from './entry-source.ts';
 
-// Resolve the public package entries through the export map so the loading
-// plugin works identically from `src/` during development and from the built
-// `dist/` output. `./browser` is a private build artifact until TASK-190.
-export const packageEntry = fileURLToPath(new URL(import.meta.resolve('@kimuson/motion-kit')));
-export const browserEntry = join(dirname(packageEntry), 'browser.js');
+// The loading plugin aliases the public package entries to files on disk. In the
+// source tree (and the installed-child test's copied src/) those are the `.ts`
+// entries; in the built `dist/` output they are the bundled `.js` entries. The
+// built output is detected by the module's own URL so the same source works
+// everywhere. `./browser` is a private build artifact until TASK-190.
+const builtRoot = import.meta.url.includes('/dist/');
+export const packageEntry = builtRoot
+  ? join(dirname(fileURLToPath(import.meta.url)), 'index.js')
+  : fileURLToPath(new URL('../../index.ts', import.meta.url));
+export const browserEntry = builtRoot
+  ? join(dirname(fileURLToPath(import.meta.url)), 'browser.js')
+  : fileURLToPath(new URL('../../core/runtime/browser-entry.ts', import.meta.url));
 export const loadingPlugin = (entry: string): Plugin => ({
   name: 'motion-kit-loading',
   enforce: 'pre',
