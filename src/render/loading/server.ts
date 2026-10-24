@@ -60,14 +60,28 @@ const failed = (error: unknown, configuration = resolvingConfig) => {
     : loadingFailure('configuration');
 };
 const report = (error: unknown) => send({ type: 'failure', error: failed(error) });
+/** Vite's dependency optimizer rejects the project's `optimizeDeps` settings inside its
+ * own async context, where the failure is a bare `TypeError` (no `plugin` field) whose
+ * message is the only marker that the project's configuration caused it. */
+const optimizerFailure = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'message' in error &&
+  typeof error.message === 'string' &&
+  error.message.startsWith('Error during dependency optimization');
 // A project setting can crash Vite inside its own async context (the dependency
-// optimizer, for example) without ever reaching the try below. Node would exit with
-// the raw stack on the inherited stderr and the caller would only see the generic
-// service-exit Diagnostic. Every such crash is reported as a configuration failure:
-// the child exists to load one project's config, and the crash comes from Vite,
-// its optimizer or a plugin acting on it.
-const crashed = (error: unknown) =>
-  send({ type: 'failure', error: failed(error, true) }, () => process.disconnect?.());
+// optimizer, for example) without ever reaching the try below. The listeners below stop
+// Node from printing the cause and exiting, so print it to the inherited stderr and
+// report it: the caller would otherwise only see the generic service-exit Diagnostic.
+// The guard covers the child's whole life, so configuration attribution needs a real
+// marker — the config phase, the optimizer's message, a plugin name or a config key —
+// and any other crash keeps the plain loading Diagnostic.
+const crashed = (error: unknown) => {
+  console.error(error);
+  send({ type: 'failure', error: failed(error, resolvingConfig || optimizerFailure(error)) }, () =>
+    process.disconnect?.(),
+  );
+};
 process.on('uncaughtException', crashed);
 process.on('unhandledRejection', crashed);
 try {

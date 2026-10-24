@@ -11,7 +11,7 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openLoadingSession } from './session.ts';
 
@@ -575,6 +575,33 @@ export default defineConfig({});`);
         hint: `The project configuration and plugins must work under Vite 7; check ${join(root, 'vite.config.ts')}.`,
       },
     });
+  }, 30_000);
+
+  it('reports a crash after ready as a plain loading failure and still prints its cause', async () => {
+    const root = fixture(
+      `let scheduled = false;
+export default {plugins:[{name:'late-crash-plugin',transform(){if(scheduled)return;scheduled=true;setTimeout(()=>{throw new Error('LATE_CRASH_TEXT')},10)}}]};`,
+    );
+    const written: string[] = [];
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      expect(await open(root)).toEqual({
+        ok: false,
+        error: {
+          code: 'render.page-error',
+          severity: 'error',
+          message: 'Loading configuration failed.',
+          hint: 'Check configuration and the project configuration; the loader uses bundled Vite 7.3.7.',
+        },
+      });
+    } finally {
+      write.mockRestore();
+    }
+    // Installing the crash listeners stops Node printing the cause; the child prints it.
+    expect(written.join('')).toContain('LATE_CRASH_TEXT');
   }, 30_000);
 
   it('loads CommonJS config through bundled Vite and reports the discovered config location on early failure', async () => {
