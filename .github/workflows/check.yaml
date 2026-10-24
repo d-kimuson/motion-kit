@@ -39,11 +39,17 @@ jobs:
           test: false
           lint: false
 
-      - name: Install Chromium for minimal Composition DOM tests
+      - name: Install Chromium for Composition DOM and loading-session tests
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run tests
-        run: pnpm test
+      - name: Run unit tests
+        run: pnpm test --project unit
+
+      - name: Run Composition DOM tests
+        run: pnpm test --project composition-dom
+
+      - name: Run supervised loading-session tests
+        run: pnpm test --project loading
 
   gitleaks:
     name: gitleaks

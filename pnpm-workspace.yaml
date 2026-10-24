@@ -4,6 +4,7 @@ saveExact: true
 enableGlobalVirtualStore: true
 allowBuilds:
   lefthook: true
+  esbuild: false
 
 minimumReleaseAge: 1440
 

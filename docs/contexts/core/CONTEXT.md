@@ -22,7 +22,7 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 | Seekability Tier         | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                       |
 | Asset Readiness          | `useAsset`                       | Whether every asset a frame needs (font, image, video frame, model, texture) is loaded, reported before capture; a failure is a diagnostic, not a silent skip.           |
 
-The registry, provider, realm-local coordinator, public timeline hooks and Sequence implement TASK-154. Browser loading and transport remain TASK-157.
+The registry, provider, realm-local coordinator, public timeline hooks and Sequence implement TASK-154. TASK-157's loading half adds the browser bootstrap; frame transport/capture remain its second half.
 
 | Term                     | Code                  | Definition                                                                                                                                             |
 | ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -51,7 +51,7 @@ The registry, provider, realm-local coordinator, public timeline hooks and Seque
 
 ## Public timeline API
 
-Scene authors use `defineComposition`/`defineCompositions`, `Sequence` and the four hooks from the package root. `Composition` is the page-side runtime root, not a scene-author declaration; the future TASK-157 browser bootstrap owns runtime construction. The existing root runtime exports remain available for hosts until that browser entry ships.
+Scene authors use `defineComposition`/`defineCompositions`, `Sequence` and the four hooks from the package root. `Composition` is the page-side runtime root, not a scene-author declaration; the browser-only `/browser` bootstrap owns runtime construction. The existing root runtime exports remain available; the bootstrap itself is not re-exported by the root.
 
 | Term             | Code              | Definition                                                                                                      |
 | ---------------- | ----------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -113,7 +113,7 @@ declare function Sequence(props: SequenceProps): React.JSX.Element | null;
 - Defaults and props each receive a fresh configurable 30-second loading timeout. Schema failure and non-JSON output use `composition.props-invalid`; custom messages/input/params are omitted from sanitized issues. Thrown callbacks/loading expiry and invalid width/height/FPS use `render.page-error`; invalid duration uses `composition.duration-invalid`. Invalid output-frame requests are mapped to `render.page-error` at this runtime boundary, leaving the Time Module's existing standalone mapping unchanged.
 - React and ReactDOM are host peers at `^19.0.0`; dev versions remain pinned for tests. The implementation uses React 19-compatible APIs, and the tsconfig requires no narrower runtime range. No React implementation is bundled into this source-distributed package.
 
-`registry.test.ts`, `composition-runtime.test.ts`, and the Chromium `composition.browser.test.tsx` and `timeline-hooks.browser.test.tsx` cover the TASK-154 matrix. Asset acquisition/inventory and GPU integration remain TASK-158 and later adapters; full capture and host termination qualification remains TASK-157/158. The public root's resolved browser graph is checked in `scripts/check-browser-graph.test.ts`; TASK-157 must add its browser subpath and emitted entry to that assertion.
+`registry.test.ts`, `composition-runtime.test.ts`, and the Chromium `composition.browser.test.tsx` and `timeline-hooks.browser.test.tsx` cover the TASK-154 matrix. Asset acquisition/inventory and GPU integration remain TASK-158 and later adapters; full capture and host termination qualification remains TASK-157/158. The public root, browser subpath and emitted loading entry are checked in `scripts/check-browser-graph.test.ts` using bundled Vite and the production loading resolver.
 
 ## Seekability
 

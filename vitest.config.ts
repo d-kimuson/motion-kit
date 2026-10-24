@@ -2,7 +2,6 @@ import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  resolve: { tsconfigPaths: true },
   test: {
     projects: [
       {
@@ -11,8 +10,17 @@ export default defineConfig({
           name: 'unit',
           isolate: false,
           include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', '.agents/**/*.test.ts'],
-          exclude: ['src/**/*.browser.test.tsx'],
+          exclude: ['src/**/*.browser.test.tsx', 'src/render/**/*.test.ts'],
           setupFiles: ['configs/vitest/time.setup.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'loading',
+          include: ['src/render/**/*.test.ts'],
+          testTimeout: 20_000,
+          hookTimeout: 20_000,
         },
       },
       {
@@ -22,7 +30,10 @@ export default defineConfig({
         },
         test: {
           name: 'composition-dom',
-          include: ['src/core/composition/**/*.browser.test.tsx'],
+          include: [
+            'src/core/composition/**/*.browser.test.tsx',
+            'src/core/runtime/**/*.browser.test.tsx',
+          ],
           setupFiles: ['configs/vitest/time.setup.ts'],
           browser: {
             enabled: true,
