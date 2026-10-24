@@ -78,8 +78,22 @@ const basis = (t: number, m: Model): { c: number; s: number } => {
 const evaluate = (t: number, s: Spring, m: Model): SpringState => {
   if (s.from === s.to && s.velocity === 0) return { position: s.to, velocity: 0 };
   const { c, s: sine } = basis(t, m);
-  const p = c + m.a * sine;
+  const realRoots = m.regime === 1 && m.q * t >= 0.001;
+  const slowDecay = Math.exp(-m.slow * t);
+  const fastDecay = realRoots ? slowDecay * Math.exp(-2 * m.q * t) : 0;
+  const p = realRoots ? slowDecay + m.slow * sine : c + m.a * sine;
   const v = -m.w * (m.w * sine);
+  const velocityAt = (displacement: number, initialVelocity: number): number => {
+    if (!realRoots) return v * displacement + (c - m.a * sine) * initialVelocity;
+    // v(t) = -slow*y(t) + exp(-fast*t)*(v0 + slow*y0).
+    // Do not form C-aS (cancellation) or slow*S before multiplying v0
+    // (underflow): the final velocity can still be large and representable.
+    return (
+      -m.slow * (p * displacement + sine * initialVelocity) +
+      fastDecay * initialVelocity +
+      m.slow * (fastDecay * displacement)
+    );
+  };
   const displacement = s.from - s.to;
   // Prefer the displacement form (not a weighted sum of large equal endpoints).
   // Half-scale an overflowing displacement before applying its coefficient.
@@ -87,8 +101,8 @@ const evaluate = (t: number, s: Spring, m: Model): SpringState => {
     ? s.to + p * displacement + sine * s.velocity
     : (s.to / 2 + p * (s.from / 2 - s.to / 2) + sine * (s.velocity / 2)) * 2;
   const velocity = Number.isFinite(displacement)
-    ? v * displacement + (c - m.a * sine) * s.velocity
-    : (v * (s.from / 2 - s.to / 2) + (c - m.a * sine) * (s.velocity / 2)) * 2;
+    ? velocityAt(displacement, s.velocity)
+    : velocityAt(s.from / 2 - s.to / 2, s.velocity / 2) * 2;
   return { position, velocity };
 };
 

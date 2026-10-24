@@ -22,7 +22,7 @@ Repeated samples compare the eight binary64 bytes, not rounded decimal strings. 
 
 ## Mutation matrix
 
-Each mutation was applied alone to `src/motion/spring.ts`, the named test was executed with `pnpm vitest run src/motion/spring.test.ts --project unit -t '<name>'`, and the original implementation was restored. All seven runs failed on assertions, not compilation or setup. No survivor remains.
+Each mutation was applied alone to `src/motion/spring.ts`, the named test was executed with `pnpm vitest run src/motion/spring.test.ts --project unit -t '<name>'`, and the original implementation was restored. All eight runs failed on assertions, not compilation or setup. No survivor remains.
 
 | Mutant                                                                              | Killing test                                                                           | Observed failure                                                      |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -33,6 +33,8 @@ Each mutation was applied alone to `src/motion/spring.ts`, the named test was ex
 | Divide the settle root by two                                                       | `has a tight last-entry boundary for monotone critical and over-damped motion`         | Deviation `0.42113628585326535` exceeded tolerance `0.1`              |
 | Snap the near-critical signed series term to zero                                   | `preserves near-critical signed corrections rather than snapping damping`              | Error `2.4525296238309124e-9` exceeded `5e-15`                        |
 | Reintroduce a module-level history cache keyed only by time                         | `is byte-identical under shuffled evaluation and interleaved different inputs`         | Cached zero returned for translated equilibrium whose position is one |
+
+The additional stiff-velocity mutant forces the original `C-aS` coefficient instead of the stable real-root identity. `preserves stiff analytic velocity without cancellation or coefficient underflow` kills it: normalized velocity is zero instead of `0.36787944117144233` for `velocity=1e308`, `damping=1e200`, `stiffness=1`, `time=1e200`.
 
 ## Residuals
 

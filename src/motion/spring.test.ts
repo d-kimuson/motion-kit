@@ -66,6 +66,18 @@ describe('closed-form spring', () => {
       6,
     );
   });
+  it('preserves stiff analytic velocity without cancellation or coefficient underflow', () => {
+    // With c=1e200, the fast mode is negligible here. For k=1 the
+    // slow root is -1e-200; for k=1e200 it is -1 (binary64 precision).
+    // x(t)=1e108*exp(-slow*t), v(t)=-slow*x(t).
+    for (const stiffness of [1, 1e200]) {
+      const s = { ...base, from: 0, velocity: 1e308, stiffness, damping: 1e200 };
+      const rate = stiffness / 1e200;
+      const state = value(springState(1 / rate, s));
+      expect(state.position / 1e108).toBeCloseTo(0.36787944117144233, 14);
+      expect(state.velocity / (-rate * 1e108)).toBeCloseTo(0.36787944117144233, 14);
+    }
+  });
   it('holds before start and preserves the explicit initial velocity at start', () => {
     const s = { ...base, start: 2, velocity: 3 };
     expect(value(springState(-4, s))).toEqual({ position: 1, velocity: 0 });
