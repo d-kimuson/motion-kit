@@ -4,12 +4,12 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 
 ## Ubiquitous Language
 
-| Term              | Code                              | Definition                                                                                                           |
-| ----------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Renderer          | `renderer.renderFrame({ frame })` | The contract that produces one frame: compute time, update the timeline, wait for readiness, capture.                |
-| Readiness Barrier | `awaitFrameReady`                 | The explicit condition (assets loaded, React committed, WebGL flushed) that must hold before capture; never a timer. |
-| Capture           | `captureFrame`                    | Taking the pixels of the rendered page for one frame.                                                                |
-| Encoder           | `encode`                          | Turning captured frames and audio into the output file with FFmpeg.                                                  |
+| Term              | Code             | Definition                                                                                                                                          |
+| ----------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Renderer          | `createRenderer` | Builds the host object exposing `renderFrame({ frame })` and `renderFrames({ from, to })`; each frame computes time, waits for readiness, captures. |
+| Readiness Barrier | `settleFrame`    | The page operation that seeks/commits and drains generation-tagged content and integration acknowledgements into a ready lease; never a timer.      |
+| Capture           | `capture`        | The transport step that screenshots the settled page via `page.screenshot`, inside the host frame deadline.                                         |
+| Encoder           | `encode`         | Turning captured frames and audio into the output file with FFmpeg.                                                                                 |
 
 TASK-157 implements supervised loading, frame transport and PNG capture over core's shared registry/provider/coordinator. Encoding and the asset acquisition API remain separate tasks.
 
