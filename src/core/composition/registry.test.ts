@@ -184,7 +184,6 @@ describe('Composition registry', () => {
           }),
         ]),
       );
-      expect(await registry.validateDefaults('v1')).toEqual({ ok: true, value: undefined });
       expect(await registry.mount({ revision: 'v1', props: 'supplied' })).toMatchObject({
         ok: false,
         error: { code: 'composition.props-invalid' },
@@ -372,7 +371,7 @@ describe('Composition registry', () => {
     ).toMatchObject({ ok: false, error: { code: 'cli.invalid-arguments' } });
   });
 
-  it('parses defaults once per revision and raw props once per mount using the real async schema', async () => {
+  it('parses the selected schema defaults and raw props once per mount using the real async schema', async () => {
     const parse = vi.fn(async (value: { title: string }) => {
       await Promise.resolve();
       return value;
@@ -383,11 +382,11 @@ describe('Composition registry', () => {
     );
     const first = unwrap(await registry.mount({ revision: 'v1', props: {} }));
     expect(first.props).toEqual({ title: 'Hello' });
-    expect(parse).toHaveBeenCalledTimes(2);
+    expect(parse).toHaveBeenCalledTimes(1);
     unwrap(await registry.mount({ revision: 'v1', props: { title: 'Explicit', ignored: true } }));
-    expect(parse).toHaveBeenCalledTimes(3);
+    expect(parse).toHaveBeenCalledTimes(2);
     unwrap(await registry.mount({ revision: 'v2' }));
-    expect(parse).toHaveBeenCalledTimes(5);
+    expect(parse).toHaveBeenCalledTimes(3);
   });
 
   it('does not merge parsed defaults into supplied nested objects', async () => {
@@ -447,6 +446,30 @@ describe('Composition registry', () => {
     expect(JSON.stringify(result)).not.toContain('private');
   });
 
+  it('mounts a selected composition without validating an unselected required-prop sibling', async () => {
+    const registry = unwrap(
+      defineCompositions([
+        defineComposition({ ...metadata, schema, component }),
+        defineComposition({
+          ...metadata,
+          id: 'required',
+          schema: z.object({ text: z.string() }),
+          component: () => null,
+        }),
+      ]),
+    );
+    expect(await registry.mount({ compositionId: 'Title', revision: 'v1' })).toMatchObject({
+      ok: true,
+    });
+    expect(
+      await registry.mount({ compositionId: 'required', revision: 'v1', props: { text: 'x' } }),
+    ).toMatchObject({ ok: true });
+    expect(await registry.mount({ compositionId: 'required', revision: 'v1' })).toMatchObject({
+      ok: false,
+      error: { code: 'composition.props-invalid', location: { compositionId: 'required' } },
+    });
+  });
+
   it('rejects invalid defaults, non-JSON output, and thrown refinements', async () => {
     for (const actualSchema of [
       z.object({ required: z.string() }),
@@ -472,7 +495,7 @@ describe('Composition registry', () => {
     });
   });
 
-  it('retries failed defaults with a corrected budget and caches only success', async () => {
+  it('retries a failed props parse on the next mount with a corrected budget', async () => {
     vi.useFakeTimers();
     try {
       const parse = vi.fn(async () => {
@@ -484,14 +507,14 @@ describe('Composition registry', () => {
           defineComposition({ ...metadata, schema: z.object({}).transform(parse), component }),
         ]),
       );
-      const expired = registry.validateDefaults('v1', 10);
-      expect(registry.validateDefaults('v1', 10)).toBe(expired);
+      const expired = registry.mount({ revision: 'v1', loadingTimeoutMs: 10 });
       await vi.advanceTimersByTimeAsync(10);
       expect(await expired).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
-      const retried = registry.validateDefaults('v1', 100);
+      const retried = registry.mount({ revision: 'v1', loadingTimeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(20);
-      expect(await retried).toEqual({ ok: true, value: undefined });
-      expect(await registry.validateDefaults('v1', 100)).toEqual({ ok: true, value: undefined });
+      const mounted = await retried;
+      if (!mounted.ok) throw new Error('expected retried mount');
+      expect(mounted.value.props).toEqual({ title: 'Hello' });
       expect(parse).toHaveBeenCalledTimes(2);
       expect(vi.getTimerCount()).toBe(0);
     } finally {

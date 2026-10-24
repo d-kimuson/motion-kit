@@ -417,7 +417,7 @@ describe('Composition provider', () => {
         expect(container.textContent).toBe(`Selected:${frame}`);
         expect(runtime.completeCapture(result.lease)).toEqual({ status: 'accepted' });
       }
-      expect(parse).toHaveBeenCalledTimes(2);
+      expect(parse).toHaveBeenCalledTimes(1);
       expect(unselected).not.toHaveBeenCalled();
     } finally {
       flushSync(() => root.unmount());

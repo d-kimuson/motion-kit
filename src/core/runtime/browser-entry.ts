@@ -61,7 +61,6 @@ export const bootstrapComposition = (input: unknown): void => {
   let root: Root | undefined;
   let runtime: CompositionRuntime | undefined;
   let disposed = false;
-  const validated = new Set<number>();
   const api: LoadingPage = {
     protocolVersion: loadingProtocolVersion,
     settleFrame: async (frame, request) => {
@@ -117,17 +116,6 @@ export const bootstrapComposition = (input: unknown): void => {
       registry === undefined
         ? (declaration ?? failure())
         : { ok: true, value: registry.listCompositions() },
-    validateDefault: async (index, revision, timeoutMs) => {
-      if (disposed || registry === undefined) return failure();
-      if (validated.has(index)) return { ok: true, value: undefined };
-      const definition = registry.definitions[index];
-      if (definition === undefined || !definition.ok) return failure();
-      const prepared = await definition.value.prepare({}, revision, timeoutMs);
-      if (!prepared.ok) return prepared;
-      if (disposed) return failure();
-      validated.add(index);
-      return { ok: true, value: undefined };
-    },
     mount: async (raw) => {
       const checked = mountRequestSchema.safeParse(raw);
       if (!checked.success || disposed || registry === undefined || root !== undefined)
@@ -151,7 +139,6 @@ export const bootstrapComposition = (input: unknown): void => {
           'The selected Composition does not exist.',
           'Use an exact case-sensitive id returned by listCompositions.',
         );
-      if (validated.size !== descriptors.length) return failure();
       const definition = registry.definitions[index];
       if (definition === undefined || !definition.ok) return failure();
       const prepared = await definition.value.prepare(

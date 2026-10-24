@@ -47,8 +47,6 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
     value: [{ id: 'test', width: 320, height: 180 }],
   });
   expect(parses).toBe(0);
-  expect(await api.validateDefault(0, 'revision', 1000)).toEqual({ ok: true, value: undefined });
-  expect(await api.validateDefault(0, 'revision', 1000)).toEqual({ ok: true, value: undefined });
   expect(
     await api.mount({
       instance: 'instance',
@@ -57,7 +55,7 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
       loadingTimeoutMs: 1000,
     }),
   ).toMatchObject({ ok: true, value: { instance: 'instance' } });
-  expect(parses).toBe(2);
+  expect(parses).toBe(1);
   expect(renders).toBe(0);
   expect(container.style.width).toBe('320px');
   expect(container.style.height).toBe('180px');
@@ -81,7 +79,7 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
   expect(api.validateCapture(ready.lease)).toEqual({ status: 'valid' });
   expect(api.completeCapture(ready.lease)).toEqual({ status: 'accepted' });
   expect(api.completeCapture(ready.lease)).toEqual({ status: 'aborted' });
-  expect(parses).toBe(2);
+  expect(parses).toBe(1);
   delete window.__motionKitOwnership;
   expect(api.dispose()).toEqual({ ok: true, value: undefined });
   delete window.__motionKitLoadingEvent;
