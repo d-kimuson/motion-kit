@@ -133,6 +133,34 @@ describe('closed-form spring', () => {
       velocity: 0,
     });
   });
+  it.each([0, 1])(
+    'preserves scaled over-damped displacement contributions with initial velocity %s',
+    (initialVelocity) => {
+      // x=1e-250*X(u), u=1e250*t reduces the ODE to X''+4X'+3X=0.
+      // X(0)=1, X'(0)=v0: X=A*e^-u+B*e^-3u,
+      // A=(v0+3)/2, B=-(v0+1)/2. At u=1, x'=X'(1).
+      // These finite modal contributions lie inside the joint numeric domain;
+      // the tiny sine basis, not the decay, requires scaled evaluation.
+      const a = (initialVelocity + 3) / 2;
+      const b = -(initialVelocity + 1) / 2;
+      const expectedPosition = 1e-250 * (a * Math.exp(-1) + b * Math.exp(-3));
+      const expectedVelocity = -a * Math.exp(-1) - 3 * b * Math.exp(-3);
+      for (const sign of [-1, 1]) {
+        const s = {
+          ...base,
+          from: sign * 1e-250,
+          velocity: sign * initialVelocity,
+          stiffness: 3e300,
+          damping: 4e50,
+          mass: 1e-200,
+        };
+        const actual = value(springState(1e-250, s));
+        expect(Math.abs(actual.position / (sign * expectedPosition) - 1)).toBeLessThan(1e-12);
+        expect(Math.abs(actual.velocity / (sign * expectedVelocity) - 1)).toBeLessThan(1e-12);
+        expect(position(1e-250, s)).toBe(actual.position);
+      }
+    },
+  );
   it('combines half-scaled endpoints and velocity before restoring their magnitude', () => {
     // Roots round to -1,-1e308. At t=1e-310 the position change is
     // below its ULP; v=2*from*expm1(-0.01)+v0*exp(-0.01).
@@ -207,14 +235,36 @@ describe('closed-form spring', () => {
     }
   });
   it('walks both sides of the signed-series conditioning boundary and the repeated root', () => {
-    for (const multiplier of [1 - Number.EPSILON, 1, 1 + Number.EPSILON]) {
-      const t = 0.001 * multiplier; // q=1 on both sides, so |q*t|=0.001.
-      const under = { ...base, stiffness: 2, velocity: -1 };
+    const boundaryTimes = (s: Spring): readonly number[] => {
+      // Contract: q=sqrt(|a*a-omega*omega|), using the factored discriminant.
+      const a = s.damping / s.mass / 2;
+      const omega = Math.sqrt(s.stiffness) / Math.sqrt(s.mass);
+      const large = Math.max(a, omega);
+      const small = Math.min(a, omega);
+      const q = Math.sqrt(large - small) * Math.sqrt(large) * Math.sqrt(1 + small / large);
+      const at = 0.001 / q;
+      const below = at * (1 - Number.EPSILON);
+      const above = at * (1 + Number.EPSILON);
+      expect(q * below).toBeLessThan(0.001);
+      expect(q * at).toBe(0.001);
+      expect(q * above).toBeGreaterThan(0.001);
+      return [below, at, above];
+    };
+    const under = { ...base, stiffness: 2, velocity: -1 };
+    for (const t of boundaryTimes(under)) {
       expect(position(t, under)).toBeCloseTo(Math.exp(-t) * Math.cos(t), 14);
-      const over = { ...base, stiffness: 3, damping: 4 };
-      expect(position(t, over)).toBeCloseTo((3 * Math.exp(-t) - Math.exp(-3 * t)) / 2, 14);
-      const critical = { ...base, stiffness: multiplier };
-      expect(position(1, critical)).toBeCloseTo(2 / Math.E, 14);
+    }
+    // k=9,c=10 gives exact factored q=4 and roots -1,-9, unlike k=3,c=4.
+    const over = { ...base, stiffness: 9, damping: 10 };
+    for (const t of boundaryTimes(over)) {
+      expect(position(t, over)).toBeCloseTo((9 * Math.exp(-t) - Math.exp(-9 * t)) / 8, 14);
+      expect(value(springState(t, over)).velocity).toBeCloseTo(
+        (9 * (Math.exp(-9 * t) - Math.exp(-t))) / 8,
+        14,
+      );
+    }
+    for (const multiplier of [1 - Number.EPSILON, 1, 1 + Number.EPSILON]) {
+      expect(position(1, { ...base, stiffness: multiplier })).toBeCloseTo(2 / Math.E, 14);
     }
   });
   it('distinguishes an unrepresentable computation from mathematical output overflow', () => {
