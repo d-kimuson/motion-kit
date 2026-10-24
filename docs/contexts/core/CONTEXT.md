@@ -22,7 +22,7 @@ The master clock. core defines the Composition, the timeline it runs on, how Seq
 | Seekability Tier         | `seekability: 'A' \| 'B' \| 'C'` | How far a component's output at a time is independent of the frames rendered before: A guaranteed, B controlled by an integration, C uncontrolled.                       |
 | Asset Readiness          | `useAsset`                       | Whether every asset a frame needs (font, image, video frame, model, texture) is loaded, reported before capture; a failure is a diagnostic, not a silent skip.           |
 
-The registry, provider and realm-local coordinator implement TASK-154. Browser loading and transport remain TASK-157.
+The registry, provider, realm-local coordinator, public timeline hooks and Sequence implement TASK-154. Browser loading and transport remain TASK-157.
 
 | Term                     | Code                  | Definition                                                                                                                                             |
 | ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -49,6 +49,56 @@ The registry, provider and realm-local coordinator implement TASK-154. Browser l
 - The [loading design](../render/design-doc/20261024-composition-loading.md) shares core's browser bootstrap and Composition runtime implementation between preview and renderer, never their sessions, host scheduling or mutable Composition realms.
 - core's contract provides one Composition runtime implementation for the Browser Renderer and the future preview to consume; it does not assert that a preview exists. Presentation Time stays fixed while registered work settles. Completion belongs to the active frame generation and resource versions, not just a frame number; allocating a queued generation does not invalidate the active one. Resource-version changes re-settle within that generation; cancellation or supersession aborts it without publication. The [readiness barrier contract](../../decisions/20261024-time-control-and-frame-capture.accepted.md#readiness-barrier-contract) defines exclusive ownership, queueing and deadlines.
 
+## Public timeline API
+
+Scene authors use `defineComposition`/`defineCompositions`, `Sequence` and the four hooks from the package root. `Composition` is the page-side runtime root, not a scene-author declaration; the future TASK-157 browser bootstrap owns runtime construction. The existing root runtime exports remain available for hosts until that browser entry ships.
+
+| Term             | Code              | Definition                                                                                                      |
+| ---------------- | ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| Sequence context | `SequenceContext` | Numeric local timing for the nearest Sequence, or the whole Composition when no Sequence encloses the consumer. |
+| Timeline context | `TimelineContext` | Composition-scoped numeric timing and exact static metadata, unaffected by enclosing Sequences.                 |
+
+```ts
+type SequenceContext = Readonly<{
+  time: number;
+  duration: number;
+  remaining: number;
+  progress: number;
+  localFramePosition: number;
+  fps: number;
+  globalTime: number;
+  globalFrame: number;
+}>;
+type TimelineContext = SequenceContext &
+  Readonly<{
+    id: string;
+    width: number;
+    height: number;
+    durationInFrames: number;
+    frameRate: FrameRate;
+  }>;
+
+declare function useTime(): number;
+declare function useFrame(): number;
+declare function useSequence(): SequenceContext;
+declare function useTimeline(): TimelineContext;
+
+type SequenceProps = {
+  from: number | RationalInput;
+  duration: number | RationalInput;
+  children: ReactNode;
+};
+declare function Sequence(props: SequenceProps): React.JSX.Element | null;
+```
+
+- The product owner's numbers-versus-rationals decision is explicit: `time`, `duration`, `remaining` and `globalTime` are seconds as `number`; `progress` is the dimensionless ratio `time / duration` as `number`; frame values are `number`; `fps` is the decimal rate (for example, approximately 29.97002997 for 30000/1001). `useTimeline().frameRate` additionally exposes the exact Time Module `FrameRate`, not the declaration's `RationalInput`. The `FrameRate` has normalized bigint numerator/denominator; `durationInFrames`, width and height retain the validated integer metadata.
+- `useTime()` returns local seconds; `useFrame()` always returns the global output frame. `useSequence()` reports the nearest declared interval's local time, duration, remaining time and progress, fractional `localFramePosition`, decimal fps, global seconds and global frame. `useTimeline()` reports those same fields relative to the whole Composition: `time` and `globalTime` are the current Presentation Time in seconds, `localFramePosition` is the global frame position, and duration derives only from `durationInFrames` and exact fps. Using any of the four hooks outside the Composition runtime is a programmer error: it throws an `Error` with the exact message `useCompositionFrame requires a Composition provider.` Nothing renders; there is no silent fallback. This is an exception for a programming mistake, not a returned Diagnostic for invalid props.
+- Outside a Sequence but inside Composition, `useTime()` is global seconds and `useSequence()` uses `[0, composition duration)`. This explicit fallback avoids a nullable hook and gives scene authors usable timing at the root. A zero-duration Composition remains inspectable but has no output frame, so its scene and hooks never mount.
+- `<Sequence from={2} duration={3}>…</Sequence>` uses seconds, with `from` relative to the enclosing Sequence's start (or zero at the Composition root). Exact rational seconds are also accepted. Global interval endpoints remain exact; only the hook return values undergo lossy number conversion. Neither numeric return values nor previous frames feed timing calculations. No hook or Sequence schedules work or reads an ambient clock.
+- Sequence membership is exactly `[start, end)`: children are not rendered outside it, including a zero-length interval at its start. Nested Sequences add offsets exactly, and ancestor membership clips visibility without changing the child's declared duration, local origin or progress. Signed starts and ends beyond the Composition duration are **valid**, matching `createSequence`; only valid output frames can render. Negative duration, nonfinite/out-of-safe-range number seconds or malformed rational input are invalid authored JSX and throw; the existing Composition error boundary reports `render.page-error`. A valid but entirely offscreen interval is simply empty in the output. No extra containment constraint is imposed on the Time Module's signed-interval contract.
+
+`composition/timeline-hooks.browser.test.tsx` imports the public package root in the existing Chromium `composition-dom` project. It asserts every field at 30000/1001 fps, fractional local frame positions, exact start/end boundaries, nested offsets, clipping, zero duration, invalid authoring and missing providers. Sequential values for 90 distinct frames match three seeded random permutations, reverse order and repeated seeks. The tests use the landed runtime's owned Presentation Time, not a second test clock or provider. A snapshot-accessor probe deliberately supplies Presentation Time inconsistent with `globalFrame` to pin the runtime's ownership: hooks consume that time rather than recomputing it from the frame. Fractional-position assertions also compare strictly against the Time Module's final conversion of hand-calculated rationals, so premature numeric conversion fails.
+
 ## Composition API and host integration
 
 - `defineComposition` returns `Result<CompositionDefinition<Schema>>`; `defineCompositions` accepts the heterogeneous tuple of these Results and returns `Result<CompositionRegistry>`. An entry exports that result as `compositions`. Branch on `ok` before using the registry; declaration failures do not escape module evaluation as exceptions.
@@ -63,7 +113,7 @@ The registry, provider and realm-local coordinator implement TASK-154. Browser l
 - Defaults and props each receive a fresh configurable 30-second loading timeout. Schema failure and non-JSON output use `composition.props-invalid`; custom messages/input/params are omitted from sanitized issues. Thrown callbacks/loading expiry and invalid width/height/FPS use `render.page-error`; invalid duration uses `composition.duration-invalid`. Invalid output-frame requests are mapped to `render.page-error` at this runtime boundary, leaving the Time Module's existing standalone mapping unchanged.
 - React and ReactDOM are host peers at `^19.0.0`; dev versions remain pinned for tests. The implementation uses React 19-compatible APIs, and the tsconfig requires no narrower runtime range. No React implementation is bundled into this source-distributed package.
 
-`registry.test.ts`, `composition-runtime.test.ts`, and the minimal Chromium `composition.browser.test.tsx` cover the TASK-154 matrix. Asset acquisition/inventory and GPU integration remain TASK-158 and later adapters; full capture and host termination qualification remains TASK-157/158. The public root's resolved browser graph is checked in `scripts/check-browser-graph.test.ts`; TASK-157 must add its browser subpath and emitted entry to that assertion.
+`registry.test.ts`, `composition-runtime.test.ts`, and the Chromium `composition.browser.test.tsx` and `timeline-hooks.browser.test.tsx` cover the TASK-154 matrix. Asset acquisition/inventory and GPU integration remain TASK-158 and later adapters; full capture and host termination qualification remains TASK-157/158. The public root's resolved browser graph is checked in `scripts/check-browser-graph.test.ts`; TASK-157 must add its browser subpath and emitted entry to that assertion.
 
 ## Seekability
 

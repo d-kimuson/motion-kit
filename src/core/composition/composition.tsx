@@ -27,6 +27,13 @@ export const useCompositionFrame = (): FrameSnapshot => {
   return context.snapshot;
 };
 
+/** Internal metadata access for the public timeline hooks and Sequence boundary. */
+export const useCompositionDefinition = (): PreparedComposition => {
+  const context = useContext(RuntimeContext);
+  if (context === null) throw new Error('Timeline hooks require a Composition provider.');
+  return context.runtime.definition;
+};
+
 /** Register required content outside the subtree that may suspend, then put this
  * acknowledgement inside that subtree. A fallback must never include it.
  */

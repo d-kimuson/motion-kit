@@ -25,6 +25,15 @@ export {
   CompositionContent,
   useCompositionFrame,
 } from './core/composition/composition.tsx';
+export {
+  useTimeline,
+  useTime,
+  useFrame,
+  useSequence,
+  type TimelineContext,
+  type SequenceContext,
+} from './core/timeline/hooks.ts';
+export { Sequence, type SequenceProps } from './core/sequence/sequence.tsx';
 export type { Clock } from './lib/clock.ts';
 export type { Result } from './lib/result.ts';
 export {
