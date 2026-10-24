@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { requiredDeterminismModes } from './determinism/compare.ts';
+import { defineDeterminismSuite, runDeterminismSuite } from './determinism/suite.ts';
 import * as loading from './loading/session.ts';
 
 const require = createRequire(import.meta.url);
@@ -113,45 +115,25 @@ describe('qualified Chromium PNG transport', () => {
   }, 60_000);
 
   it('matches sequential single random reverse repeated fresh-realm and held-session bytes with nonconstant frames', async () => {
-    const renderer = await open();
-    const baseline = new Map<number, Buffer>();
-    for await (const result of renderer.renderFrames({ from: 0, to: 6 })) {
-      expect(result.ok).toBe(true);
-      if (result.ok) baseline.set(result.value.frame, result.value.png);
-    }
-    expect(baseline.size).toBe(6);
-    expect(baseline.get(0)?.equals(baseline.get(5) ?? Buffer.alloc(0))).toBe(false);
-    for (const [mode, order] of [
-      ['random', [4, 1, 5, 0, 3, 2]],
-      ['reverse', [5, 4, 3, 2, 1, 0]],
-      ['repeated', [2, 2, 2]],
-    ] as const)
-      for (const number of order)
-        expect({
-          mode,
-          equal: (await frame(renderer, number)).png.equals(
-            baseline.get(number) ?? Buffer.alloc(0),
-          ),
-        }).toEqual({ mode, equal: true });
-    const originalPid = session().servicePid;
-    for (const number of [0, 2, 5]) {
-      expect(await renderer.select({ compositionId: 'one' })).toMatchObject({ ok: true });
-      expect({
-        mode: 'fresh-realm single',
-        equal: (await frame(renderer, number)).png.equals(baseline.get(number) ?? Buffer.alloc(0)),
-      }).toEqual({ mode: 'fresh-realm single', equal: true });
-      expect(session().servicePid).toBe(originalPid);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect({
-      mode: 'held-session',
-      equal: (await frame(renderer, 5)).png.equals(baseline.get(5) ?? Buffer.alloc(0)),
-    }).toEqual({ mode: 'held-session', equal: true });
-    const single = await open();
-    expect({
-      mode: 'single fresh renderer',
-      equal: (await frame(single, 5)).png.equals(baseline.get(5) ?? Buffer.alloc(0)),
-    }).toEqual({ mode: 'single fresh renderer', equal: true });
+    const report = await runDeterminismSuite(
+      defineDeterminismSuite({
+        composition: {
+          name: 'capture-fixture',
+          modulePath: new URL('../core/runtime/fixtures/capture.tsx', import.meta.url).pathname,
+          compositionId: 'one',
+          props: { mode: 'normal' },
+        },
+        frames: [0, 1, 2, 3, 4, 5],
+      }),
+      { servicePid: () => session().servicePid },
+    );
+    for (const mode of report.compositions.flatMap((item) => item.modes))
+      console.info(mode.message);
+    expect(report.passed).toBe(true);
+    expect(report.compositions[0]?.framesDiffer).toBe(true);
+    expect(report.compositions[0]?.modes.map((mode) => mode.mode)).toEqual([
+      ...requiredDeterminismModes,
+    ]);
   }, 60_000);
 
   it.each([

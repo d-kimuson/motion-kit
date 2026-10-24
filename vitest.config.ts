@@ -10,7 +10,11 @@ export default defineConfig({
           name: 'unit',
           isolate: false,
           include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', '.agents/**/*.test.ts'],
-          exclude: ['src/**/*.browser.test.tsx', 'src/render/**/*.test.ts'],
+          exclude: [
+            'src/**/*.browser.test.tsx',
+            'src/render/**/*.test.ts',
+            'src/**/*.determinism.test.ts',
+          ],
           setupFiles: ['configs/vitest/time.setup.ts'],
         },
       },
@@ -27,7 +31,12 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'frame-transport',
-          include: ['src/render/renderer.test.ts', 'src/render/capture/**/*.test.ts'],
+          include: [
+            'src/render/renderer.test.ts',
+            'src/render/capture/**/*.test.ts',
+            // Later contexts register reference Compositions as *.determinism.test.ts.
+            'src/**/*.determinism.test.ts',
+          ],
           testTimeout: 60_000,
           hookTimeout: 60_000,
         },
