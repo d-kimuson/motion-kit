@@ -233,6 +233,25 @@ describe('asset registry', () => {
     expect(leaked(registry.snapshot())).toBe(false);
   });
 
+  it('redacts signed-query credentials, access-key names, and nested userinfo', () => {
+    expect(
+      redactAssetSource('https://user:s3cret@example.com/one.png?AWSAccessKeyId=AKIASECRET'),
+    ).toBe('https://example.com/one.png');
+    expect(redactAssetSource('/two.png?access_key=SECRETKEY')).toBe('/two.png');
+    expect(
+      redactAssetSource('https://cdn.example/two.png?url=https://user:s3cret@evil.example/x'),
+    ).toBe('https://cdn.example/two.png?url=https%3A%2F%2Fevil.example%2Fx');
+    expect(redactAssetSource('https://cdn.example/ok.png?v=2&w=320')).toBe(
+      'https://cdn.example/ok.png?v=2&w=320',
+    );
+    const nested = redactAssetSource(
+      'https://cdn.example/two.png?url=https://user:s3cret@evil.example/x',
+    );
+    expect(nested).not.toContain('s3cret');
+    expect(nested).not.toContain('user%3A');
+    expect(decodeURIComponent(nested)).not.toContain('user:s3cret');
+  });
+
   it('lists every pending registration and timeoutMs', async () => {
     vi.useFakeTimers();
     try {
@@ -268,6 +287,100 @@ describe('asset registry', () => {
     }
   });
 
+  it('keeps a rejection that lands before the deadline as asset.load-failed', async () => {
+    vi.useFakeTimers();
+    try {
+      const gate = Promise.withResolvers<string>();
+      const registry = createAssetRegistry({ load: () => gate.promise });
+      registry.retain(image('/broken.png', 'picture'), 'owner', context);
+      const result = registry.whenReady({
+        signal: new AbortController().signal,
+        timeoutMs: 50,
+        location: { compositionId: 'demo', frame: 1, timeSeconds: 0 },
+        generation: 1,
+        committed: () => true,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      gate.reject(new Error('decode failed before deadline'));
+      await vi.advanceTimersByTimeAsync(40);
+      const settled = await result;
+      expect(settled).toMatchObject({
+        ok: false,
+        error: [{ code: 'asset.load-failed' }],
+      });
+      if (settled.ok || !('error' in settled)) throw new Error('expected diagnostics');
+      expect(settled.error[0]?.message).toContain('image');
+      expect(settled.error.map((diagnostic) => diagnostic.code)).not.toContain('asset.not-ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('prefers asset.load-failed when the deadline flag and a rejection are both visible', async () => {
+    vi.useFakeTimers();
+    try {
+      const gate = Promise.withResolvers<string>();
+      setTimeout(() => {
+        gate.reject(new Error('decode failed as the deadline fired'));
+      }, 30);
+      const registry = createAssetRegistry({ load: () => gate.promise });
+      registry.retain(image('/broken.png', 'picture'), 'owner', context);
+      const result = registry.whenReady({
+        signal: new AbortController().signal,
+        timeoutMs: 30,
+        location: { compositionId: 'demo', frame: 1, timeSeconds: 0 },
+        generation: 1,
+        committed: () => true,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      vi.advanceTimersByTime(30);
+      await Promise.resolve();
+      await Promise.resolve();
+      const settled = await result;
+      expect(settled).toMatchObject({
+        ok: false,
+        error: [expect.objectContaining({ code: 'asset.load-failed' })],
+      });
+      if (settled.ok || !('error' in settled)) throw new Error('expected diagnostics');
+      expect(settled.error.map((diagnostic) => diagnostic.code)).not.toContain('asset.not-ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports load-failed when a rejection and a still-pending registration coexist', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = Promise.withResolvers<string>();
+      const failed = Promise.withResolvers<string>();
+      const registry = createAssetRegistry({
+        load: (descriptor) => (descriptor.id === 'broken' ? failed.promise : pending.promise),
+      });
+      registry.retain(image('/broken.png', 'broken'), 'failed-owner', context);
+      registry.retain(image('/slow.png', 'slow'), 'pending-owner', context);
+      const result = registry.whenReady({
+        signal: new AbortController().signal,
+        timeoutMs: 30,
+        location: { compositionId: 'demo', frame: 2, timeSeconds: 0 },
+        generation: 1,
+        committed: () => true,
+      });
+      await vi.advanceTimersByTimeAsync(5);
+      failed.reject(new Error('decode failed'));
+      await vi.advanceTimersByTimeAsync(30);
+      const settled = await result;
+      expect(settled.ok).toBe(false);
+      if (settled.ok || !('error' in settled)) throw new Error('expected diagnostics');
+      expect(settled.error.map((diagnostic) => diagnostic.code)).toContain('asset.load-failed');
+      expect(settled.error.map((diagnostic) => diagnostic.code)).not.toContain('asset.not-ready');
+      expect(JSON.stringify(settled.error)).toContain('broken');
+      expect(registry.pending().map((asset) => asset.id)).toEqual(['slow']);
+      expect(registry.snapshot().failed.map((asset) => asset.id)).toEqual(['broken']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('maps font and image load failures to asset.load-failed', async () => {
     const registry = createAssetRegistry({
       load: (descriptor) => Promise.reject(new Error(`raw ${descriptor.kind} s3cret`)),
@@ -294,6 +407,40 @@ describe('asset registry', () => {
     expect(leaked(result)).toBe(false);
     expect(result.error[0]?.message).toBe('The required image failed to decode.');
     expect(result.error[1]?.message).toBe('The required font failed to load.');
+  });
+
+  it('keeps the barrier waiting when a registration appears during confirmation', async () => {
+    const late = Promise.withResolvers<string>();
+    let confirmations = 0;
+    const registry = createAssetRegistry({
+      load: (descriptor) => (descriptor.id === 'late' ? late.promise : Promise.resolve('ready')),
+    });
+    registry.retain(image('/first.png', 'first'), 'owner', context);
+    let settled = false;
+    const result = registry
+      .whenReady({
+        signal: new AbortController().signal,
+        timeoutMs: 2000,
+        location: { compositionId: 'demo', frame: 3, timeSeconds: 0.1 },
+        generation: 1,
+        committed: () => {
+          confirmations += 1;
+          if (confirmations === 1)
+            queueMicrotask(() => {
+              registry.retain(image('/late.png', 'late'), 'late-owner', context);
+            });
+          return true;
+        },
+      })
+      .then((value) => {
+        settled = true;
+        return value;
+      });
+    await tick();
+    expect(settled).toBe(false);
+    expect(registry.pending().map((asset) => asset.id)).toEqual(['late']);
+    late.resolve('done');
+    await expect(result).resolves.toEqual({ ok: true, value: undefined });
   });
 
   it('does not treat an unregistered asset as ready or pending', async () => {

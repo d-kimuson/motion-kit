@@ -2,6 +2,10 @@ import { type Diagnostic, type Location } from '../../lib/diagnostic.ts';
 import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type AssetDescriptor, type AssetPhase } from './types.ts';
 
+const REDACTED_SOURCE = '[asset source]';
+const MAX_REDACTION_DEPTH = 4;
+
+/** Exact compact names. `key` stays exact so unrelated words are not dropped. */
 const SENSITIVE_EXACT = new Set([
   'sig',
   'auth',
@@ -18,37 +22,106 @@ const SENSITIVE_EXACT = new Set([
   'keypairid',
 ]);
 
-/** Schema validation does not redact. Every asset Diagnostic must pass through here. */
-export const redactAssetSource = (source: string): string => {
+/**
+ * Compact-name fragments. A query parameter is dropped when its alphanumeric
+ * name contains one of these, is an exact denylist hit, has a `key` segment
+ * (`access_key`), or contains `keyid` (`AWSAccessKeyId`).
+ * Deliberately kept non-sensitive parameters are every other name, including
+ * cache and dimension queries such as `v`, `w`, `h`, `width`, and `format`.
+ */
+const SENSITIVE_FRAGMENTS = [
+  'accesskey',
+  'apikey',
+  'token',
+  'signature',
+  'secret',
+  'password',
+  'credential',
+  'session',
+  'auth',
+] as const;
+
+const compactName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const sensitiveParameter = (name: string): boolean => {
+  const compact = compactName(name);
+  return (
+    SENSITIVE_EXACT.has(compact) ||
+    SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment)) ||
+    /(?:^|[^a-z0-9])key(?:[^a-z0-9]|$)/i.test(name) ||
+    compact.includes('keyid')
+  );
+};
+
+const decodeRepeated = (value: string): string => {
+  let current = value;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current.includes('%')) return current;
+    try {
+      const next = decodeURIComponent(current);
+      if (next === current) return current;
+      current = next;
+    } catch {
+      return current;
+    }
+  }
+  return current;
+};
+
+const isAbsoluteUrl = (value: string): boolean => /^[a-z][a-z0-9+.-]*:/i.test(value);
+
+const hasUserinfo = (value: string): boolean => {
+  if (isAbsoluteUrl(value)) {
+    try {
+      const url = new URL(value);
+      if (url.username !== '' || url.password !== '') return true;
+    } catch {
+      /* Fall through to the textual userinfo check. */
+    }
+  }
+  return /(?:^|\/\/)[^/?#\s@]*:[^/?#\s@]+@/.test(value);
+};
+
+const credentialValue = (value: string): boolean =>
+  hasUserinfo(value) || /^(?:AKIA|ASIA)[0-9A-Z]{16}$/.test(value);
+
+const redactQueryValue = (value: string, depth: number): string | undefined => {
+  const decoded = decodeRepeated(value);
+  if (isAbsoluteUrl(decoded)) {
+    const nested = redactSource(decoded, depth + 1);
+    if (nested === REDACTED_SOURCE || hasUserinfo(decodeRepeated(nested))) return undefined;
+    return nested;
+  }
+  if (credentialValue(decoded)) return undefined;
+  return value;
+};
+
+const redactSource = (source: string, depth: number): string => {
+  if (depth > MAX_REDACTION_DEPTH) return REDACTED_SOURCE;
   try {
-    const absolute = /^[a-z][a-z0-9+.-]*:/i.test(source);
+    const absolute = isAbsoluteUrl(source);
     const url = new URL(source, 'http://assets.invalid');
     url.username = '';
     url.password = '';
     url.hash = '';
     const kept = new URLSearchParams();
-    for (const [name, value] of url.searchParams)
-      if (!sensitiveParameter(name)) kept.append(name, value);
+    for (const [name, value] of url.searchParams) {
+      if (sensitiveParameter(name)) continue;
+      const redactedValue = redactQueryValue(value, depth);
+      if (redactedValue === undefined) continue;
+      kept.append(name, redactedValue);
+    }
     url.search = kept.toString();
     const redacted = absolute ? url.toString() : `${url.pathname}${url.search}`;
-    if (source.includes('@') && redacted.includes('@')) return '[asset source]';
+    if (hasUserinfo(decodeRepeated(redacted))) return REDACTED_SOURCE;
     return redacted;
   } catch {
-    return '[asset source]';
+    return REDACTED_SOURCE;
   }
 };
 
-const sensitiveParameter = (name: string): boolean => {
-  const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return (
-    SENSITIVE_EXACT.has(compact) ||
-    compact.includes('token') ||
-    compact.includes('secret') ||
-    compact.includes('signature') ||
-    compact.includes('password') ||
-    compact.includes('credential')
-  );
-};
+/** Schema validation does not redact. Every asset Diagnostic must pass through here. */
+export const redactAssetSource = (source: string): string => redactSource(source, 0);
 
 const loadFailedMessage = (kind: string): string => {
   if (kind === 'font') return 'The required font failed to load.';

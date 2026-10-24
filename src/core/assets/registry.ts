@@ -133,8 +133,9 @@ export const createAssetRegistry = (options: {
 
   const pendingRegistrations = (): PendingAsset[] =>
     liveEntries()
-      .filter((entry) => entry.status !== 'ready')
+      .filter((entry) => entry.status === 'pending' || entry.status === 'idle')
       .flatMap(recordsFor);
+  const failedEntries = (): Entry[] => liveEntries().filter((entry) => entry.status === 'failed');
 
   const contextLocation = (entry: Entry): Location => {
     const context = entry.owners.values().next().value?.context;
@@ -168,7 +169,6 @@ export const createAssetRegistry = (options: {
     error: unknown,
   ) => {
     if (entry.attempt !== attempt || entry.controller?.signal.aborted === true) return;
-    if (entries.get(entry.key) !== entry) return;
     if (outcome === 'ready') {
       entry.status = 'ready';
       entry.value = value;
@@ -323,10 +323,10 @@ export const createAssetRegistry = (options: {
     try {
       let confirmedRevision: number | undefined;
       while (!request.signal.aborted) {
+        const failed = failedEntries();
+        if (failed.length > 0) return failureResult(request, failed);
         if (timedOut) return timeoutResult(request);
         const required = liveEntries();
-        const failed = required.filter((entry) => entry.status === 'failed');
-        if (failed.length > 0) return failureResult(request, failed);
         const pending = required.filter((entry) => entry.status !== 'ready');
         if (pending.length === 0 && request.committed()) {
           if (confirmedRevision === revision) return { ok: true, value: undefined };
@@ -334,6 +334,8 @@ export const createAssetRegistry = (options: {
           const seen = wakeVersion;
           await Promise.resolve();
           if (request.signal.aborted) return { ok: false, aborted: true };
+          const failedAfterConfirm = failedEntries();
+          if (failedAfterConfirm.length > 0) return failureResult(request, failedAfterConfirm);
           if (timedOut) return timeoutResult(request);
           if (
             revision === confirmedRevision &&
