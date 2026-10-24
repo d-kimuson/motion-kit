@@ -10,7 +10,7 @@ export type BrowserOptions = {
 export const chromiumOptions = (options: BrowserOptions = {}): LaunchOptions => ({
   headless: true,
   chromiumSandbox: options.disableSandbox !== true,
-  ignoreDefaultArgs: ['--enable-unsafe-swiftshader'],
+  ignoreDefaultArgs: options.softwareWebGL === true ? [] : ['--enable-unsafe-swiftshader'],
   args:
     options.softwareWebGL === true
       ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']

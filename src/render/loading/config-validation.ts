@@ -84,7 +84,9 @@ const keys: Record<string, readonly string[]> = {
     'needsInterop',
     'noDiscovery',
     'holdUntilCrawlEnd',
-    'esbuildOptions',
+    // esbuildOptions is intentionally unsupported: its build API includes
+    // output/entry overrides Vite's optimizer does not apply. Do not admit an
+    // opaque nested branch without a qualified serve-mode key policy.
     'force',
   ],
 };
@@ -148,6 +150,25 @@ export const validateConfig = (config: UserConfig, projectRoot: string): void =>
     else requirePreprocessor(name === 'styl' ? 'stylus' : name);
   }
   if (config.css?.transformer === 'lightningcss') requirePreprocessor('lightningcss');
+};
+
+// CSS @imports can invoke a preprocessor inside vite:css without a separate
+// transform hook. Use Vite's own dependency error (including nested imports),
+// not the outer module extension or the generic vite:css plugin attribution.
+export const preprocessorFailure = (error: unknown): string | undefined => {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('plugin' in error) ||
+    error.plugin !== 'vite:css' ||
+    !('message' in error) ||
+    typeof error.message !== 'string'
+  )
+    return undefined;
+  const name = /Preprocessor dependency "(sass-embedded|sass|less|stylus)" not found\./.exec(
+    error.message,
+  )?.[1];
+  return name === 'sass-embedded' ? 'sass' : name;
 };
 
 export const checkPreprocessorFile = (id: string, root: string) => {

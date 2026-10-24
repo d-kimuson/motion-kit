@@ -14,7 +14,7 @@ it('intercepts config imports before Vite attempts project-relative package look
     );
     const script = `import fs from 'node:fs';
 import {installBundledVite} from ${JSON.stringify(new URL('./config-loader.ts', import.meta.url).href)};
-installBundledVite(${JSON.stringify(root)});
+installBundledVite(${JSON.stringify(root)}, ${JSON.stringify(root)});
 const {loadConfigFromFile}=await import('vite');
 // Vite can leave an unresolved import external, accidentally letting the later
 // Node hook hide the missing first stage. Observe the actual filesystem boundary.

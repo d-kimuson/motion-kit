@@ -138,6 +138,8 @@ export const openLoadingSession = async (
     }
     await exited;
   };
+  // Internal failure cleanup must preserve its Diagnostic; only the public
+  // disposal entry point is caller cancellation.
   const dispose = (): Promise<Result<undefined>> => {
     disposal ??= (async () => {
       disposed = true;
@@ -290,7 +292,10 @@ export const openLoadingSession = async (
         servicePid: pid,
         workspace,
         browserConnected: () => owned?.browser.isConnected() ?? false,
-        dispose,
+        dispose: () => {
+          onAbort();
+          return dispose();
+        },
         select: async (selection) => {
           if (aborted) return { ok: false, aborted: true };
           if (disposed || selecting || terminal !== undefined)

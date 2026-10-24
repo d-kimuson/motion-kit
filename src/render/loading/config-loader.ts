@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire, registerHooks } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,6 +12,8 @@ const manifestSchema = z.object({
   name: z.string(),
   version: z.string().optional(),
   peerDependencies: z.object({ vite: z.string().optional() }).optional(),
+  dependencies: z.object({ vite: z.string().optional() }).optional(),
+  optionalDependencies: z.object({ vite: z.string().optional() }).optional(),
 });
 
 /** Child-process-only adapter for pinned Vite 7.3.7.
@@ -19,7 +21,8 @@ const manifestSchema = z.object({
  * absolute/relative bypasses). Stage 2 intercepts externalized ESM AND CJS.
  * The guarded in-memory patch never changes an installed package or user tree.
  */
-export const installBundledVite = (workspace: string) => {
+export const installBundledVite = (workspace: string, projectRoot: string) => {
+  const projectDirectory = realpathSync(projectRoot);
   const viteRoot = dirname(require.resolve('vite/package.json'));
   const paths: Record<string, string> = {
     vite: require.resolve('vite'),
@@ -35,6 +38,11 @@ export const installBundledVite = (workspace: string) => {
   const inspectPackage = (url: string) => {
     if (!url.startsWith('file:')) return;
     let directory = dirname(fileURLToPath(url));
+    try {
+      directory = realpathSync(directory);
+    } catch {
+      return;
+    }
     while (directory !== dirname(directory)) {
       if (checked.has(directory)) return;
       checked.add(directory);
@@ -47,8 +55,15 @@ export const installBundledVite = (workspace: string) => {
         directory = dirname(directory);
         continue;
       }
-      const range = manifest.peerDependencies?.vite;
-      if (range !== undefined && !satisfies('7.3.7', range)) reject(manifest.name);
+      // The application's own Vite may coexist; compatibility binds imported
+      // plugin/dependency packages, not local config helpers in the project.
+      if (directory !== projectDirectory)
+        for (const range of [
+          manifest.peerDependencies?.vite,
+          manifest.dependencies?.vite,
+          manifest.optionalDependencies?.vite,
+        ])
+          if (range !== undefined && !satisfies('7.3.7', range)) reject(manifest.name);
       if (manifest.name === 'vite' && directory !== viteRoot)
         reject(`vite@${manifest.version ?? 'unknown'}`);
       return;

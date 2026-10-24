@@ -87,6 +87,13 @@ ${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
     );
   }, 30_000);
 
+  it('enforces owned settings after asynchronous configResolved hooks finish', async () => {
+    const root = fixture(`export default {plugins:[{name:'late-settings',enforce:'post',
+configResolved:{order:'post',async handler(c){await new Promise(done=>setTimeout(done,20));c.server.ws=true;c.server.hmr={port:0};c.server.middlewareMode=false;c.server.open=true;c.server.host='0.0.0.0';c.appType='spa';}},
+configureServer(s){const c=s.config;if(c.server.ws!==false||c.server.hmr!==false||c.server.middlewareMode!==true||c.server.open!==false||c.server.host!=='127.0.0.1'||c.appType!=='custom')throw new Error('owned settings escaped');}}]};`);
+    expect(await open(root)).toMatchObject({ ok: true });
+  });
+
   it('deduplicates React for linked packages against the project installation', async () => {
     const root = fixture();
     const linked = mkdtempSync(join(tmpdir(), 'motion-kit-linked-'));
@@ -133,6 +140,57 @@ ${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
       },
     });
   }, 20_000);
+
+  it('names a missing preprocessor reached through nested CSS imports', async () => {
+    const root = fixture();
+    writeFileSync(join(root, 'style.css'), '@import "./nested.css";');
+    writeFileSync(join(root, 'nested.css'), '@import "./colors.scss";');
+    writeFileSync(join(root, 'colors.scss'), '$color:red; body{color:$color}');
+    writeFileSync(
+      join(root, 'entry.tsx'),
+      `import './style.css';\n${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+    );
+    expect(await open(root)).toEqual({
+      ok: false,
+      error: {
+        code: 'render.page-error',
+        severity: 'error',
+        message: 'Loading configuration rejected "sass".',
+        hint: `Use a Vite 7.3.7-compatible plugin, serve setting or installed preprocessor; check ${join(root, 'vite.config.ts')}.`,
+      },
+    });
+  });
+
+  it.each(['accept', 'reject'])(
+    'cancels a pending %s props parse on caller disposal without a Diagnostic',
+    async (outcome) => {
+      const root = fixture();
+      const markerRoot = mkdtempSync(join(tmpdir(), 'motion-kit-parse-'));
+      directories.push(markerRoot);
+      const marker = join(markerRoot, 'parse-started');
+      writeFileSync(
+        join(root, 'vite.config.ts'),
+        `import {writeFileSync} from 'node:fs';export default {plugins:[{name:'parse-marker',configureServer(s){s.middlewares.use('/parse-started',(_req,res)=>{writeFileSync(${JSON.stringify(marker)},'started');res.end();});}}]};`,
+      );
+      writeFileSync(
+        join(root, 'entry.tsx'),
+        readFileSync(join(root, 'entry.tsx'), 'utf8').replace(
+          "z.object({text:z.string().default('hello')})",
+          `z.object({text:z.string().default('hello')}).superRefine(async (props,ctx)=>{if(props.text==='hello')return;await fetch('/parse-started');await new Promise(done=>setTimeout(done,2000));if(props.text==='reject')ctx.addIssue({code:'custom',message:'rejected'});})`,
+        ),
+      );
+      const result = await open(root);
+      if (!result.ok) throw new Error('Loading failed');
+      const pending = result.value.select({ compositionId: 'one', props: { text: outcome } });
+      await expect.poll(() => existsSync(marker)).toBe(true);
+      await new Promise((done) => setTimeout(done, 500));
+      expect(await result.value.dispose()).toEqual({ ok: true, value: undefined });
+      expect(await pending).toEqual({ ok: false, aborted: true });
+      expect(existsSync(result.value.workspace)).toBe(false);
+      expect(() => process.kill(result.value.servicePid, 0)).toThrow('ESRCH');
+      expect(() => process.kill(result.value.browserPid, 0)).toThrow('ESRCH');
+    },
+  );
 
   it('restarts individual defaults and later props budgets, kills a blocked later parse, and never keeps the poisoned realm', async () => {
     const root = fixture();
@@ -263,9 +321,19 @@ ${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
     'intercepts config bundling and external ESM/CJS Vite imports with project Vite %s',
     async (major) => {
       const root = fixture(`import {defineConfig,version} from 'vite';
+import './helper.ts';
 import esm from 'probe-esm'; import cjs from 'probe-cjs';
 if(version !== '7.3.7' || esm !== version || cjs !== version) throw new Error('wrong Vite');
 export default defineConfig({});`);
+      writeFileSync(join(root, 'helper.ts'), 'export {};');
+      writeFileSync(
+        join(root, 'package.json'),
+        JSON.stringify({
+          name: 'user-project',
+          type: 'module',
+          ...(major === '8' ? { dependencies: { vite: '^8.0.0' } } : {}),
+        }),
+      );
       for (const kind of ['esm', 'cjs']) {
         const directory = join(root, `node_modules/probe-${kind}`);
         mkdirSync(directory);
@@ -313,6 +381,21 @@ export default defineConfig({});`);
       'vite/private-api',
     ],
     ['nested key', `export default {css:{futureOption:true}}`, 'css.futureOption'],
+    [
+      'nested optimizer option',
+      `export default {optimizeDeps:{esbuildOptions:{futureOption:true}}}`,
+      'optimizeDeps.esbuildOptions',
+    ],
+    [
+      'deferred plugin hook',
+      `export default {plugins:[{name:'post-configure-r',configureServer(){return ()=>{throw new Error('boom');};}}]}`,
+      'post-configure-r',
+    ],
+    [
+      'async deferred plugin hook',
+      `export default {plugins:[{name:'async-post-configure-r',async configureServer(){return async ()=>{throw new Error('boom');};}}]}`,
+      'async-post-configure-r',
+    ],
     [
       'plugin-added key',
       `export default {plugins:[{name:'bad-key',config(){return {build:{minify:true}}}}]}`,
@@ -381,27 +464,39 @@ export default defineConfig({});`);
     });
   });
 
-  it('rejects a Vite 8-only plugin by package name', async () => {
-    const root = fixture(
-      `import react from '@vitejs/plugin-react'; export default {plugins:[react()]};`,
-    );
-    const directory = join(root, 'node_modules/@vitejs/plugin-react');
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, 'package.json'),
-      '{"name":"@vitejs/plugin-react","version":"6.0.0","type":"module","main":"index.js","peerDependencies":{"vite":"^8.0.0"}}',
-    );
-    writeFileSync(join(directory, 'index.js'), `export default () => ({name:'vite:react-babel'});`);
-    expect(await open(root)).toEqual({
-      ok: false,
-      error: {
-        code: 'render.page-error',
-        severity: 'error',
-        message: 'Loading configuration rejected "@vitejs/plugin-react".',
-        hint: `Use a Vite 7.3.7-compatible plugin, serve setting or installed preprocessor; check ${join(root, 'vite.config.ts')}.`,
-      },
-    });
-  });
+  it.each(['peerDependencies', 'dependencies', 'optionalDependencies'])(
+    'rejects a Vite 8-only plugin bound through %s by package name',
+    async (binding) => {
+      const root = fixture(
+        `import react from '@vitejs/plugin-react'; export default {plugins:[react()]};`,
+      );
+      const directory = join(root, 'node_modules/@vitejs/plugin-react');
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, 'package.json'),
+        JSON.stringify({
+          name: '@vitejs/plugin-react',
+          version: '6.0.0',
+          type: 'module',
+          main: 'index.js',
+          [binding]: { vite: '^8.0.0' },
+        }),
+      );
+      writeFileSync(
+        join(directory, 'index.js'),
+        `export default () => ({name:'vite:react-babel'});`,
+      );
+      expect(await open(root)).toEqual({
+        ok: false,
+        error: {
+          code: 'render.page-error',
+          severity: 'error',
+          message: 'Loading configuration rejected "@vitejs/plugin-react".',
+          hint: `Use a Vite 7.3.7-compatible plugin, serve setting or installed preprocessor; check ${join(root, 'vite.config.ts')}.`,
+        },
+      });
+    },
+  );
 
   it('cancels startup without a Diagnostic and tears down the blocked service', async () => {
     const root = fixture(`export default {plugins:[{name:'blocked',config(){while(true){}}}]};`);
