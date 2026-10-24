@@ -230,6 +230,68 @@ describe('TransitionSeries public components', () => {
     });
   });
 
+  it.each([1, 2])('preserves exact interior overlap progress at %i/3', async (third) => {
+    await withScene(
+      () => (
+        <TransitionSeries>
+          <TransitionScene duration={1}>
+            <Probe name="a" />
+          </TransitionScene>
+          <Transition duration={0.75}>
+            <Progress />
+          </Transition>
+          <TransitionScene duration={1}>
+            <Probe name="b" />
+          </TransitionScene>
+        </TransitionSeries>
+      ),
+      async ({ seek, progress }) => {
+        await seek(1 + third); // At 4 fps, overlap starts at frame 1 and lasts 3 frames.
+        expect(progress()).not.toBeNull();
+        const observed = Number(progress());
+        expect(observed).toBe(third / 3);
+        expect(observed).not.toBe(Math.round((third / 3) * 1000) / 1000);
+        expect(observed).not.toBe(Math.round((third / 3) * 100) / 100);
+      },
+    );
+  });
+
+  it('preserves exact interior overlap progress at an off-grid local time at 30000/1001 fps', async () => {
+    const overlapDuration = { numerator: 701, denominator: 10000 };
+    await withScene(
+      () => (
+        <Sequence from={0.01} duration={1}>
+          <TransitionSeries>
+            <TransitionScene duration={overlapDuration}>
+              <Probe name="a" />
+            </TransitionScene>
+            <Transition duration={overlapDuration}>
+              <Progress />
+            </Transition>
+            <TransitionScene duration={overlapDuration}>
+              <Probe name="b" />
+            </TransitionScene>
+          </TransitionSeries>
+        </Sequence>
+      ),
+      async ({ seek, read, progress }) => {
+        await seek(1);
+        // Local time = 1001/30000 - 1/100 = 701/30000, one third of 701/10000.
+        // The origin and local time are off-grid: local frame position is 701/1001.
+        expect(read('overlap')).toMatchObject({
+          time: toSeconds(seconds({ numerator: 701, denominator: 30000 })),
+          sequence: { localFramePosition: 701 / 1001 },
+        });
+        expect(progress()).not.toBeNull();
+        const observed = Number(progress());
+        expect(observed).toBe(1 / 3);
+        expect(observed).not.toBe(0.333);
+        expect(observed).not.toBe(0.33);
+      },
+      { numerator: 30000, denominator: 1001 },
+    );
+  });
+
   it('actually unmounts scene and transition children at the exclusive boundary', async () => {
     const events: string[] = [];
     const Mounted = ({ name }: { name: string }) => {
