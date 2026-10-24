@@ -9,6 +9,7 @@ import {
   pngBytesMatch,
   randomOrder,
   repeatedOrder,
+  requiredDeterminismModes,
   reverseOrder,
   type CrossEnvironmentTolerance,
   type DeterminismMode,
@@ -337,7 +338,13 @@ export const runDeterminismSuite = async (
     );
     const constantMessage = `${name}: sequential 0..N captures are identical; a constant composition cannot prove traversal independence`;
     if (!framesDiffer) modes.push(modeResult(name, 'sequential-then-n', false, constantMessage));
-    const passed = framesDiffer && modes.every((mode) => mode.equal);
+    // Fail closed: a required traversal mode that did not run is a failure, not a silent pass.
+    const missingModes = requiredDeterminismModes.filter(
+      (required) => !modes.some((mode) => mode.mode === required),
+    );
+    for (const missing of missingModes)
+      modes.push(modeResult(name, missing, false, `${name}/${missing}: required mode did not run`));
+    const passed = framesDiffer && missingModes.length === 0 && modes.every((mode) => mode.equal);
     return {
       passed,
       compositions: [
