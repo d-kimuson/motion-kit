@@ -47,15 +47,38 @@ const optimizerFixture = (noDiscovery = false) => {
   );
   return root;
 };
+/** The optimizer can reject the project's `optimizeDeps` settings or an installed
+ * dependency, so its Diagnostic names the bundled version and the config path without
+ * blaming the project's `vite.config.ts` alone. */
 const optimizerDiagnostic = (root: string) => ({
   ok: false,
   error: {
     code: 'render.page-error',
     severity: 'error',
-    message: 'Loading configuration failed for "configuration" with bundled Vite 7.3.7.',
-    hint: `The project configuration and plugins must work under Vite 7; check ${join(root, 'vite.config.ts')}.`,
+    message: "Vite's dependency optimizer failed with bundled Vite 7.3.7.",
+    hint: `The project's optimizeDeps settings in ${join(root, 'vite.config.ts')} or one of its installed dependencies could not be pre-bundled; check both.`,
   },
 });
+/** An installed dependency whose own `require` cannot be resolved fails the optimizer with
+ * an otherwise empty project config, so the config path is not the cause. */
+const dependencyOptimizerFixture = () => {
+  const root = fixture('export default {};');
+  const directory = join(root, 'node_modules/broken-dependency');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, 'package.json'),
+    '{"name":"broken-dependency","version":"1.0.0","type":"commonjs","main":"index.js"}',
+  );
+  writeFileSync(
+    join(directory, 'index.js'),
+    `module.exports = require('pkg-that-is-not-installed');`,
+  );
+  writeFileSync(
+    join(root, 'entry.tsx'),
+    `import 'broken-dependency';\n${readFileSync(join(root, 'entry.tsx'), 'utf8')}`,
+  );
+  return root;
+};
 const open = async (root: string, loadingTimeoutMs = 15_000) => {
   const result = await openLoadingSession({
     projectRoot: root,
@@ -602,6 +625,14 @@ export default defineConfig({});`);
     // noDiscovery moves the same optimizer run inside createServer, so the rejection is
     // awaited there instead of surfacing as an unhandled rejection later.
     const root = optimizerFixture(true);
+    expect(await open(root)).toEqual(optimizerDiagnostic(root));
+  }, 30_000);
+
+  it('reports an optimizer failure caused by a dependency without blaming the project config', async () => {
+    // The project config is empty; only an installed CommonJS dependency is broken. The
+    // Diagnostic must still name the bundled version and the config path, but as the place
+    // to look, not as the proven cause.
+    const root = dependencyOptimizerFixture();
     expect(await open(root)).toEqual(optimizerDiagnostic(root));
   }, 30_000);
 

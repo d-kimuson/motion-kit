@@ -11,6 +11,7 @@ import {
   configFailure,
   LoadingConfigError,
   loadingFailure,
+  optimizerFailure,
   preprocessorFailure,
   viteOptimizerFailure,
 } from './diagnostics.ts';
@@ -51,15 +52,18 @@ const failureName = (error: unknown): string | undefined => {
   const name = error.plugin;
   return typeof name === 'string' && !name.startsWith('vite:') ? name : undefined;
 };
-/** Only the project's config and plugin resolution is a configuration failure; anything
- * else (server creation, the shell, the loopback bind) keeps the plain loading failure.
- * The phase alone cannot decide it: Vite surfaces the same failure from the try below,
- * from the custom logger, or as an unhandled rejection, before or after `ready`, so every
- * path classifies through this one function. */
+/** Only the project's config and plugin resolution, or an optimizer rejection, is a
+ * configuration-shaped failure; anything else (server creation, the shell, the loopback
+ * bind) keeps the plain loading failure. The phase alone cannot decide it: Vite surfaces
+ * the same failure from the try below, from the custom logger, or as an unhandled
+ * rejection, before or after `ready`, so every path classifies through this one function.
+ * The optimizer gets its own Diagnostic because it rejects installed dependencies too,
+ * so the project's `vite.config.ts` is not necessarily at fault. */
 let resolvingConfig = true;
 const failed = (error: unknown) => {
+  if (viteOptimizerFailure(error)) return optimizerFailure(configPath);
   const name = failureName(error);
-  return resolvingConfig || name !== undefined || viteOptimizerFailure(error)
+  return resolvingConfig || name !== undefined
     ? configFailure(name ?? 'configuration', configPath)
     : loadingFailure('configuration');
 };
