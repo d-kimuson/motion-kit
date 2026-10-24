@@ -44,6 +44,18 @@ beforeAll(() => {
       new URL('../core/runtime/fixtures/capture.tsx', import.meta.url).pathname,
     )};`,
   );
+  writeFileSync(
+    join(projectRoot, 'entry-required.tsx'),
+    `import { defineComposition, defineCompositions } from ${JSON.stringify(
+      new URL('../core/composition/registry.ts', import.meta.url).pathname,
+    )};
+import { z } from 'zod';
+const Scene = ({ text }: { text: string }) => <div>{text}</div>;
+export const compositions = defineCompositions([
+  defineComposition({ id: 'one', schema: z.object({ text: z.string().default('hello') }), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 3 }),
+  defineComposition({ id: 'two', schema: z.object({ text: z.string() }), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 3 }),
+]);`,
+  );
 });
 
 afterAll(() => {
@@ -292,4 +304,80 @@ describe('motion-kit CLI', () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.diagnostics[0]?.code).toBe('cli.invalid-arguments');
   });
+
+  it('renders a composition when an unselected sibling requires a prop', async () => {
+    const result = await run([
+      'frame',
+      'entry-required.tsx',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'required-other.png'),
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ ok: true, data: { format: 'png', frame: 0 } });
+    expect(statSync(join(outputRoot, 'required-other.png')).isFile()).toBe(true);
+  }, 60_000);
+
+  it('renders a selected required-prop composition when the prop is supplied', async () => {
+    const result = await run([
+      'render',
+      'entry-required.tsx',
+      '--composition',
+      'two',
+      '--props',
+      '{"text":"x"}',
+      '--out',
+      join(outputRoot, 'required-frames'),
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ ok: true, data: { frameCount: 3 } });
+  }, 60_000);
+
+  it('rejects a selected required-prop composition without the prop', async () => {
+    const result = await run([
+      'frame',
+      'entry-required.tsx',
+      '--composition',
+      'two',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'required-missing.png'),
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: 'composition.props-invalid', location: { compositionId: 'two' } }],
+    });
+  }, 60_000);
+
+  it('renders full sequences with output inside the project root several times', async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const output = join(projectRoot, `frames-in-root-${attempt}`);
+      const result = await run([
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({ ok: true, data: { frameCount: 6 } });
+      for (let frame = 0; frame < 6; frame++)
+        expect(existsSync(join(output, `frame-${String(frame).padStart(5, '0')}.png`))).toBe(true);
+      expect(existsSync(join(output, 'manifest.json'))).toBe(true);
+    }
+  }, 120_000);
 });
