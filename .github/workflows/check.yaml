@@ -42,6 +42,18 @@ jobs:
       - name: Install Chromium for Composition DOM and loading-session tests
         run: pnpm exec playwright install --with-deps chromium
 
+      # Ubuntu restricts user namespaces for downloaded executables. Allow only
+      # the test browser to create them; do not disable Chromium's sandbox.
+      - name: Allow sandboxed Playwright Chromium on the CI runner
+        run: |
+          sudo apparmor_parser -r /dev/stdin <<EOF
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile motion-kit-playwright ${HOME}/.cache/ms-playwright/**/{chrome,chrome-headless-shell} flags=(unconfined) {
+            userns,
+          }
+          EOF
+
       - name: Run unit tests
         run: pnpm test --project unit
 
