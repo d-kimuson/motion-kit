@@ -144,8 +144,11 @@ vite.config.ts.timestamp-*
 .turbo
 
 .direnv/
-.env.secret
-.env.overrides
+# Local environment files; keep sanitized example templates trackable.
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # docs
 docs/tmp
