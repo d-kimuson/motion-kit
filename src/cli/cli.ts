@@ -10,6 +10,7 @@ import {
 } from '../agent/cli-output.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
+import { coverOnExit } from '../lib/exit.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
@@ -443,21 +444,35 @@ export const runCli = async (
   }
 
   let outcome: CommandOutcome;
-  try {
-    outcome =
-      checked.data.command === 'render'
-        ? await runRender(checked.data, signal)
-        : await runFrame(checked.data, signal);
-  } catch (error) {
-    if (error instanceof Error && error.stack !== undefined)
-      process.stderr.write(`${error.stack}\n`);
-    outcome = failure([internalUnexpected()]);
-  }
-  // A cancelled run has no envelope: aborted control flow carries no Diagnostic, and the
-  // schema forbids `ok: false` without one. `--json` therefore prints nothing at all.
-  if ('aborted' in outcome) {
+  // A cancelled run's line is written below, but a library that exits the process from its own
+  // signal handler can end the run before that line is reached; this cover is the last chance to
+  // keep the caller's one statement about what the interrupted run left behind (lib/exit.ts).
+  let reported = false;
+  const report = (): void => {
+    if (reported) return;
+    reported = true;
     process.stderr.write(`${abortedLine(checked.data)}\n`);
-    return abortedExitCode(signal);
+  };
+  const releaseCover = coverOnExit(report);
+  try {
+    try {
+      outcome =
+        checked.data.command === 'render'
+          ? await runRender(checked.data, signal)
+          : await runFrame(checked.data, signal);
+    } catch (error) {
+      if (error instanceof Error && error.stack !== undefined)
+        process.stderr.write(`${error.stack}\n`);
+      outcome = failure([internalUnexpected()]);
+    }
+    // A cancelled run has no envelope: aborted control flow carries no Diagnostic, and the
+    // schema forbids `ok: false` without one. `--json` therefore prints nothing at all.
+    if ('aborted' in outcome) {
+      report();
+      return abortedExitCode(signal);
+    }
+    return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);
+  } finally {
+    releaseCover();
   }
-  return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);
 };

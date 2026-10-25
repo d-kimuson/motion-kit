@@ -5,6 +5,7 @@ import { basename, dirname, extname, join } from 'node:path';
 
 import { createFrameRate, durationFromFrameCount, toSeconds } from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
+import { coverOnExit } from '../../lib/exit.ts';
 import { type Result } from '../../lib/result.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
 import {
@@ -391,6 +392,16 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
     return { ok: false, error: [ffmpegNotFoundDiagnostic(binary)] };
   }
 
+  // Cancellation below is asynchronous, and a library that exits the process from its own signal
+  // handler ends it before this encode can finish. The child and its temporary file are exactly
+  // what a caller of a cancelled run must not find afterwards, so both are dealt with
+  // synchronously on the way out — `SIGKILL` there, because an exiting process cannot wait for
+  // `SIGTERM` to be honoured (lib/exit.ts).
+  const releaseCover = coverOnExit(() => {
+    child.kill('SIGKILL');
+    removeSibling(temporary);
+  });
+
   let stderrTail = '';
   child.stderr?.setEncoding('utf8');
   child.stderr?.on('data', (chunk: string) => {
@@ -436,6 +447,8 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
     if (aborted) await terminate(child, closed);
   } else await terminate(child, closed);
   signal?.removeEventListener('abort', onAbort);
+  // The child is gone and the rest of this function is synchronous, so an exit cannot strand it.
+  releaseCover();
 
   const fail = (diagnostics: readonly Diagnostic[]): EncodeOutcome => {
     removeSibling(temporary);

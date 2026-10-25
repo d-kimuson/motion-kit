@@ -66,10 +66,16 @@ afterAll(() => {
   rmSync(outputRoot, { recursive: true, force: true });
 });
 
-type RunResult = { readonly code: number; readonly envelope?: Envelope; readonly stdout: string };
+type RunResult = {
+  readonly code: number;
+  readonly envelope?: Envelope;
+  readonly stdout: string;
+  readonly stderr: string;
+};
 
 const run = async (args: readonly string[], env?: Record<string, string>): Promise<RunResult> => {
   let stdout = '';
+  let stderr = '';
   let code = 0;
   try {
     const result = await execFileAsync(process.execPath, [bin, ...args], {
@@ -79,6 +85,7 @@ const run = async (args: readonly string[], env?: Record<string, string>): Promi
       env: { ...process.env, ...env },
     });
     stdout = result.stdout;
+    stderr = result.stderr;
   } catch (error) {
     if (
       typeof error === 'object' &&
@@ -87,6 +94,13 @@ const run = async (args: readonly string[], env?: Record<string, string>): Promi
       typeof error.stdout === 'string'
     )
       stdout = error.stdout;
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'stderr' in error &&
+      typeof error.stderr === 'string'
+    )
+      stderr = error.stderr;
     if (
       typeof error === 'object' &&
       error !== null &&
@@ -100,7 +114,7 @@ const run = async (args: readonly string[], env?: Record<string, string>): Promi
     args.includes('--json') && trimmed !== ''
       ? EnvelopeSchema.parse(JSON.parse(trimmed))
       : undefined;
-  return { code, envelope, stdout };
+  return { code, envelope, stdout, stderr };
 };
 
 const assertValidEnvelope = (result: RunResult): Envelope => {
@@ -128,6 +142,16 @@ const childGone = (pid: number): boolean => {
   } catch {
     return true;
   }
+};
+
+/** The processes a run owns directly: its encoder, its loading service and its browser. */
+const childrenOf = (pid: number): readonly number[] => {
+  const children: number[] = [];
+  for (const line of execFileSync('ps', ['-Ao', 'pid=,ppid='], { encoding: 'utf8' }).split('\n')) {
+    const [own, parent] = line.trim().split(/\s+/).map(Number);
+    if (own !== undefined && parent === pid) children.push(own);
+  }
+  return children;
 };
 
 describe('motion-kit CLI', () => {
@@ -216,6 +240,8 @@ describe('motion-kit CLI', () => {
     if (data === null || data.format !== 'mp4') throw new Error('mp4 data missing');
     expect(data.durationSeconds).toBeCloseTo(6 / (30000 / 1001), 3);
     expect(statSync(output).size).toBeGreaterThan(0);
+    // A run that finished says nothing about a cancellation, not even on the way out.
+    expect(result.stderr).not.toContain('render aborted');
     // The temporary sibling is renamed onto the target, never left behind.
     expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
     const probed = execFileSync('ffprobe', [
@@ -369,6 +395,113 @@ exec sleep 30
       expect(existsSync(output)).toBe(false);
       expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
       expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      rmSync(fake, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it('keeps the cancellation contract when another SIGINT listener exits the process', async () => {
+    // A library that launches a child process can take SIGINT over for it:
+    // playwright-core's `addProcessHandlerIfNeeded` adds its own listener on browser launch and
+    // its handler exits the process (130) as soon as its browsers close — inside the same
+    // signal dispatch as the CLI's handler, before the CLI's asynchronous cleanup can finish.
+    // The preload below is that library: it registers behind the CLI's listener and leaves
+    // through `process.exit`. The line, the removed temporary and the killed children must
+    // survive it: Playwright itself is launched with its own signal handling off, but no
+    // cancellation guarantee may depend on which listeners another library happens to install.
+    const fake = mkdtempSync(join(tmpdir(), 'motion-kit-hostile-signal-'));
+    const encoderPid = join(fake, 'encode.pid');
+    writeFileSync(
+      join(fake, 'ffmpeg'),
+      `#!/bin/sh
+case "$1" in
+  -version) printf 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers\\n'; exit 0 ;;
+  -hide_banner) printf 'Encoders:\\n V....D libx264              libx264 H.264 / AVC\\n'; exit 0 ;;
+esac
+printf '%s' "$$" > "${encoderPid}"
+exec sleep 30
+`,
+      { mode: 0o755 },
+    );
+    const preload = join(fake, 'hostile-sigint.mjs');
+    const claimed = join(fake, 'hostile.ran');
+    writeFileSync(
+      preload,
+      `import { writeFileSync } from 'node:fs';
+let registered = false;
+process.on('newListener', (event) => {
+  if (event !== 'SIGINT' || registered) return;
+  registered = true;
+  // The CLI's own listener is added right after this event; land behind it, as a library that
+  // hooks the signal when it launches a child process does.
+  process.nextTick(() =>
+    process.on('SIGINT', () => {
+      // The marker proves the process really was ended by another listener: without it this
+      // case would only exercise the CLI's own, ordered cleanup.
+      writeFileSync(${JSON.stringify(claimed)}, 'exit 130');
+      process.exit(130);
+    }),
+  );
+});
+`,
+    );
+    const output = join(outputRoot, 'interrupted-hostile.mp4');
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        preload,
+        bin,
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--out',
+        output,
+        '--json',
+      ],
+      { cwd: projectRoot, env: { ...process.env, PATH: `${fake}:${process.env['PATH'] ?? ''}` } },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    try {
+      await waitFor(
+        () =>
+          existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
+        60_000,
+      );
+      // The run owns an encoder and a loading service while it is in flight.
+      const running = child.pid;
+      if (running === undefined) throw new Error('the run has no pid');
+      const owned = childrenOf(running);
+      expect(owned.length).toBeGreaterThan(0);
+      child.kill('SIGINT');
+      const code = await new Promise<number | null>((resolve) => {
+        child.once('exit', (exitCode) => resolve(exitCode));
+      });
+      expect(code).toBe(130);
+      // The other listener really did end the process, so the rest is the last-resort cleanup.
+      expect(readFileSync(claimed, 'utf8')).toBe('exit 130');
+      // The caller is still told what the cancelled run left, even though another listener
+      // ended the process: one line, the route's own sentence, and no envelope.
+      expect(stdout).toBe('');
+      expect(stderr.split('\n').filter((line) => line.includes('render aborted'))).toEqual([
+        'render aborted; no output was produced',
+      ]);
+      expect(existsSync(output)).toBe(false);
+      expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
+      // Nothing the run started outlives it: the encoder, the loading service and the browser.
+      await waitFor(() => owned.every(childGone), 10_000);
+      expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
     } finally {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
       rmSync(fake, { recursive: true, force: true });
