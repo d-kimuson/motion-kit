@@ -1,4 +1,5 @@
 import { CommandSchema, type Command } from '../agent/cli-output.ts';
+import { valueTakingOptions } from './commands.ts';
 
 // The envelope names the command an invocation asked for, and the promise to a caller is one JSON
 // document on stdout even when the invocation is unusable. Deriving that name from argv must
@@ -7,13 +8,35 @@ import { CommandSchema, type Command } from '../agent/cli-output.ts';
 // `"unknown"`, which would enlarge the enum for a value no command produces.
 
 /**
- * The known subcommand argv names: its first positional argument. The CLI has no global flags, so
- * in a usable invocation that argument is the subcommand itself. An invocation that never reaches
- * one (`--json`) and one that names something else (`unknown`, or a typo) both resolve to null,
- * because argv then names no command the CLI knows.
+ * The first positional argument of argv: the first token that is neither a flag nor a flag's
+ * value. A flag written as `--opt=value` carries its value in the same token, and a flag declared
+ * to take a value consumes the next one (`valueTakingOptions`, derived from the CLI's own command
+ * declarations), so neither the `value` nor `--opt`'s neighbour is a positional argument. That is
+ * what keeps `--out /tmp/a.png render entry.tsx` naming `render` rather than the path. The `--`
+ * terminator needs no case of its own: it is a flag-shaped token taking no value, so the scan
+ * simply continues past it.
+ */
+const firstPositional = (argv: readonly string[]): string | undefined => {
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === undefined) return undefined;
+    if (!token.startsWith('-')) return token;
+    // `--opt=value` already carries the value, so the next token is positional again.
+    if (token.includes('=')) continue;
+    if (valueTakingOptions.has(token)) index += 1;
+  }
+  return undefined;
+};
+
+/**
+ * The known subcommand argv names, or null. The candidate is the first positional argument, so a
+ * subcommand written after a flag is still named truthfully (the CLI reports it as misplaced) and
+ * a flag's value never takes its place. An invocation that never reaches a positional (`--json`)
+ * and one that names something else (`unknown`, or a typo) both resolve to null, because argv then
+ * names no command the CLI knows. A reserved subcommand (`inspect`, `validate`) resolves to itself:
+ * the enum is the contract's, not the implementation's.
  */
 export const resolveCommand = (argv: readonly string[]): Command | null => {
-  const positional = argv.find((argument) => !argument.startsWith('-'));
-  const known = CommandSchema.safeParse(positional);
+  const known = CommandSchema.safeParse(firstPositional(argv));
   return known.success ? known.data : null;
 };

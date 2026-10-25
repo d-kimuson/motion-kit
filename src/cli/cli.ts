@@ -1,4 +1,4 @@
-import { Command, CommanderError } from 'commander';
+import { CommanderError } from 'commander';
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 
@@ -17,6 +17,7 @@ import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
 import { CliArgsSchema, type FrameArgs, type RenderArgs } from './args.ts';
+import { commands } from './commands.ts';
 import { resolveCommand } from './invocation.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
@@ -50,29 +51,6 @@ const internalUnexpected = (): Diagnostic =>
     'The stack trace was written to stderr; report it as a bug.',
   );
 
-const renderCommand = new Command('render')
-  .argument('<entry>')
-  .option('--composition <id>')
-  .requiredOption('--out <file-or-dir>')
-  .option('--props <json>')
-  .option('--json')
-  .exitOverride()
-  .configureOutput({ outputError: () => {} });
-
-const frameCommand = new Command('frame')
-  .argument('<entry>')
-  .option('--composition <id>')
-  .requiredOption('--frame <n>')
-  .requiredOption('--out <png>')
-  .option('--json')
-  .exitOverride()
-  .configureOutput({ outputError: () => {} });
-
-const commands: Readonly<Record<'render' | 'frame', Command>> = {
-  render: renderCommand,
-  frame: frameCommand,
-};
-
 type ParseOutcome =
   | { readonly kind: 'no-command'; readonly command: EnvelopeCommand | null }
   | { readonly kind: 'help' }
@@ -105,7 +83,8 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
   if (name === 'help' || name === '--help' || name === '-h') return { kind: 'usage' };
   // Only an implemented subcommand in the leading position can be parsed: the CLI has no global
   // flags, so a name anywhere else, a reserved name and an unknown one all fail here with the
-  // command argv named, and the envelope still reports it (agent ADR: nullable `command`).
+  // command argv named — the first positional argument, past any flag and its value — and the
+  // envelope still reports it (agent ADR: nullable `command`, first positional argument).
   const command = resolveCommand(argv);
   if (command === null || name !== command || !isCommandName(command))
     return { kind: 'no-command', command };
