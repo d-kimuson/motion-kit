@@ -157,6 +157,16 @@ const frameFailure = (result: Extract<FrameCaptureResult, { ok: false }>): Comma
 /** The one format rule: an .mp4 target is encoded video; every other target is a PNG directory. */
 const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() === '.mp4';
 
+/**
+ * The aborted line is the caller's only signal, so it says what the route actually left behind
+ * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
+ * as it arrived, while the mp4 route removes its temporary sibling and leaves no target.
+ */
+const abortedLine = (args: RenderArgs | FrameArgs): string =>
+  args.command === 'render' && !isVideoOutput(args.out)
+    ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
+    : `${args.command} aborted; no output was produced`;
+
 const isFile = (path: string): boolean => {
   try {
     return statSync(path).isFile();
@@ -446,7 +456,7 @@ export const runCli = async (
   // A cancelled run has no envelope: aborted control flow carries no Diagnostic, and the
   // schema forbids `ok: false` without one. `--json` therefore prints nothing at all.
   if ('aborted' in outcome) {
-    process.stderr.write(`${checked.data.command} aborted; no output was produced\n`);
+    process.stderr.write(`${abortedLine(checked.data)}\n`);
     return abortedExitCode(signal);
   }
   return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);

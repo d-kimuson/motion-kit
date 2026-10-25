@@ -283,21 +283,40 @@ describe('motion-kit CLI', () => {
     const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
-      for (const target of [join(outputRoot, 'cancelled.mp4'), join(outputRoot, 'cancelled')]) {
+      const framesTarget = join(outputRoot, 'cancelled');
+      const routes = [
+        {
+          target: join(outputRoot, 'cancelled.mp4'),
+          said: 'render aborted; no output was produced',
+        },
+        {
+          target: framesTarget,
+          said: `render aborted; any PNG frames already written remain in ${framesTarget}; no manifest.json was written`,
+        },
+      ];
+      for (const route of routes) {
+        stderr.mockClear();
         const code = await runCli(
-          ['render', 'entry.ts', '--composition', 'one', '--out', target, '--json'],
+          ['render', 'entry.ts', '--composition', 'one', '--out', route.target, '--json'],
           { signal: controller.signal },
         );
         // 128 + SIGINT: the caller stopped the run, so it is neither a domain failure (1),
         // an invocation error (2) nor an internal bug (3).
         expect(code).toBe(130);
-        expect(existsSync(target)).toBe(false);
+        expect(existsSync(route.target)).toBe(false);
+        // The stderr line is the caller's only signal, so it has to be true of this route: the
+        // frames route keeps the PNGs it already wrote and stops before the manifest.
+        const lines = stderr.mock.calls
+          .map(([chunk]) => String(chunk))
+          .join('')
+          .split('\n')
+          .filter((line) => line !== '');
+        expect(lines[0]).toContain('render aborted');
+        expect(lines).toEqual([route.said]);
+        expect(lines.join('')).not.toContain('internal.unexpected');
       }
       // A cancellation has no Diagnostic to put in an envelope, so nothing claims one.
       expect(stdout).not.toHaveBeenCalled();
-      const said = stderr.mock.calls.map(([chunk]) => String(chunk)).join('');
-      expect(said).toContain('render aborted');
-      expect(said).not.toContain('internal.unexpected');
     } finally {
       stdout.mockRestore();
       stderr.mockRestore();
