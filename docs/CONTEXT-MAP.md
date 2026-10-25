@@ -16,12 +16,13 @@
 
 Terms of how agents work on this repository, used by `docs/guidelines/`.
 
-| Term              | Meaning                                                                                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SubAgent          | An agent started from the current agent for a bounded piece of work (an investigation, a review, a QA Check). It returns its result to the agent that started it |
-| Independent Agent | A SubAgent that takes a delegated task to the definition of done (`docs/guidelines/delegate.md`) in its own worktree and context                                 |
-| User task         | A Backlog task waiting for the user's decision or action, assigned to the user's actor (`docs/guidelines/backlog.md`)                                            |
-| Maintenance task  | A recurring task auto-pilot starts when its trigger is reached: `.agents/auto-pilot/maintenance-tasks/<name>/` (`docs/guidelines/auto-pilot.md`)                 |
+| Term              | Meaning                                                                                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SubAgent          | An agent started from the current agent for a bounded piece of work (an investigation, a review, a QA Check). It returns its result to the agent that started it                                   |
+| Independent Agent | A SubAgent that takes a delegated task to the definition of done (`docs/guidelines/delegate.md`) in its own worktree and context                                                                   |
+| User task         | A Backlog task waiting for the user's decision or action, assigned to the user's actor (`docs/guidelines/backlog.md`)                                                                              |
+| Maintenance task  | A recurring task auto-pilot starts when its trigger is reached: `.agents/auto-pilot/maintenance-tasks/<name>/` (`docs/guidelines/auto-pilot.md`)                                                   |
+| Reference example | A committed video under `examples/<name>/` that fixes the output quality bar for one axis; its targets and CI gates are the [reference-examples design](design-doc/20261025-reference-examples.md) |
 
 ## Relations
 
