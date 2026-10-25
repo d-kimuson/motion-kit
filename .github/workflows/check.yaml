@@ -57,21 +57,10 @@ jobs:
           }
           EOF
 
-      - name: Run unit tests
-        run: pnpm test --project unit
-
-      - name: Run Composition DOM tests
-        run: pnpm test --project composition-dom
-
-      - name: Run supervised loading-session tests
-        run: pnpm test --project loading
-
-      - name: Run frame transport and PNG determinism tests
-        run: pnpm test --project frame-transport
-
-      # The encoder and the CLI's mp4 route spawn the system FFmpeg, so the runner needs one.
-      # Every case fails on a missing binary (there is no skip), which is why the install is
-      # asserted here instead of left to whatever the runner image happens to ship.
+      # The encoder, the CLI's mp4 route and the frame-transport video test spawn the system
+      # FFmpeg, and every case fails on a missing binary (there is no skip), so the install is
+      # asserted here instead of left to whatever the runner image happens to ship. It comes
+      # before the test steps because `render-video.test.ts` runs in the frame-transport project.
       - name: Install FFmpeg for the encoder tests
         run: |
           sudo apt-get update
@@ -86,6 +75,18 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Run unit tests
+        run: pnpm test --project unit
+
+      - name: Run Composition DOM tests
+        run: pnpm test --project composition-dom
+
+      - name: Run supervised loading-session tests
+        run: pnpm test --project loading
+
+      - name: Run frame transport and PNG determinism tests
+        run: pnpm test --project frame-transport
 
       - name: Run encoder port tests
         run: pnpm test --project encoding
