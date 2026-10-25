@@ -1,5 +1,5 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -15,10 +15,12 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import { EnvelopeSchema, type Envelope } from '../agent/cli-output.ts';
+import { currentDate } from '../lib/clock.ts';
+import { runCli } from './cli.ts';
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -107,6 +109,25 @@ const assertValidEnvelope = (result: RunResult): Envelope => {
   if (envelope === undefined) throw new Error('Envelope missing');
   expect(validateJson(envelope)).toBe(true);
   return envelope;
+};
+
+/** Polls a filesystem fact a child process produces; a render has no other progress signal. */
+const waitFor = async (ready: () => boolean, timeoutMs: number): Promise<void> => {
+  const started = currentDate().getTime();
+  while (!ready()) {
+    if (currentDate().getTime() - started > timeoutMs)
+      throw new Error('the render never reached the encoder');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+};
+
+const childGone = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
 };
 
 describe('motion-kit CLI', () => {
@@ -254,6 +275,85 @@ describe('motion-kit CLI', () => {
     expect(rendered.code).toBe(0);
     const renderedEnvelope = assertValidEnvelope(rendered);
     expect(renderedEnvelope.diagnostics).toEqual(encodedEnvelope.diagnostics);
+  }, 120_000);
+
+  it('ends a cancelled run as aborted control flow, with no envelope on either route', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      for (const target of [join(outputRoot, 'cancelled.mp4'), join(outputRoot, 'cancelled')]) {
+        const code = await runCli(
+          ['render', 'entry.ts', '--composition', 'one', '--out', target, '--json'],
+          { signal: controller.signal },
+        );
+        // 128 + SIGINT: the caller stopped the run, so it is neither a domain failure (1),
+        // an invocation error (2) nor an internal bug (3).
+        expect(code).toBe(130);
+        expect(existsSync(target)).toBe(false);
+      }
+      // A cancellation has no Diagnostic to put in an envelope, so nothing claims one.
+      expect(stdout).not.toHaveBeenCalled();
+      const said = stderr.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(said).toContain('render aborted');
+      expect(said).not.toContain('internal.unexpected');
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
+  });
+
+  it('stops a SIGINT render with no target, no .part sibling and no encoder child', async () => {
+    // A stand-in binary that never finishes the encode, so the run is stopped mid-render.
+    const fake = mkdtempSync(join(tmpdir(), 'motion-kit-signal-ffmpeg-'));
+    const encoderPid = join(fake, 'encode.pid');
+    writeFileSync(
+      join(fake, 'ffmpeg'),
+      `#!/bin/sh
+case "$1" in
+  -version) printf 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers\\n'; exit 0 ;;
+  -hide_banner) printf 'Encoders:\\n V....D libx264              libx264 H.264 / AVC\\n'; exit 0 ;;
+esac
+printf '%s' "$$" > "${encoderPid}"
+exec sleep 30
+`,
+      { mode: 0o755 },
+    );
+    const output = join(outputRoot, 'interrupted.mp4');
+    const child = spawn(
+      process.execPath,
+      [bin, 'render', 'entry.ts', '--composition', 'one', '--out', output, '--json'],
+      {
+        cwd: projectRoot,
+        env: { ...process.env, PATH: `${fake}:${process.env['PATH'] ?? ''}` },
+      },
+    );
+    let stdout = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    try {
+      await waitFor(
+        () =>
+          existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
+        60_000,
+      );
+      child.kill('SIGINT');
+      const code = await new Promise<number | null>((resolve) => {
+        child.once('exit', (exitCode) => resolve(exitCode));
+      });
+      expect(code).toBe(130);
+      // No envelope was fabricated for the cancellation, and nothing was left behind.
+      expect(stdout).toBe('');
+      expect(existsSync(output)).toBe(false);
+      expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
+      expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      rmSync(fake, { recursive: true, force: true });
+    }
   }, 120_000);
 
   it('prints usage and exits 0 for --help', async () => {
