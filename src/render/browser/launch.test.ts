@@ -5,9 +5,14 @@ import { chromiumOptions, launchBrowser } from './launch.ts';
 
 describe('Chromium launch policy', () => {
   it('keeps sandbox enabled and unsafe software rendering opt-in', () => {
+    // The launcher never owns cancellation: its own signal handlers exit the process (130)
+    // before a caller's asynchronous cleanup can finish (src/lib/exit.ts holds the guard).
     expect(chromiumOptions()).toEqual({
       headless: true,
       chromiumSandbox: true,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
       ignoreDefaultArgs: ['--enable-unsafe-swiftshader'],
       args: [],
     });
