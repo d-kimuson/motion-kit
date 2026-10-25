@@ -1,5 +1,6 @@
 // Exercise the package export, rather than making the contract a private deep import.
 import {
+  EnvelopeCommandSchema,
   EnvelopeSchema,
   FrameDataSchema,
   RenderDataSchema,
@@ -70,6 +71,12 @@ describe('CLI output v1', () => {
     const payload = { ...base, command, data };
     expect(EnvelopeSchema.safeParse(payload).success).toBe(true);
     expect(validateJson(payload)).toBe(true);
+  });
+
+  it('names a known subcommand or null, never a sentinel member', () => {
+    expect(EnvelopeCommandSchema.parse('frame')).toBe('frame');
+    expect(EnvelopeCommandSchema.parse(null)).toBeNull();
+    expect(EnvelopeCommandSchema.safeParse('unknown').success).toBe(false);
   });
 
   it('infers command-specific data from the envelope', () => {
