@@ -11,11 +11,12 @@ The single source of truth for reviewing a change. Internal reviews (`docs/guide
 
 ## Precedence
 
-Text can disagree; the newer wins: (a) a `DECIDED:` answer or a section marked "Product owner ..." on the task, newest first; (b) accepted ADRs and Design Docs; (c) `docs/tmp/design.md`; (d) everything else.
+Text can disagree; the newer wins: (a) the product owner decision recorded on the task, (b) accepted ADRs and Design Docs, (c) `docs/tmp/design.md`, (d) everything else. A product owner decision newer than an accepted document supersedes it.
 
-- Check a finding that cites an ADR or Design Doc sentence against the task first. If a newer product owner section supersedes that sentence, the finding is "doc needs amending", not "code must change", and the change is not widened for it.
-- Do not raise a finding that models a hostile plugin, hostile config, or hostile composition as P1/P2: the project's config and plugins are trusted code (Trust model in `docs/contexts/render/CONTEXT.md`).
-- The implementer's side, the reviewer prompt, and the two-round limit are in `docs/guidelines/auto-pilot.md` (Precedence when documents disagree); recording an amendment on an ADR is in `docs/guidelines/writing/adr.md`.
+- At (a) the marker is a `## Product owner ...` section, dated in its heading, or a line that starts with `DECIDED:`. The last one in the description is the newest, because `docs/guidelines/team-channel.md` puts a `DECIDED:` line where its question was asked, not where it was answered; the dated heading is the reliable form, so when the two disagree the later date wins over position. Two contradicting sections the dates do not order are a question for the product owner, not a choice to make.
+- Check every finding that cites an accepted ADR, a Design Doc, or `docs/tmp/design.md` against (a) first. A finding that only breaks a sentence a product owner decision supersedes is "the document needs amending", not "the change must be different": raise that, and the change is not widened for it. `docs/tmp/design.md` is gitignored and absent from a worktree (`AGENTS.md`), so at (c) check the task instead and say the file was unavailable.
+- Do not raise a finding that models a hostile plugin, hostile config, or hostile Composition: the render context treats project config and plugins as trusted Node code (`docs/contexts/render/CONTEXT.md`, Trust model). The exclusion belongs to the context that states it.
+- The implementer's side and the round rule are in `docs/guidelines/auto-pilot.md` (Precedence when documents disagree); the reviewer prompt that carries the task key is in `docs/guidelines/delegate.md` (Definition of done); recording an amendment is in `docs/guidelines/writing/adr.md`.
 
 ## Patterns
 

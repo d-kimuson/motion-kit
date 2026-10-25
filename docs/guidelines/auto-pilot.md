@@ -20,7 +20,7 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
   - Recent decisions: what was decided and why. Remove an entry once later turns no longer use it
   - Notes for the next turn
   - The wait interval (Wait, below)
-- `tasks/<id>.md`: one file per task in progress. `<id>` is the Backlog task id, or `maintenance-<name>` for a maintenance task in progress (which also records the commit HEAD was at when it started). Write who it was delegated to, what was asked, links (PR, worktree, task), what it is waiting for, and what has been decided. Delete the file when the task is done or dropped; for a maintenance task, after recording it with `done`.
+- `tasks/<id>.md`: one file per task in progress. `<id>` is the Backlog task id, or `maintenance-<name>` for a maintenance task in progress (which also records the commit HEAD was at when it started). Write who it was delegated to, what was asked, links (PR, worktree, task), what it is waiting for, its `review rounds` (Precedence when documents disagree), and what has been decided. Delete the file when the task is done or dropped; for a maintenance task, after recording it with `done`.
 - `maintenance-tasks/`: maintenance tasks (Maintenance tasks, below).
 - `troubleshots/<topic>.md`: workarounds for the auto-pilot mechanism itself, in the format of `docs/guidelines/writing/troubleshoot.md`. When a command or integration fails unexpectedly, look here first.
 
@@ -32,11 +32,11 @@ Start it as a SubAgent that uses a worktree. In this harness (pi), worktree isol
 
 ## Precedence when documents disagree
 
-When the task and the documents say different things, the newer text wins: (a) a `DECIDED:` answer or a section marked "Product owner ..." on the task, newest first; (b) accepted ADRs and Design Docs; (c) `docs/tmp/design.md`; (d) everything else. A product owner section on the task newer than an accepted ADR or Design Doc supersedes it.
+When the task and the documents disagree, the product owner decision recorded on the task wins. `docs/guidelines/review/index.md` (Precedence) has the order, the marker, and the reviewer's check; this section has what the auto-pilot and the implementer do.
 
-- Implementer: follow (a) over (b), and do not widen the PR to satisfy the superseded doc. Amend it in the same PR when the change is a paragraph — a status/history line with the date and the task key, plus the changed paragraph (`docs/guidelines/writing/adr.md`) — or, when it is larger, file a follow-up docs task and say so in the PR body.
-- Reviewer: before raising a finding that cites an ADR or Design Doc sentence, check the task for a product owner section that supersedes it. If one exists, the finding is "doc needs amending", not "code must change". A finding that models a hostile plugin, hostile config, or hostile composition is out of scope under the Trust model of `docs/contexts/render/CONTEXT.md` and must not be raised as P1/P2. `docs/guidelines/review/index.md` (Precedence) carries the same rule.
-- Rounds: after the second "request changes" round on one PR, stop iterating and ask the product owner on the team channel (in Command Code, the session) with the disagreement and the precedence reading, instead of a third round.
+- Implementer: do not follow the superseded document and do not widen the PR for it. Amend that document in the same PR when the change is a paragraph (`docs/guidelines/writing/adr.md`), or, when it is larger, file a follow-up docs task and say so in the PR body.
+- Rounds: a round is a review on the PR that returns at least one finding, counted in `tasks/<id>.md` under `review rounds`. After the second round that re-litigates the same document conflict, stop iterating and ask the product owner by `docs/guidelines/team-channel.md` with the disagreement and the precedence reading, instead of a third round. A correctness or regression finding is always raised and never counts toward the limit.
+- After the answer, recorded on the task as `team-channel.md` requires: either the document is amended and the change stands, or the finding is dropped and the PR merges as it is. Until the answer comes, keep other work going and do not merge the PR.
 
 ## Turn
 
