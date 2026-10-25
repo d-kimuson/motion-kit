@@ -8,16 +8,16 @@ import { z } from 'zod';
 
 import { installBundledVite } from './config-loader.ts';
 import {
-  checkPreprocessorFile,
-  environmentConfigValidator,
+  configFailure,
+  LoadingConfigError,
+  loadingFailure,
+  optimizerFailure,
   preprocessorFailure,
-  resolvedConfigValidator,
-  validateConfig,
-} from './config-validation.ts';
-import { configFailure, LoadingConfigError, loadingFailure } from './diagnostics.ts';
+  viteOptimizerFailure,
+} from './diagnostics.ts';
 import { htmlShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
-import { loadingPlugin, reactResolution } from './resolution.ts';
+import { loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
 
 const input = z
   .object({ projectRoot: z.string(), entry: z.string(), workspace: z.string() })
@@ -37,25 +37,50 @@ let configPath =
   ['js', 'mjs', 'ts', 'cjs', 'mts', 'cts']
     .map((extension) => join(input.projectRoot, `vite.config.${extension}`))
     .find(existsSync) ?? join(input.projectRoot, 'vite.config.ts');
-const adapter = installBundledVite(input.workspace, input.projectRoot);
-const send = (message: unknown) => process.send?.(message);
-const report = (error: unknown) => {
-  const name =
-    adapter.rejectedName() ??
-    preprocessorFailure(error) ??
-    (error instanceof LoadingConfigError
-      ? error.key
-      : typeof error === 'object' &&
-          error !== null &&
-          'plugin' in error &&
-          typeof error.plugin === 'string'
-        ? error.plugin
-        : undefined);
-  send({
-    type: 'failure',
-    error: name === undefined ? loadingFailure('configuration') : configFailure(name, configPath),
-  });
+const adapter = installBundledVite(input.workspace);
+const send = (message: unknown, callback?: (error: Error | null) => void) =>
+  callback === undefined ? process.send?.(message) : process.send?.(message, callback);
+/** A producer-authored name for a failure, if the cause is known precisely. Vite's own
+ * plugins are not project plugins, so their names never reach the Diagnostic. */
+const failureName = (error: unknown): string | undefined => {
+  const rejected = adapter.rejectedName();
+  if (rejected !== undefined) return rejected;
+  const preprocessor = preprocessorFailure(error);
+  if (preprocessor !== undefined) return preprocessor;
+  if (error instanceof LoadingConfigError) return error.key;
+  if (typeof error !== 'object' || error === null || !('plugin' in error)) return undefined;
+  const name = error.plugin;
+  return typeof name === 'string' && !name.startsWith('vite:') ? name : undefined;
 };
+/** Only the project's config and plugin resolution, or an optimizer rejection, is a
+ * configuration-shaped failure; anything else (server creation, the shell, the loopback
+ * bind) keeps the plain loading failure. The phase alone cannot decide it: Vite surfaces
+ * the same failure from the try below, from the custom logger, or as an unhandled
+ * rejection, before or after `ready`, so every path classifies through this one function.
+ * The optimizer gets its own Diagnostic because it rejects installed dependencies too,
+ * so the project's `vite.config.ts` is not necessarily at fault. */
+let resolvingConfig = true;
+const failed = (error: unknown) => {
+  if (viteOptimizerFailure(error)) return optimizerFailure(configPath);
+  const name = failureName(error);
+  return resolvingConfig || name !== undefined
+    ? configFailure(name ?? 'configuration', configPath)
+    : loadingFailure('configuration');
+};
+const report = (error: unknown) => send({ type: 'failure', error: failed(error) });
+// A project setting can crash Vite inside its own async context (the dependency
+// optimizer, for example) without ever reaching the try below. The listeners below stop
+// Node from printing the cause and exiting, so print it to the inherited stderr and
+// report it: the caller would otherwise only see the generic service-exit Diagnostic.
+// The guard covers the child's whole life, so configuration attribution needs a real
+// marker — the config phase, the optimizer's banner, a plugin name or a config key —
+// and any other crash keeps the plain loading Diagnostic.
+const crashed = (error: unknown) => {
+  console.error(error);
+  send({ type: 'failure', error: failed(error) }, () => process.disconnect?.());
+};
+process.on('uncaughtException', crashed);
+process.on('unhandledRejection', crashed);
 try {
   const vite = await import('vite');
   adapter.assertIntercepted();
@@ -82,9 +107,7 @@ try {
   );
   configPath = loaded?.path ?? configPath;
   const config = loaded?.config ?? {};
-  validateConfig(config, input.projectRoot);
   let enforceOwned: (() => void) | undefined;
-  const validateEnvironments = new Map<string, ReturnType<typeof environmentConfigValidator>>();
   const resolved = await vite.resolveConfig(
     {
       ...config,
@@ -92,19 +115,6 @@ try {
       root: resolve(input.projectRoot, config.root ?? '.'),
       mode: 'development',
       plugins: [
-        {
-          name: 'motion-kit-loading-environment-baseline',
-          enforce: 'pre',
-          configEnvironment: {
-            order: 'pre',
-            handler(name, environment) {
-              validateEnvironments.set(
-                name,
-                environmentConfigValidator(environment, input.projectRoot),
-              );
-            },
-          },
-        },
         loadingPlugin(entry),
         ...(await namedPlugins(config.plugins ?? [], report)),
         {
@@ -114,7 +124,6 @@ try {
           config: {
             order: 'post',
             handler(final) {
-              validateConfig(final, input.projectRoot);
               const react = reactResolution(input.projectRoot, final);
               const root = resolve(input.projectRoot, final.root ?? '.');
               return {
@@ -127,7 +136,7 @@ try {
                 esbuild: { jsx: 'automatic', ...final.esbuild },
                 resolve: {
                   ...final.resolve,
-                  alias: react.aliases,
+                  alias: [...reservedAliases(entry), ...react.aliases],
                   dedupe: withReactDedupe(final.resolve?.dedupe ?? []),
                 },
                 optimizeDeps: { ...final.optimizeDeps, entries: [entry], include: react.include },
@@ -152,14 +161,6 @@ try {
               };
             },
           },
-          configEnvironment: {
-            order: 'post',
-            handler(name, environment) {
-              const validate = validateEnvironments.get(name);
-              if (validate === undefined) throw new LoadingConfigError('environments');
-              validate(environment);
-            },
-          },
           transform: {
             order: 'pre',
             handler(code, id) {
@@ -170,12 +171,6 @@ try {
                 if (code.split(connect).length !== 2)
                   throw new LoadingConfigError('bundled Vite client adapter');
                 return code.replace(connect, '');
-              }
-              try {
-                checkPreprocessorFile(id, input.projectRoot);
-              } catch (error) {
-                report(error);
-                throw error;
               }
               return undefined;
             },
@@ -199,7 +194,6 @@ try {
         customLogger: resolved.customLogger,
         clearScreen: resolved.clearScreen,
       };
-      const validateResolved = resolvedConfigValidator(resolved, input.projectRoot);
       const environmentNames = Object.keys(resolved.environments);
       const aliases = resolved.resolve.alias.map((alias) => ({ ...alias }));
       const allow = [...resolved.server.fs.allow];
@@ -236,13 +230,15 @@ try {
           client.optimizeDeps.entries = [entry];
           client.optimizeDeps.include = include;
         }
-        validateResolved();
       };
     },
   );
   // Public Vite API accepts an already-resolved configuration without rerunning
   // hooks. Enforce before it creates HTTP/WebSocket servers or middleware.
   enforceOwned?.();
+  // Config and plugin resolution is over; a plugin hook that still throws is named
+  // precisely, but an unnamed later failure is no longer a configuration failure.
+  resolvingConfig = false;
   const server = await vite.createServer(resolved);
   const base = server.config.base;
   const http = createHttpServer((request, response) => {

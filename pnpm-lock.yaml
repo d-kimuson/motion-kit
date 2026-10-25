@@ -174,9 +174,6 @@ importers:
       playwright:
         specifier: 1.64.1
         version: 1.64.1
-      semver:
-        specifier: 7.7.3
-        version: 7.7.3
       vite:
         specifier: 7.3.7
         version: 7.3.7(@types/node@26.6.5)
@@ -202,9 +199,6 @@ importers:
       '@types/react-dom':
         specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
-      '@types/semver':
-        specifier: 7.7.1
-        version: 7.7.1
       '@types/three':
         specifier: 0.186.0
         version: 0.186.0
@@ -1049,9 +1043,6 @@ packages:
 
   '@types/react@19.3.0':
     resolution: {integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==}
-
-  '@types/semver@7.7.1':
-    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/stats.js@0.17.4':
     resolution: {integrity: sha512-jIBvWWShCvlBqBNIZt0KAshWpvSjhkwkEu4ZUcASoAvhmrgAUI2t1dXrjSL4xXVLB4FznPrIsX3nKXFl/Dt4vA==}
@@ -2589,8 +2580,6 @@ snapshots:
   '@types/react@19.3.0':
     dependencies:
       csstype: 3.2.3
-
-  '@types/semver@7.7.1': {}
 
   '@types/stats.js@0.17.4': {}
 

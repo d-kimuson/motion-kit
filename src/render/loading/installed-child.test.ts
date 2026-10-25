@@ -16,7 +16,7 @@ it('boots the supervised source package from node_modules rather than relying on
   cpSync(new URL('../../', import.meta.url), join(installed, 'src'), { recursive: true });
   writeFileSync(join(installed, 'package.json'), '{"name":"@kimuson/motion-kit","type":"module"}');
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
-  for (const name of ['react', 'react-dom', 'zod', 'vite', 'semver'])
+  for (const name of ['react', 'react-dom', 'zod', 'vite'])
     symlinkSync(dirname(require.resolve(`${name}/package.json`)), join(root, 'node_modules', name));
   writeFileSync(join(root, 'entry.tsx'), 'export const compositions=undefined;');
   const child = fork(

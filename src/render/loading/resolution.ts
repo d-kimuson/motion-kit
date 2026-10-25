@@ -1,11 +1,16 @@
-import type { Plugin, UserConfig } from 'vite';
+import type { Alias, AliasOptions, Plugin, UserConfig } from 'vite';
 
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { normalizeAliases } from './config-validation.ts';
 import { bootstrapId, entryId, entrySource } from './entry-source.ts';
+
+const isAliasArray = (value: AliasOptions): value is readonly Alias[] => Array.isArray(value);
+const normalizeAliases = (aliases: AliasOptions = {}): readonly Alias[] =>
+  isAliasArray(aliases)
+    ? aliases
+    : Object.entries(aliases).map(([find, replacement]) => ({ find, replacement }));
 
 // The loading plugin aliases the public package entries to files on disk. In the
 // source tree (and the installed-child test's copied src/) those are the `.ts`
@@ -20,6 +25,18 @@ export const packageEntry = builtRoot
 export const browserEntry = builtRoot
   ? join(dirname(fileURLToPath(import.meta.url)), 'browser.js')
   : fileURLToPath(new URL('../../core/runtime/browser-entry.ts', import.meta.url));
+/** Ids the loading plugin owns. Vite's alias plugin runs before `enforce: 'pre'` plugins,
+ * so a project alias for these would shadow the bootstrap instead of the other way round.
+ * They are prepended to `resolve.alias` so motion-kit's reserved ids win over a conflicting
+ * project alias, without rejecting the project's config. The user entry is reserved too:
+ * `entrySource()` imports it by id, so a project alias must not swap the entry module. */
+export const reservedAliases = (entry: string): readonly Alias[] => [
+  { find: /^@kimuson\/motion-kit\/browser$/, replacement: browserEntry },
+  { find: /^@kimuson\/motion-kit$/, replacement: packageEntry },
+  { find: /^motion-kit$/, replacement: packageEntry },
+  { find: /^virtual:motion-kit-entry$/, replacement: `\u0000${entryId}` },
+  { find: /^virtual:motion-kit-user-entry$/, replacement: entry },
+];
 export const loadingPlugin = (entry: string): Plugin => ({
   name: 'motion-kit-loading',
   enforce: 'pre',
