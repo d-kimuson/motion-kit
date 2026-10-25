@@ -4,7 +4,7 @@ An agent-first framework for programmatic video. Scenes are React/TSX components
 deterministic timeline, every frame is a pure function of time, and the render pipeline
 captures frames in Chromium through Playwright and encodes them with FFmpeg. A CLI and
 structured diagnostics let a coding agent render a Composition and read any failure without a
-GUI. motion-kit is an MIT alternative to Remotion, published as `@kimuson/motion-kit`.
+GUI. motion-kit is an MIT alternative to Remotion, named `@kimuson/motion-kit`.
 
 ## Status
 
@@ -67,7 +67,7 @@ stdout; without it, the same data is printed as a short human summary. `node dis
 
 ```bash
 # Capture one frame as a PNG.
-motion-kit frame <entry> [--composition <id>] --frame <n> --out <png>
+motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
 
 # Render a whole Composition: an .mp4 target is encoded video, any other target is PNG frames.
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--json]
@@ -95,7 +95,8 @@ envelope: it writes one line to stderr and exits `130` (`SIGINT`), `143` (`SIGTE
 
 ## Package surface
 
-The published package has one subpath per context, and only the three below ship today:
+Each context gets its own subpath, with `core` as the package root, and the browser bootstrap
+gets `/browser`; only the three below are exported today:
 
 - `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
   timeline hooks (`useFrame`, `useTime`), `Sequence`, `TransitionSeries`, `useAsset`.
