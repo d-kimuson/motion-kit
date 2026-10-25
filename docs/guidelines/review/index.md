@@ -9,6 +9,14 @@ The single source of truth for reviewing a change. Internal reviews (`docs/guide
 - Do not raise what lint, type checking, or tests enforce; those are checked mechanically.
 - For each finding, give the location and either the problem it causes or the rule it breaks.
 
+## Precedence
+
+Text can disagree; the newer wins: (a) a `DECIDED:` answer or a section marked "Product owner ..." on the task, newest first; (b) accepted ADRs and Design Docs; (c) `docs/tmp/design.md`; (d) everything else.
+
+- Check a finding that cites an ADR or Design Doc sentence against the task first. If a newer product owner section supersedes that sentence, the finding is "doc needs amending", not "code must change", and the change is not widened for it.
+- Do not raise a finding that models a hostile plugin, hostile config, or hostile composition as P1/P2: the project's config and plugins are trusted code (Trust model in `docs/contexts/render/CONTEXT.md`).
+- The implementer's side, the reviewer prompt, and the two-round limit are in `docs/guidelines/auto-pilot.md` (Precedence when documents disagree); recording an amendment on an ADR is in `docs/guidelines/writing/adr.md`.
+
 ## Patterns
 
 Pick the patterns that apply from the content of the change.

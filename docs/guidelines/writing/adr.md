@@ -7,6 +7,7 @@ An Architecture Decision Record captures a decision that is hard to reverse or t
 - Cross-context: `docs/decisions/YYYYMMDD-<name>.<status>.md`.
 - One context: `docs/contexts/<context>/adr/YYYYMMDD-<name>.<status>.md`.
 - `<status>` is one of `proposed`, `accepted`, `rejected`, `deprecated`, `superseded`. Change the status by renaming the file; a superseded ADR links to its successor in `Consequences`.
+- When a newer product owner decision on a task supersedes an accepted ADR, amend it: a status/history line with the date and the task key, plus the changed paragraph (`docs/guidelines/auto-pilot.md`, Precedence when documents disagree).
 
 ## Template
 
