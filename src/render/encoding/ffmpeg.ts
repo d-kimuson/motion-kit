@@ -271,7 +271,13 @@ const pump = async (options: {
       stop_ = 'capture-failure';
       break;
     }
-    if (!(await write(frame.png))) break;
+    // A stalled reader must not swallow the abort: race the write against the same stop.
+    const wrote = await Promise.race<boolean | 'stop'>([write(frame.png), stop]);
+    if (wrote === 'stop') {
+      stop_ = aborted() ? 'aborted' : 'child-gone';
+      break;
+    }
+    if (!wrote) break;
     encodedFrames += 1;
     diagnostics.push(...frame.diagnostics);
     request.onProgress?.({ encodedFrames, frameCount: request.frameCount });

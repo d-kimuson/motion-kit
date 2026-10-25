@@ -91,7 +91,7 @@ type FakeVariant = {
   /** Whether `-encoders` lists libx264. */
   readonly libx264?: boolean;
   /** What the encode invocation does after draining stdin. */
-  readonly encode?: 'ok' | 'fail' | 'empty';
+  readonly encode?: 'ok' | 'fail' | 'empty' | 'stall';
 };
 
 /**
@@ -118,13 +118,20 @@ esac
 echo encode >> "$log"
 last=""
 for argument in "$@"; do last="$argument"; done
-cat > /dev/null
+${
+  variant.encode === 'stall'
+    ? // A reader that never drains stdin and never exits, so a write stays blocked.
+      `exec sleep 60`
+    : 'cat > /dev/null'
+}
 ${
   variant.encode === 'fail'
     ? `printf 'boom: the encoder exploded\\n' >&2\nexit 1`
     : variant.encode === 'empty'
       ? 'exit 0'
-      : `printf 'fake-mp4-bytes' > "$last"`
+      : variant.encode === 'stall'
+        ? ''
+        : `printf 'fake-mp4-bytes' > "$last"`
 }
 `;
   const path = join(directory, 'ffmpeg');
@@ -434,6 +441,31 @@ describe('FfmpegEncoder.encode', () => {
     expect(outcome).toMatchObject({ ok: true, value: { diagnostics: [warning] } });
     expect(existsSync(output)).toBe(true);
   });
+
+  it('observes a caller cancellation while a stdin write is blocked', async () => {
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+      encode: 'stall',
+    });
+    const encoder = await openEncoder(binary);
+    const output = outputPath();
+    const controller = new AbortController();
+    // Larger than the pipe buffer, so the first write never completes against a stalled reader.
+    const png = Buffer.alloc(512 * 1024, 7);
+    const frames = asyncIterableOf<FrameCaptureResult>(
+      Array.from({ length: 4 }, (_, index) => ({
+        ok: true as const,
+        value: { frame: index, width: 64, height: 64, png, diagnostics: [] },
+      })),
+    );
+    const pending = encoder.encode(
+      request({ frames, frameCount: 4, output, signal: controller.signal }),
+    );
+    setTimeout(() => controller.abort(), 100);
+    expect(await pending).toEqual({ ok: false, aborted: true });
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+  }, 10_000);
 
   it('kills the child, removes the sibling and aborts on a caller cancellation', async () => {
     const binary = fakeFfmpeg({
