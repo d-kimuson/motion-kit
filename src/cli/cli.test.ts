@@ -137,12 +137,15 @@ const assertValidEnvelope = (result: RunResult): Envelope => {
   return envelope;
 };
 
-/** Polls a filesystem fact a child process produces; a render has no other progress signal. */
-const waitFor = async (ready: () => boolean, timeoutMs: number): Promise<void> => {
+/**
+ * Polls a filesystem fact a child process produces; a render has no other progress signal. `what`
+ * names that fact, so a timeout says what never happened instead of guessing a route.
+ */
+const waitFor = async (ready: () => boolean, timeoutMs: number, what: string): Promise<void> => {
   const started = currentDate().getTime();
   while (!ready()) {
     if (currentDate().getTime() - started > timeoutMs)
-      throw new Error('the render never reached the encoder');
+      throw new Error(`the run never produced ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 };
@@ -425,57 +428,78 @@ describe('motion-kit CLI', () => {
     }
   });
 
-  it('stops a SIGINT render with no target, no .part sibling and no encoder child', async () => {
-    // A stand-in binary that never finishes the encode, so the run is stopped mid-render.
-    const fake = mkdtempSync(join(tmpdir(), 'motion-kit-signal-ffmpeg-'));
-    const encoderPid = join(fake, 'encode.pid');
-    writeFileSync(
-      join(fake, 'ffmpeg'),
-      `#!/bin/sh
-case "$1" in
-  -version) printf 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers\\n'; exit 0 ;;
-  -hide_banner) printf 'Encoders:\\n V....D libx264              libx264 H.264 / AVC\\n'; exit 0 ;;
-esac
-printf '%s' "$$" > "${encoderPid}"
-exec sleep 30
-`,
-      { mode: 0o755 },
-    );
-    const output = join(outputRoot, 'interrupted.mp4');
-    const child = spawn(
-      process.execPath,
-      [bin, 'render', 'entry.ts', '--composition', 'one', '--out', output, '--json'],
+  it('stops one SIGINT with exactly the route’s own aborted line and no leftovers', async () => {
+    // The first signal is the caller's cancellation, not a death by signal: the run ends its own
+    // way, on either route, and says once what that route actually left. Both routes are checked
+    // because the sentence differs: the mp4 route produced nothing, while the frames route keeps
+    // the PNGs it already wrote and stops before the manifest that would claim the sequence whole.
+    const fake = mkdtempSync(join(tmpdir(), 'motion-kit-single-signal-'));
+    // The stand-in never finishes the encode and ignores `SIGTERM`, so the run is stopped with its
+    // temporary sibling on disk and has to wait out its bounded grace before the child is gone.
+    const encoderPid = standInEncoder(fake);
+    const video = join(outputRoot, 'interrupted.mp4');
+    const frames = join(outputRoot, 'interrupted-frames');
+    const routes = [
       {
-        cwd: projectRoot,
-        env: { ...process.env, PATH: `${fake}:${process.env['PATH'] ?? ''}` },
-      },
-    );
-    let stdout = '';
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    try {
-      await waitFor(
-        () =>
+        args: ['render', 'entry.ts', '--composition', 'one'],
+        target: video,
+        what: 'the encoder and its temporary sibling',
+        ready: (): boolean =>
           existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
-        60_000,
-      );
-      child.kill('SIGINT');
-      const code = await new Promise<number | null>((resolve) => {
-        child.once('exit', (exitCode) => resolve(exitCode));
-      });
-      expect(code).toBe(130);
-      // No envelope was fabricated for the cancellation, and nothing was left behind.
-      expect(stdout).toBe('');
-      expect(existsSync(output)).toBe(false);
-      expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
-      expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
+        said: 'render aborted; no output was produced',
+        left: (): void => {
+          expect(existsSync(video)).toBe(false);
+          expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
+          // A direct child of the run: the cancellation killed it and waited for it to go.
+          expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
+        },
+      },
+      {
+        args: ['render', 'entry-long.tsx', '--composition', 'long'],
+        target: frames,
+        what: 'the first PNG of the sequence',
+        ready: (): boolean =>
+          existsSync(frames) && readdirSync(frames).some((name) => name.endsWith('.png')),
+        said: `render aborted; any PNG frames already written remain in ${frames}; no manifest.json was written`,
+        left: (): void => {
+          // The line says the written frames remain, so they had better be there.
+          expect(
+            readdirSync(frames).filter((name) => name.endsWith('.png')).length,
+          ).toBeGreaterThan(0);
+          expect(existsSync(join(frames, 'manifest.json'))).toBe(false);
+        },
+      },
+    ];
+    try {
+      for (const route of routes) {
+        const run = spawnRun([...route.args, '--out', route.target, '--json'], {
+          PATH: `${fake}:${process.env['PATH'] ?? ''}`,
+        });
+        try {
+          await waitFor(route.ready, 60_000, route.what);
+          // The run owns children while it is in flight, and owes them a death either way.
+          const owned = childrenOf(run.child.pid ?? 0);
+          expect(owned.length).toBeGreaterThan(0);
+
+          run.child.kill('SIGINT');
+          // A code rather than a death by signal: the run ended through its own cleanup.
+          expect(await run.exit).toEqual({ code: 130, signal: null });
+          // No envelope was fabricated for the cancellation, and the line appears exactly once.
+          expect(run.stdout()).toBe('');
+          expect(abortedLines(run.stderr())).toEqual([route.said]);
+          route.left();
+          // Nothing the run started outlives it: the encoder, the loading service and the browser.
+          await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
+          expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
+        } finally {
+          if (run.child.exitCode === null && run.child.signalCode === null)
+            run.child.kill('SIGKILL');
+        }
+      }
     } finally {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
       rmSync(fake, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 180_000);
 
   it('keeps the cancellation contract when another SIGINT listener exits the process', async () => {
     // A library that launches a child process can take SIGINT over for it:
@@ -554,6 +578,7 @@ process.on('newListener', (event) => {
         () =>
           existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
         60_000,
+        'the encoder and its temporary sibling',
       );
       // The run owns an encoder and a loading service while it is in flight.
       const running = child.pid;
@@ -576,7 +601,7 @@ process.on('newListener', (event) => {
       expect(existsSync(output)).toBe(false);
       expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
       // Nothing the run started outlives it: the encoder, the loading service and the browser.
-      await waitFor(() => owned.every(childGone), 10_000);
+      await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
       expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
     } finally {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -584,55 +609,63 @@ process.on('newListener', (event) => {
     }
   }, 120_000);
 
-  it('ends a second SIGINT at once, through the covers, with no .part sibling left', async () => {
-    // `process.once` used to hand a second signal to Node's default disposition, which terminates
-    // the process without running a single `exit` listener: the encoder's temporary sibling and
-    // its child outlived the run. The second signal now runs the synchronous covers and leaves.
-    const fake = mkdtempSync(join(tmpdir(), 'motion-kit-second-signal-'));
-    const encoderPid = standInEncoder(fake);
-    const output = join(outputRoot, 'second-signal.mp4');
-    const run = spawnRun(
-      ['render', 'entry.ts', '--composition', 'one', '--out', output, '--json'],
-      {
-        PATH: `${fake}:${process.env['PATH'] ?? ''}`,
-      },
-    );
-    try {
-      await waitFor(
-        () =>
-          existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
-        60_000,
+  // Every gap a second `Ctrl-C` really arrives at, all of them inside the mp4 route's cleanup
+  // window: the stand-in ignores the encoder's `SIGTERM`, so the run stays alive with its
+  // temporary sibling on disk until its 2 s grace expires. `process.once` used to hand a second
+  // signal to Node's default disposition in all three cases, which terminates the process without
+  // running a single `exit` listener: the sibling and its child outlived the run.
+  it.each([5, 120, 1_000])(
+    'ends a second SIGINT %ims into the cleanup window at once, through the covers, with no .part sibling left',
+    async (gap) => {
+      const fake = mkdtempSync(join(tmpdir(), `motion-kit-second-signal-${gap}-`));
+      const encoderPid = standInEncoder(fake);
+      const output = join(outputRoot, `second-signal-${gap}.mp4`);
+      const run = spawnRun(
+        ['render', 'entry.ts', '--composition', 'one', '--out', output, '--json'],
+        {
+          PATH: `${fake}:${process.env['PATH'] ?? ''}`,
+        },
       );
-      const owned = childrenOf(run.child.pid ?? 0);
-      expect(owned.length).toBeGreaterThan(0);
-      run.child.kill('SIGINT');
-      // Inside the mp4 route's cleanup window: the stand-in still ignores the encoder's SIGTERM,
-      // so the run is alive with its sibling on disk when the second signal arrives.
-      await new Promise((resolve) => setTimeout(resolve, 120));
-      expect(run.child.exitCode).toBe(null);
-      expect(run.child.signalCode).toBe(null);
-      expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).not.toEqual([]);
-      const secondSignalAt = currentDate().getTime();
-      run.child.kill('SIGINT');
+      try {
+        await waitFor(
+          () =>
+            existsSync(encoderPid) &&
+            readdirSync(outputRoot).some((name) => name.includes('.part')),
+          60_000,
+          'the encoder and its temporary sibling',
+        );
+        const owned = childrenOf(run.child.pid ?? 0);
+        expect(owned.length).toBeGreaterThan(0);
+        run.child.kill('SIGINT');
+        await new Promise((resolve) => setTimeout(resolve, gap));
+        // The first signal's cleanup is still in flight, so the covers are all that can run.
+        expect(run.child.exitCode).toBe(null);
+        expect(run.child.signalCode).toBe(null);
+        expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).not.toEqual([]);
+        const secondSignalAt = currentDate().getTime();
+        run.child.kill('SIGINT');
 
-      const ended = await run.exit;
-      // A code rather than a death by signal: the second signal went through the covers instead
-      // of the default disposition, so nothing was skipped.
-      expect(ended).toEqual({ code: 130, signal: null });
-      // Prompt: it does not wait out the 2 s the stand-in's SIGTERM grace would take.
-      expect(currentDate().getTime() - secondSignalAt).toBeLessThan(1_000);
-      expect(run.stdout()).toBe('');
-      expect(abortedLines(run.stderr())).toEqual(['render aborted; no output was produced']);
-      expect(existsSync(output)).toBe(false);
-      expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
-      expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
-      await waitFor(() => owned.every(childGone), 10_000);
-      expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
-    } finally {
-      if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill('SIGKILL');
-      rmSync(fake, { recursive: true, force: true });
-    }
-  }, 120_000);
+        const ended = await run.exit;
+        // A code rather than a death by signal: the second signal went through the covers instead
+        // of the default disposition, so nothing was skipped.
+        expect(ended).toEqual({ code: 130, signal: null });
+        // Prompt: it does not wait out the 2 s the stand-in's SIGTERM grace would take.
+        expect(currentDate().getTime() - secondSignalAt).toBeLessThan(1_000);
+        expect(run.stdout()).toBe('');
+        // Exactly one line, and it is true of this route: no target, no sibling, no survivor.
+        expect(abortedLines(run.stderr())).toEqual(['render aborted; no output was produced']);
+        expect(existsSync(output)).toBe(false);
+        expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
+        expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
+        await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
+        expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
+      } finally {
+        if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill('SIGKILL');
+        rmSync(fake, { recursive: true, force: true });
+      }
+    },
+    180_000,
+  );
 
   it('ends a second SIGINT at once on the frames route too', async () => {
     // The same signal path on the route whose cleanup is short: a second SIGINT must still leave
@@ -646,6 +679,7 @@ process.on('newListener', (event) => {
       await waitFor(
         () => existsSync(target) && readdirSync(target).some((name) => name.endsWith('.png')),
         60_000,
+        'the first PNG of the sequence',
       );
       run.child.kill('SIGINT');
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -684,6 +718,7 @@ process.on('newListener', (event) => {
         () =>
           existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
         60_000,
+        'the encoder and its temporary sibling',
       );
       const owned = childrenOf(run.child.pid ?? 0);
       const encoder = Number(readFileSync(encoderPid, 'utf8'));
@@ -702,7 +737,7 @@ process.on('newListener', (event) => {
       expect(existsSync(output)).toBe(false);
       expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
       // Nothing the run started outlives it, the loading service's own process group included.
-      await waitFor(() => owned.every(childGone), 10_000);
+      await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
       expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
     } finally {
       if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill('SIGKILL');
