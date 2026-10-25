@@ -2,7 +2,7 @@
   "name": "@kimuson/motion-kit",
   "version": "0.0.0",
   "private": true,
-  "description": "A type-safe toolkit for motion timing primitives.",
+  "description": "An agent-first framework for programmatic video.",
   "license": "MIT",
   "bin": {
     "motion-kit": "./dist/cli.js"
