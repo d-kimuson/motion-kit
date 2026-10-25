@@ -139,6 +139,17 @@ const failure = (diagnostics: readonly Diagnostic[]): EnvelopeOutcome => ({
 
 const abortedOutcome: CommandOutcome = { ok: false, aborted: true };
 
+/**
+ * Records that the run's outcome is final: the artifact is on disk, or the failure is.
+ *
+ * Only the outcome is settled here, not the run: the renderer's teardown follows and takes far
+ * longer than the commit did (a page-dispose deadline, a service-dispose race, a browser kill).
+ * While that teardown runs, the aborted line would deny an output that already exists, so the
+ * caller's report cover is released the moment an outcome is decided, before the awaits.
+ * Aborted control flow is not decided — that line is exactly what its caller needs.
+ */
+type Decide = (outcome: CommandOutcome) => CommandOutcome;
+
 const rendererFailure = (
   outcome: Extract<RenderOutcome<Renderer>, { ok: false }>,
 ): CommandOutcome =>
@@ -192,7 +203,11 @@ const openRenderer = async (args: RenderArgs | FrameArgs, signal: AbortSignal) =
   return { ok: true as const, renderer: renderer.value };
 };
 
-const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<CommandOutcome> => {
+const runRender = async (
+  args: RenderArgs,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
   // Checked before the browser exists, so a run cancelled while it started does no work.
   if (signal.aborted) return abortedOutcome;
   const opened = await openRenderer(args, signal);
@@ -201,7 +216,7 @@ const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<Command
   try {
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
-    if (!rate.ok) return failure([rate.error]);
+    if (!rate.ok) return decide(failure([rate.error]));
     const outAbsolute = resolve(process.cwd(), args.out);
     // The target's extension selects the format: an `.mp4` file is encoded video, and any
     // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
@@ -210,12 +225,14 @@ const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<Command
       // The same signal reaches the encoder, which kills its child and removes the sibling.
       const encoded = await renderVideo({ composition: renderer, output: outAbsolute, signal });
       if (!encoded.ok)
-        return 'aborted' in encoded
-          ? abortedOutcome
-          : 'error' in encoded
-            ? failure([...encoded.error])
-            : failure([internalUnexpected()]);
-      return {
+        return decide(
+          'aborted' in encoded
+            ? abortedOutcome
+            : 'error' in encoded
+              ? failure([...encoded.error])
+              : failure([internalUnexpected()]),
+        );
+      return decide({
         ok: true,
         // The frames route forwards each frame's warnings; the mp4 route reports the same
         // warnings the receipt carried, so a Tier C Composition is flagged on both.
@@ -232,7 +249,7 @@ const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<Command
           frameCount: encoded.value.frameCount,
           durationSeconds: encoded.value.durationSeconds,
         },
-      };
+      });
     }
     mkdirSync(outAbsolute, { recursive: true });
     const files: string[] = [];
@@ -244,7 +261,7 @@ const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<Command
       to: descriptor.durationInFrames,
       signal,
     })) {
-      if (!result.ok) return frameFailure(result);
+      if (!result.ok) return decide(frameFailure(result));
       const name = `frame-${String(result.value.frame).padStart(5, '0')}.png`;
       writeFileSync(join(outAbsolute, name), result.value.png);
       files.push(name);
@@ -270,7 +287,7 @@ const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<Command
         2,
       )}\n`,
     );
-    return {
+    return decide({
       ok: true,
       diagnostics,
       data: {
@@ -283,13 +300,18 @@ const runRender = async (args: RenderArgs, signal: AbortSignal): Promise<Command
         frameCount: descriptor.durationInFrames,
         durationSeconds: toSeconds(frameToTime(BigInt(descriptor.durationInFrames), rate.value)),
       },
-    };
+    });
   } finally {
+    // The outcome above is already on disk; this teardown is all that is left of the run.
     await renderer.dispose();
   }
 };
 
-const runFrame = async (args: FrameArgs, signal: AbortSignal): Promise<CommandOutcome> => {
+const runFrame = async (
+  args: FrameArgs,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
   if (signal.aborted) return abortedOutcome;
   const opened = await openRenderer(args, signal);
   if (!opened.ok) return opened.outcome;
@@ -297,12 +319,12 @@ const runFrame = async (args: FrameArgs, signal: AbortSignal): Promise<CommandOu
   try {
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
-    if (!rate.ok) return failure([rate.error]);
+    if (!rate.ok) return decide(failure([rate.error]));
     const result = await renderer.renderFrame({ frame: args.frame, signal });
-    if (!result.ok) return frameFailure(result);
+    if (!result.ok) return decide(frameFailure(result));
     const outAbsolute = resolve(process.cwd(), args.out);
     writeFileSync(outAbsolute, result.value.png);
-    return {
+    return decide({
       ok: true,
       diagnostics: [...result.value.diagnostics],
       data: {
@@ -313,7 +335,7 @@ const runFrame = async (args: FrameArgs, signal: AbortSignal): Promise<CommandOu
         width: result.value.width,
         height: result.value.height,
       },
-    };
+    });
   } finally {
     await renderer.dispose();
   }
@@ -475,12 +497,19 @@ export const runCli = async (
     process.stderr.write(`${abortedLine(checked.data)}\n`);
   };
   const releaseCover = coverOnExit(report);
+  // The route reports its own outcome as final the moment it commits (or fails for good), which is
+  // before the teardown those functions still owe: the line above must not outlive that commit, or
+  // a stop during teardown would deny an output the directory already holds.
+  const decide: Decide = (decided) => {
+    if (!('aborted' in decided)) releaseCover();
+    return decided;
+  };
   try {
     try {
       outcome =
         checked.data.command === 'render'
-          ? await runRender(checked.data, signal)
-          : await runFrame(checked.data, signal);
+          ? await runRender(checked.data, signal, decide)
+          : await runFrame(checked.data, signal, decide);
     } catch (error) {
       if (error instanceof Error && error.stack !== undefined)
         process.stderr.write(`${error.stack}\n`);
