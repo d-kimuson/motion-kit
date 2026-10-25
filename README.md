@@ -19,22 +19,11 @@ script under `spikes/<name>/`.
 
 ## Getting started
 
-In a checkout, build once and render a Composition:
-
-```bash
-pnpm install
-pnpm build
-node dist/cli.js render entry.tsx --out out.mp4
-```
-
-Rendering needs a Chromium that Playwright can launch
-(`pnpm exec playwright install chromium`), and an `.mp4` target also needs FFmpeg on `PATH`
-(see [CLI](#cli)).
-
-A registry entry (`entry.tsx` above) exports a `compositions` registry. Every import below
-ships from the package root today:
+A project's entry file exports a `compositions` registry; every import below ships from the
+package root today:
 
 ```tsx
+// entry.tsx
 import { defineComposition, defineCompositions, useFrame } from '@kimuson/motion-kit';
 import { z } from 'zod';
 
@@ -56,6 +45,18 @@ export const compositions = defineCompositions([
 `durationInFrames` and a rational `fps` fix the timeline; props come from the `zod` schema, so
 the project installs `zod` for itself.
 
+In a checkout of this repository, build once and render that entry to an MP4:
+
+```bash
+pnpm install
+pnpm build
+node dist/cli.js render entry.tsx --out out.mp4
+```
+
+Rendering needs a Chromium that Playwright can launch
+(`pnpm exec playwright install chromium`), and an `.mp4` target also needs FFmpeg on `PATH`
+(see [CLI](#cli)).
+
 ## CLI
 
 The `motion-kit` bin renders Compositions from a registry entry file. Both commands accept
@@ -73,7 +74,9 @@ motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <
 ```
 
 `--composition` may be omitted only when the registry exports exactly one Composition;
-otherwise the command fails with `cli.invalid-arguments` naming the available ids.
+otherwise the command fails with `cli.invalid-arguments` naming the available ids. End to end,
+`motion-kit render entry.tsx --out out.mp4` renders the registry in `entry.tsx` and writes the
+encoded video to `out.mp4`.
 
 `--out` selects the format: an `.mp4` file is encoded H.264, and any other target is a
 directory of PNG frames plus a `manifest.json`, reported as `"format": "frames"` in `data`.
@@ -107,7 +110,7 @@ context map](docs/CONTEXT-MAP.md) says what each will hold.
 ```bash
 pnpm install
 pnpm fix        # oxlint --fix and oxfmt
-pnpm lint       # oxlint, oxfmt --check, license allowlist, tsconfig coverage, Lean spec hygiene
+pnpm lint       # oxlint, oxfmt --check, package checks, license allowlist, tsconfig, Lean specs
 pnpm typecheck
 pnpm test
 pnpm build      # tsdown: dist/ for the published package and the CLI
