@@ -69,6 +69,8 @@ export type EncodeReceipt = {
   readonly fps: { readonly numerator: number; readonly denominator: number };
   /** Derived by the Time Module from frameCount and fps. */
   readonly durationSeconds: number;
+  /** The warnings the encoded frames carried, in frame order and unchanged. */
+  readonly diagnostics: readonly Diagnostic[];
 };
 
 /** Several Diagnostics without a second result type; cancellation aborts instead. */
@@ -91,6 +93,8 @@ export const createFfmpegEncoder: (
 ```
 
 The stream's first failed frame ends the encode: the encoder stops reading, kills the child, removes the temporary file, and forwards that frame's Diagnostics unchanged, so a capture failure is never reported as an FFmpeg failure. `FrameCaptureResult`'s third variant — `{ ok: false, aborted: true }` — is not one of those failures even when it arrives as an element of a stream the caller assembled rather than from a cancellation motion-kit itself observed: it ends the encode as aborted control flow, with no Diagnostic and never as `internal.unexpected`, exactly like the abort above (kill the child, remove the temporary sibling, return `{ ok: false, aborted: true }`). A frame whose dimensions differ from the first frame is a contract violation, not a recoverable one: the viewport is fixed for a mount, so it is reported as `internal.unexpected`. `EncodeOutcome` carries `width`, `height`, `frameCount`, and `durationSeconds` because the CLI's `mp4` variant needs them ([CLI contract `render` data](../../agent/adr/20261024-cli-output-contract.accepted.md#command-data)). The receipt's `frameCount` is the request's total, confirmed against the frames the encoder actually handed over. A shortfall must not be reported as success: when the stream ends before `frameCount` with no failed frame and no cancellation, the encoder removes the temporary file and returns `internal.unexpected`, because `frameCount` is the descriptor's `durationInFrames` and a silently short stream is a violated invariant — the same class as the dimension mismatch above — not an FFmpeg failure and not a usable result.
+
+_Amended 2026-10-25 (review):_ the receipt carries the encoded frames' Diagnostics, so a successful encode does not lose the warnings capture already produced. `EncodeReceipt.diagnostics` is the concatenation, in frame order and unchanged, of the `diagnostics` of every frame the encoder handed to the child; the CLI reports it as the `mp4` envelope's `diagnostics` exactly as the frames route reports each frame's warnings. The envelope field already exists and the contract already requires "warnings and infos on success" ([CLI contract](../../agent/adr/20261024-cli-output-contract.accepted.md#output-and-exit-codes)), so this adds no field, no schema and no `schemaVersion` change. An aborted or failed encode still carries no receipt: cancellation is aborted control flow and a failure is a Diagnostic array.
 
 **Audio has no implementation and one visible seam.** Phase 1's port is video-only; TASK-171 ("Mux audio tracks into the rendered MP4", blocked by TASK-159) adds audio, and TASK-159's job is to leave the attachment point open as the commented `audioTracks` field in `EncodeRequest` shows. The seam is the shared rational timebase §9.6 requires: `fps` and `frameCount` already describe the whole `[0, frameCount / fps)` interval, so a track added later muxes onto that same interval inside the same `encode` call and child invocation instead of inventing a second clock or a second pass. Nothing about track selection, formats, or mixing is decided here.
 

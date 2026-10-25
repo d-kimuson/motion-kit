@@ -39,6 +39,11 @@ export type EncodeReceipt = {
   readonly fps: { readonly numerator: number; readonly denominator: number };
   /** Derived by the Time Module from frameCount and fps. */
   readonly durationSeconds: number;
+  /** The warnings the captured frames carried (`seek.uncontrolled`, `layout.*`), in frame
+   * order and unchanged. A successful encode is still a successful render, and the CLI's
+   * envelope reports them: the mp4 route must not drop what the frames route forwards.
+   */
+  readonly diagnostics: readonly Diagnostic[];
 };
 
 /** Several Diagnostics without a second result type; cancellation aborts instead. */

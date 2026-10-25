@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
 import { type EncodeOutcome, type EncodeProgress, type Encoder } from './encoder.ts';
 import { createFfmpegEncoder } from './ffmpeg.ts';
@@ -59,6 +60,15 @@ const frameOf = (
   const png = pngs[index];
   if (png === undefined) throw new Error(`frame ${String(index)} is missing`);
   return { ok: true, value: { frame: index, ...size, png, diagnostics: [] } };
+};
+
+/** A captured frame carrying warnings, which is what a Tier C Composition produces. */
+const withDiagnostics = (
+  frame: FrameCaptureResult,
+  diagnostics: readonly Diagnostic[],
+): FrameCaptureResult => {
+  if (!frame.ok) throw new Error('expected a captured frame');
+  return { ok: true, value: { ...frame.value, diagnostics } };
 };
 
 /** The Encoder port only needs async iteration; a frame list is the simplest scripted source. */
@@ -400,6 +410,29 @@ describe('FfmpegEncoder.encode', () => {
     expect(errorsOf(outcome)[0]).toMatchObject({ code: 'internal.unexpected' });
     expect(existsSync(output)).toBe(false);
     expect(pathsLeftBehind(directory)).toEqual([]);
+  });
+
+  it('carries the captured warnings into the receipt of a successful encode', async () => {
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+    });
+    const encoder = await openEncoder(binary);
+    const output = outputPath();
+    const pngs = pngFrames(2);
+    const warning = {
+      code: 'seek.uncontrolled' as const,
+      severity: 'warning' as const,
+      message: 'An integration has uncontrolled time or history-dependent state.',
+      hint: 'Use a qualified absolute-time integration.',
+      location: { frame: 1 },
+    };
+    const frames = asyncIterableOf<FrameCaptureResult>([
+      frameOf(pngs, 0),
+      withDiagnostics(frameOf(pngs, 1), [warning]),
+    ]);
+    const outcome = await encoder.encode(request({ frames, frameCount: 2, output }));
+    expect(outcome).toMatchObject({ ok: true, value: { diagnostics: [warning] } });
+    expect(existsSync(output)).toBe(true);
   });
 
   it('kills the child, removes the sibling and aborts on a caller cancellation', async () => {

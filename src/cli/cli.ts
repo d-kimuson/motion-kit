@@ -179,7 +179,9 @@ const runRender = async (args: RenderArgs): Promise<CommandOutcome> => {
         return 'error' in encoded ? failure([...encoded.error]) : failure([internalUnexpected()]);
       return {
         ok: true,
-        diagnostics: [],
+        // The frames route forwards each frame's warnings; the mp4 route reports the same
+        // warnings the receipt carried, so a Tier C Composition is flagged on both.
+        diagnostics: [...encoded.value.diagnostics],
         data: {
           output: encoded.value.output,
           format: 'mp4',

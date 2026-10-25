@@ -212,6 +212,46 @@ describe('motion-kit CLI', () => {
     expect(probed).toContain('nb_frames=6');
   }, 120_000);
 
+  it('reports the captured warnings of a successful mp4 render, like the frames route', async () => {
+    const warning = { code: 'seek.uncontrolled', severity: 'warning' };
+    const video = join(outputRoot, 'tier-c.mp4');
+    const encoded = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--props',
+      '{"mode":"uncontrolled"}',
+      '--out',
+      video,
+      '--json',
+    ]);
+    expect(encoded.code).toBe(0);
+    const encodedEnvelope = assertValidEnvelope(encoded);
+    expect(encodedEnvelope.ok).toBe(true);
+    expect(encodedEnvelope.diagnostics).toHaveLength(6);
+    for (const item of encodedEnvelope.diagnostics) expect(item).toMatchObject(warning);
+    expect(encodedEnvelope.diagnostics[0]?.location?.frame).toBe(0);
+    expect(encodedEnvelope.diagnostics[5]?.location?.frame).toBe(5);
+
+    // The frames route is the reference: the same Composition, the same warnings.
+    const frames = join(outputRoot, 'tier-c-frames');
+    const rendered = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--props',
+      '{"mode":"uncontrolled"}',
+      '--out',
+      frames,
+      '--json',
+    ]);
+    expect(rendered.code).toBe(0);
+    const renderedEnvelope = assertValidEnvelope(rendered);
+    expect(renderedEnvelope.diagnostics).toEqual(encodedEnvelope.diagnostics);
+  }, 120_000);
+
   it('prints usage and exits 0 for --help', async () => {
     const result = await run(['--help']);
     expect(result.code).toBe(0);

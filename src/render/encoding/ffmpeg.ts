@@ -190,6 +190,8 @@ type PumpResult = {
   /** Why the handover stopped; `frames-end` is the only one that lets the child finish alone. */
   readonly stop: 'frames-end' | 'capture-failure' | 'aborted' | 'child-gone';
   readonly failure: readonly Diagnostic[] | undefined;
+  /** Warnings from the frames handed over, so a successful encode can report them. */
+  readonly diagnostics: readonly Diagnostic[];
 };
 
 /** Hands the PNG stream to the child and stops at the first failed frame, abort, or over-long stream. */
@@ -202,7 +204,13 @@ const pump = async (options: {
   const { child, request, stop, aborted } = options;
   const stdin = child.stdin;
   if (stdin === null)
-    return { encodedFrames: 0, size: undefined, stop: 'child-gone', failure: undefined };
+    return {
+      encodedFrames: 0,
+      size: undefined,
+      stop: 'child-gone',
+      failure: undefined,
+      diagnostics: [],
+    };
   // A broken pipe is reported through the write callback; an unhandled 'error' would throw.
   stdin.on('error', () => {});
   const iterator = request.frames[Symbol.asyncIterator]();
@@ -213,6 +221,7 @@ const pump = async (options: {
   let encodedFrames = 0;
   let size: { width: number; height: number } | undefined;
   let failure: readonly Diagnostic[] | undefined;
+  const diagnostics: Diagnostic[] = [];
   let stop_ = 'child-gone' as PumpResult['stop'];
 
   while (true) {
@@ -264,6 +273,7 @@ const pump = async (options: {
     }
     if (!(await write(frame.png))) break;
     encodedFrames += 1;
+    diagnostics.push(...frame.diagnostics);
     request.onProgress?.({ encodedFrames, frameCount: request.frameCount });
     if (encodedFrames >= request.frameCount) {
       stop_ = 'frames-end';
@@ -272,7 +282,7 @@ const pump = async (options: {
   }
   void iterator.return?.().catch(() => {});
   if (stop_ === 'frames-end') stdin.end();
-  return { encodedFrames, size, stop: stop_, failure };
+  return { encodedFrames, size, stop: stop_, failure, diagnostics };
 };
 
 const durationSecondsOf = (request: EncodeRequest): number | undefined => {
@@ -440,6 +450,7 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
     height: written.size.height,
     fps: request.fps,
     durationSeconds: seconds,
+    diagnostics: written.diagnostics,
   };
   return { ok: true, value: receipt };
 };
