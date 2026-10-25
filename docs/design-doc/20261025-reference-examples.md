@@ -60,8 +60,8 @@ examples/
 │   └── README.md
 ├── teaser/                       # same shape, no script/
 ├── chart/
-│   ├── entry.tsx                 # exports `compositions`: chart, chart-ci, chart-landscape
-│   ├── data/                     # JSON series data, one file per dataset
+│   ├── entry.tsx                 # exports `compositions`: chart, chart-ci
+│   ├── data/                     # JSON props objects, one file per dataset
 │   └── ...
 └── slideshow/
     ├── entry.tsx                 # exports `compositions`: slideshow, slideshow-landscape, slideshow-ci
@@ -69,7 +69,7 @@ examples/
     └── ...
 ```
 
-- One directory per example; the directory name is the Composition id prefix. Each entry file exports a `compositions` registry (`defineCompositions`) with exactly two or three definitions: the full Composition `<name>`, the CI Composition `<name>-ci`, and — for `chart` and `slideshow` — a second full Composition that reuses the same components at the other aspect ratio (`chart-landscape`, `slideshow-landscape`).
+- One directory per example; the directory name is the Composition id prefix. Each entry file exports a `compositions` registry (`defineCompositions`) with exactly two definitions: the full Composition `<name>` and the CI Composition `<name>-ci`. `slideshow` adds a third, `slideshow-landscape`, which reuses the same slide components at 16:9 (that is its aspect-switching axis); no other example needs a second full Composition.
 - Because every entry holds more than one Composition, `--composition <id>` is always required. There is no single-entry entry file under `examples/`.
 - `examples/<name>/README.md` states the expected look, the asset provenance, the known limitations, the exact local QA commands, and the credit lines the TASK-169 ADR requires.
 - `examples/README.md` indexes the four targets, one row each: Composition id, resolution, fps, frame count, axis, CI gate.
@@ -140,16 +140,16 @@ node dist/cli.js render examples/explainer/entry.tsx --composition explainer \
 
 - `motion-kit` is the same bin (`bin.motion-kit` → `dist/cli.js`); a reader with an installed package writes `motion-kit render …`. Under `--json` the envelope carries `data.format`, `width`, `height`, `fps`, `frameCount` and `durationSeconds`, which is how an example's smoke test asserts its own output.
 - `--out` picks the format from the extension: `.mp4` encodes H.264, anything else writes PNG frames plus `manifest.json`. There is no `--format` flag.
-- A missing entry is `cli.entry-not-found` (exit 2), an unknown `--composition` id is `cli.composition-not-found`, and invalid `--props` is `composition.props-invalid`. All three are what an example README tells the reader to expect when they get the command wrong.
+- A missing entry is `cli.entry-not-found` (exit 2), an unknown `--composition` id is `cli.composition-not-found`, `--props` that is not a JSON object string is `cli.invalid-arguments`, and valid JSON that fails the Composition's schema is `composition.props-invalid`. All four are what an example README tells the reader to expect when they get the command wrong.
 - Every render writes under `out/` at the repository root. `assets.local/` is the only other generated location.
 
 ### `explainer` — long duration, many Sequences and Transitions, subtitles against audio
 
-**Composition.** `explainer`: 1920×1080, 30 fps, `durationInFrames = ceil(totalSeconds × 30)` where `totalSeconds` comes from the script, plus a 3-second tail for the disclaimer and credits; target 180–300 seconds (5400–9000 frames). `explainer-ci`: 960×540, 60 frames.
+**Composition.** `explainer`: 1920×1080, 30 fps, `durationInFrames = frameCount(createTimelineTime(totalSeconds), { numerator: 30, denominator: 1 })` where `totalSeconds` is the script's dialogue total plus a 3-second tail for the disclaimer and credits; target 180–300 seconds (5400–9000 frames). `explainer-ci`: 960×540, 60 frames.
 
 **Structure.** Three layers, all computed from `script.ts` at module load, so the video and the data cannot disagree:
 
-1. **Slide layer** — one `TransitionSeries` from frame 0. Each script slide cue becomes a `TransitionScene`; adjacent slides get a `Transition` of 0.4 s (12 frames) with the shared `CrossFade`. The script's line durations are the timing authority, so `TransitionScene` duration for slide `i` is "the sum of its lines' seconds + the overlap with the previous slide + the overlap with the next slide"; the series total then equals the dialogue total exactly, and each crossfade straddles a slide boundary by 0.2 s.
+1. **Slide layer** — one `TransitionSeries` from frame 0. Each script slide cue becomes a `TransitionScene`; adjacent slides get a `Transition` of 0.4 s (12 frames) with the shared `CrossFade`. `TransitionScene` duration is "the sum of that slide's lines' seconds + its outgoing overlap (0.4 s, zero for the last slide)". With that rule the series total is exactly `Σ lines + Σ overlaps − Σ overlaps = Σ lines`, and slide `i` starts exactly at its first line because its predecessor's outgoing overlap is what pays for the crossfade; the overlap then runs over the first 0.4 s of slide `i`'s first line.
 2. **Subtitle layer** — one `Sequence` per line, `from` = the cumulative sum of the preceding lines' seconds, `duration` = the line's seconds. This layer has no transitions: it proves that many Sequences in one Composition keep exact timing.
 3. **Sprite layer** — the speaker's sprite for the lines in view, switched by the line's `expression`, inside its own `Sequence`s. Two characters side by side, the non-speaker dimmed to 60% opacity.
 
@@ -183,7 +183,7 @@ type Script = {
 - The voice track never becomes the timing authority. When VOICEVOX audio exists, `fetch-assets.ts` writes `assets.local/voice/durations.json` (line id → measured seconds) and `entry.tsx` prefers it over `seconds`; the timeline stays frame-derived, the audio is placed at those same times by TASK-171, and `durations.json` is generated, never committed.
 - Content rules are TASK-170's, and this document adds only the ones the video shell must enforce: the last slide is the `disclaimer` cue and stays on screen for the 3-second tail; no line names a fund, broker or allocation; the credit lines the TASK-169 ADR requires appear in the tail slide and in `README.md`.
 
-**Dependencies.** `Sequence`, `TransitionSeries` and hooks — TASK-156, TASK-154 (both in `main`). Font and image readiness — TASK-158. MP4 encoding — TASK-159. The determinism suite — TASK-160. The CLI — TASK-161. Script content and schema — TASK-170. Voice and music muxing — TASK-171. Subtitle easing with `spring`/`interpolate` — TASK-152/155 plus `/motion` (Phase 2). Font tokens and typography — theme and presets (Phase 2/3). A first version needs nothing beyond `main`; every later phase tightens it without changing the script format.
+**Dependencies.** `Sequence`, `TransitionSeries` and the hooks — TASK-156 and TASK-154 (already in `src` on `main`). Font and image readiness — TASK-158. MP4 encoding — TASK-159. The determinism suite — TASK-160. The CLI — TASK-161. Script content and schema — TASK-170. Voice and music muxing — TASK-171. Subtitle easing with `spring`/`interpolate` — TASK-152/155 plus `/motion` (Phase 2). Font tokens and typography — theme and presets (Phase 2/3). A first version needs nothing beyond `main`; every later phase tightens it without changing the script format.
 
 **Assets.** The script is authored and committed. VOICEVOX WAVs for Zundamon and Shikoku Metan are generated by `fetch-assets.ts` against a local VOICEVOX engine (`POST /audio_query`, then `POST /synthesis`, engine version recorded in the manifest) into `assets.local/voice/`, never committed. Sprites are third-party 立ち絵 sets fetched the same way into `assets.local/sprites/`. The Japanese font is an OFL family (Noto Sans JP or BIZ UDPGothic). All three are TASK-169's to allow or forbid; until that ADR lands the example renders with `assets: 'placeholder'` (a flat silhouette sprite drawn as inline SVG, the system sans-serif stack, no audio) and commits no third-party file.
 
@@ -195,7 +195,7 @@ type Script = {
 
 **Composition.** `teaser`: 1920×1080, 30 fps, 450–900 frames (15–30 s). `teaser-ci`: 960×540, 60 frames (the opening word plus the first two transitions).
 
-**Structure.** 8–12 words, one to three on screen at a time, each entering with a spring and leaving with an easing curve; a `Stagger` of 8–20 small elements (dots, rules, letter masks) behind the type; every colour, font size and duration read from a Theme token once Phase 2 lands. Motion is dense on purpose: at least one element is in motion in every frame, and several springs retarget mid-flight, which is what makes the determinism test meaningful.
+**Structure.** 8–12 words, one to three on screen at a time, each entering with a spring and leaving with an easing curve; a `Stagger` of 8–20 small elements (dots, rules, letter masks) behind the type; every colour, font size and duration read from a Theme token once Phase 2 lands. Motion is dense on purpose: at least one element is in motion in every frame, and several springs change target mid-flight (the `retarget` case once `/motion` exposes it), which is what makes the determinism test meaningful.
 
 **Dependencies.** The final form needs `/motion` (`Animate`, `Reveal`, `Stagger`, spring and easing) and `/theme` — both Phase 2, and neither has a Backlog task yet; TASK-152 (pure motion) and TASK-155 (closed-form spring) are the parts that exist. Typography and transition presets are Phase 3. The Phase 1 version of the teaser is therefore plain arithmetic on `useTime()` with hard-coded values, and the example task that lands after Phase 2 replaces it; the Composition ids and the acceptance look stay.
 
@@ -207,7 +207,7 @@ type Script = {
 
 ### `chart` — schema-first props, SVG, animated numbers, regenerate from other data
 
-**Composition.** `chart`: 1920×1080, 30 fps, 600 frames (20 s). `chart-landscape` is not needed (the default is 16:9); instead the entry carries `chart-ci` at 960×540, 60 frames. A second dataset is a `--props` argument, never a second Composition.
+**Composition.** `chart`: 1920×1080, 30 fps, 600 frames (20 s). It is already 16:9, so it has no second aspect variant; the entry carries `chart-ci` at 960×540, 60 frames. A second dataset is a `--props` argument, never a second Composition.
 
 **Props schema** (`examples/chart/entry.tsx`, in the Composition registry, so the page validates it):
 
@@ -221,19 +221,18 @@ const chartProps = z.object({
   title: z.string().default('30 years of an index'),
   unit: z.string().default('index points'),
   source: z.string().default(''), // rendered under the chart; empty renders nothing
-  fromYear: z.int().default(1995),
-  toYear: z.int().default(2024),
   series: z.array(seriesSchema), // no default: always supplied by data or --props
 });
 ```
 
 - `series` has no schema default, so the entry's own `data/index-30y.json` is passed as `--props` in the documented command; a reader who omits `--props` gets `composition.props-invalid` with the failing path, which is the schema-first behaviour the example exists to demonstrate. The example README documents both commands.
+- Each file under `examples/chart/data/` is a complete props object (`{ "title": …, "source": …, "series": […] }`), not a bare array, so `--props "$(cat examples/chart/data/index-30y.json)"` works verbatim and the from/to year range is derived from the points rather than declared twice.
 - Rendering is inline `<svg>` written as JSX: axes, gridlines, a polyline per series, a marker per point, and a value label that counts up from 0 to the final value over the last 1.5 s. No chart library, so no dependency and no nondeterminism.
 - Number formatting is a small local function, not `Intl.NumberFormat`: ICU data differs between a developer machine and the CI runner, and the determinism suite compares PNG bytes.
 
 **Dependencies.** Schema-first props through the registry (TASK-154) and `--props` through the CLI (TASK-161) exist today; SVG and DOM text are Phase 1 rendering features covered by the existing determinism fixtures (`svg-path`, `dom-text`). `interpolate`/`easing` for the draw-on and count-up curves arrive with `/motion` (TASK-152, Phase 2); until then the curves are `Math.min(1, t / duration)`.
 
-**Assets.** One committed JSON file per dataset under `examples/chart/data/`, authored for the repository, with the source recorded in a `source` prop string and in the example README. Which public series may be used, and how it is cited, is an open question for the owner (below); the placeholder dataset is a synthetic series that behaves like an index (30 yearly closes) so the example is never blocked.
+**Assets.** One committed props JSON file per dataset under `examples/chart/data/`, authored for the repository, with the source recorded in its `source` string and in the example README. Which public series may be used, and how it is cited, is an open question for the owner (below); the committed dataset is a synthetic series that behaves like an index (30 yearly closes) so the example is never blocked.
 
 **Acceptance look.** A single large chart on a light ground with the title top-left, the unit on the y-axis, years on the x-axis, and the source line in 24 px grey at the bottom. The line draws on left to right in 3 seconds, points pop in as the draw passes them, and the final value counts up and then holds for 4 seconds. Regenerating with a different dataset changes the shape and the numbers and nothing else about the layout: the y-domain, tick count and label positions are computed from the data, so a 1995–2024 series and a 2005–2024 series both fill the frame correctly.
 
@@ -261,6 +260,14 @@ Two directories, one rule:
 - `examples/<name>/assets.local/` — **gitignored**, filled by `examples/<name>/fetch-assets.ts` (Node, never Python). Third-party media (VOICEVOX audio, 立ち絵 sprites, music, photos) lands here until, and if, the ADR allows committing it.
 
 `assets.manifest.json` declares every file in both directories with `path`, `kind` (`font`/`image`/`audio`/`video`/`data`), `source` (URL or "authored"), `license` (SPDX id or "authored") and `credit`. The TASK-169 ADR supplies the allowed SPDX set and the exact credit strings; the check that reads the manifest (`scripts/check-licenses.ts` reading the manifests under `examples/`) lands with that ADR, so this document fixes the mechanism and the ADR fixes the policy.
+
+Every example's props schema carries one shared switch, so a run without the fetched media is still a complete video:
+
+```ts
+const assets = z.enum(['placeholder', 'final']).default('placeholder');
+```
+
+`placeholder` uses only what `assets/` and inline SVG provide (flat silhouette sprites, generated gradient photos, the system sans-serif stack, no audio); `final` uses `assets.local/`. CI and every commit-time render use the default; the local QA render passes `--props '{"assets":"final"}'`. When TASK-169 allows an asset to be committed, it moves into `assets/` and stops depending on the switch, but the prop stays: it is how a reader without VOICEVOX still renders the explainer.
 
 | Example     | Asset                           | Where                              | Committed today         | Decided by                       |
 | ----------- | ------------------------------- | ---------------------------------- | ----------------------- | -------------------------------- |
