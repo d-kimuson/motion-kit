@@ -102,8 +102,10 @@ type FakeVariant = {
  */
 const fakeFfmpeg = (variant: FakeVariant): string => {
   const log = join(directory, 'invocations.log');
+  const argv = join(directory, 'invocations.args');
   const script = `#!/bin/sh
 log="${log}"
+argv="${argv}"
 case "$1" in
   -version)
     echo version >> "$log"
@@ -118,6 +120,7 @@ case "$1" in
     ;;
 esac
 echo encode >> "$log"
+printf '%s\\n' "$*" > "$argv"
 last=""
 for argument in "$@"; do last="$argument"; done
 ${
@@ -151,17 +154,28 @@ const invocations = (): string[] => {
     : [];
 };
 
+/** The argv the stand-in binary saw on its encode invocation, so the flag contract is pinned. */
+const encodeArgv = (): string[] => {
+  const args = join(directory, 'invocations.args');
+  if (!existsSync(args)) return [];
+  return readFileSync(args, 'utf8')
+    .trim()
+    .split(' ')
+    .filter((word) => word !== '');
+};
+
 const outputPath = (name = 'out.mp4'): string => join(directory, name);
 
 const request = (options: {
   frames: AsyncIterable<FrameCaptureResult>;
   frameCount: number;
   output?: string;
+  fps?: { numerator: number; denominator: number };
   signal?: AbortSignal;
   onProgress?: (progress: EncodeProgress) => void;
 }) => ({
   frames: options.frames,
-  fps: { numerator: 10, denominator: 1 },
+  fps: options.fps ?? { numerator: 10, denominator: 1 },
   frameCount: options.frameCount,
   output: options.output ?? outputPath(),
   ...(options.signal === undefined ? {} : { signal: options.signal }),
@@ -307,6 +321,48 @@ describe('FfmpegEncoder.encode', () => {
     ).toBe(true);
     expect(existsSync(output)).toBe(false);
     expect(pathsLeftBehind(directory)).toEqual([]);
+  });
+
+  it('passes the rational rate to -framerate and -r and writes only the sibling', async () => {
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+    });
+    const encoder = await openEncoder(binary);
+    const output = outputPath('rational.mp4');
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf(pngFrames(2)),
+        frameCount: 2,
+        output,
+        fps: { numerator: 30000, denominator: 1001 },
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true });
+    const argv = encodeArgv();
+    expect(argv).toEqual([
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'image2pipe',
+      '-framerate',
+      '30000/1001',
+      '-c:v',
+      'png',
+      '-i',
+      'pipe:0',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-r',
+      '30000/1001',
+      // The last argument is the temporary sibling, never the target.
+      expect.stringMatching(/\/\.rational\.[0-9a-f-]{36}\.part\.mp4$/u),
+    ]);
+    // Both rates cross as the rational; a float would break the exact-duration guarantee.
+    expect(argv.filter((argument) => /^\d+\.\d+$/u.test(argument))).toEqual([]);
   });
 
   it('fails before FFmpeg runs when the target directory cannot take the sibling', async () => {

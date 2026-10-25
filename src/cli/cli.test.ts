@@ -203,13 +203,17 @@ describe('motion-kit CLI', () => {
       '-select_streams',
       'v:0',
       '-show_entries',
-      'stream=codec_name,nb_frames',
+      'stream=codec_name,nb_frames,r_frame_rate,avg_frame_rate,duration',
       '-of',
       'default=noprint_wrappers=1',
       output,
     ]).toString();
     expect(probed).toContain('codec_name=h264');
     expect(probed).toContain('nb_frames=6');
+    // The non-integer rate reaches the file as the rational, not as a rounded float.
+    expect(probed).toContain('r_frame_rate=30000/1001');
+    expect(probed).toContain('avg_frame_rate=30000/1001');
+    expect(probed).toContain('duration=0.200200');
   }, 120_000);
 
   it('reports the captured warnings of a successful mp4 render, like the frames route', async () => {
