@@ -199,9 +199,13 @@ type SpawnedRun = {
 };
 
 /** The shipped bin as a child process whose stop signals the test itself decides when to send. */
-const spawnRun = (args: readonly string[], env: Record<string, string>): SpawnedRun => {
+const spawnRun = (
+  args: readonly string[],
+  env: Record<string, string>,
+  cwd: string = projectRoot,
+): SpawnedRun => {
   const child = spawn(process.execPath, [bin, ...args], {
-    cwd: projectRoot,
+    cwd,
     env: { ...process.env, ...env },
   });
   let stdout = '';
@@ -742,6 +746,121 @@ process.on('newListener', (event) => {
     } finally {
       if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill('SIGKILL');
       rmSync(fake, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  // The window this pins is the one after the commit: the artifact is on disk and the run is still
+  // tearing the renderer down (a page-dispose deadline, the service-dispose race, a browser kill),
+  // which outlasts the render itself. Reporting that teardown as a cancellation denied an output
+  // the directory already held, on both routes.
+  it('does not deny a committed output when a second signal lands in the finished run’s teardown', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'motion-kit-teardown-window-'));
+    mkdirSync(join(root, 'node_modules'));
+    for (const name of ['react', 'react-dom', 'zod'])
+      symlinkSync(
+        dirname(require.resolve(`${name}/package.json`)),
+        join(root, 'node_modules', name),
+      );
+    writeFileSync(join(root, 'package.json'), '{"type":"module"}');
+    // A plugin that never finishes closing: the loading service answers the parent's `dispose` with
+    // a `server.close()` that cannot resolve, so the run cannot leave until the session's 250 ms
+    // service-dispose race expires. That is what makes the window — the artifact on disk, teardown
+    // still running — wide enough to aim a signal pair at, and it is teardown, not the render: the
+    // project loads and captures normally, exactly as a slow user plugin would.
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `export default {plugins:[{name:'stall-teardown',closeBundle(){return new Promise(()=>{});}}]};`,
+    );
+    writeFileSync(
+      join(root, 'entry.tsx'),
+      `import { z } from 'zod';
+import { defineComposition, defineCompositions } from ${JSON.stringify(
+        new URL('../core/composition/registry.ts', import.meta.url).pathname,
+      )};
+const Scene = () => <div style={{ width: 32, height: 32, background: '#333333' }} />;
+export const compositions = defineCompositions([
+  defineComposition({ id: 'stalled', schema: z.object({}), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 6 }),
+]);`,
+    );
+    const video = join(outputRoot, 'teardown-window.mp4');
+    const frames = join(outputRoot, 'teardown-window-frames');
+    const routes = [
+      {
+        target: video,
+        what: 'the encoded MP4',
+        ready: (): boolean => existsSync(video),
+        intact: (): void => {
+          expect(statSync(video).size).toBeGreaterThan(0);
+          const probed = execFileSync('ffprobe', [
+            '-v',
+            'error',
+            '-select_streams',
+            'v:0',
+            '-show_entries',
+            'stream=codec_name,nb_frames',
+            '-of',
+            'default=noprint_wrappers=1',
+            video,
+          ]).toString();
+          expect(probed).toContain('codec_name=h264');
+          expect(probed).toContain('nb_frames=6');
+          expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
+        },
+      },
+      {
+        target: frames,
+        what: 'the manifest that claims the sequence complete',
+        ready: (): boolean => existsSync(join(frames, 'manifest.json')),
+        intact: (): void => {
+          const manifest: unknown = JSON.parse(readFileSync(join(frames, 'manifest.json'), 'utf8'));
+          expect(manifest).toMatchObject({ format: 'frames', frameCount: 6 });
+          expect(readdirSync(frames).filter((name) => name.endsWith('.png'))).toHaveLength(6);
+        },
+      },
+    ];
+    try {
+      for (const route of routes) {
+        const run = spawnRun(
+          ['render', 'entry.tsx', '--composition', 'stalled', '--out', route.target, '--json'],
+          {},
+          root,
+        );
+        try {
+          await waitFor(route.ready, 120_000, route.what);
+          const owned = childrenOf(run.child.pid ?? 0);
+          expect(owned.length).toBeGreaterThan(0);
+          // The artifact is committed and the run is in its teardown, not before the commit.
+          expect(run.child.exitCode).toBe(null);
+          expect(run.child.signalCode).toBe(null);
+          run.child.kill('SIGINT');
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          // Still alive after the gap, so both signals really landed inside the teardown: without
+          // this check the case could silently turn into a signal pair sent after the exit.
+          expect(run.child.exitCode).toBe(null);
+          expect(run.child.signalCode).toBe(null);
+          run.child.kill('SIGINT');
+
+          const ended = await run.exit;
+          // The second signal still ends the process at once, through the covers.
+          expect(ended).toEqual({ code: 130, signal: null });
+          // The point of the case: nothing on stderr describes the committed output as missing.
+          expect(abortedLines(run.stderr())).toEqual([]);
+          expect(run.stderr()).not.toContain('no output was produced');
+          expect(run.stderr()).not.toContain('no manifest.json was written');
+          // A stopped run still fabricates no envelope; the artifact itself is the result.
+          expect(run.stdout()).toBe('');
+          route.intact();
+          await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
+          expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
+        } finally {
+          if (run.child.exitCode === null && run.child.signalCode === null)
+            run.child.kill('SIGKILL');
+        }
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(video, { force: true });
+      rmSync(frames, { recursive: true, force: true });
     }
   }, 120_000);
 
