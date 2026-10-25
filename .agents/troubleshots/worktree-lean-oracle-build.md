@@ -1,0 +1,28 @@
+# A fresh worktree has no Lean oracle, so the differential tests fail
+
+## Symptom
+
+In a fresh `git worktree` (`~/repos/worktrees/<repo>/<task>`), `pnpm test` reports four failed files and the unit project fails with:
+
+```text
+Error: .lake/build/bin/spec-oracle not found: run `lake build` first
+ ❯ evalSpecs spec/oracle.ts:22:11
+ ❯ src/core/transition/overlap.oracle.test.ts:110:13
+ Test Files  4 failed | 36 passed (40)
+```
+
+The failures have nothing to do with the change under test: `.lake/` is gitignored, so a new worktree starts without the oracle binary even though `node_modules` was installed.
+
+## Workaround
+
+Build the specs once in the worktree before running the tests that consult the oracle:
+
+```sh
+DIRENV_DISABLE=1 timeout 900 lake build   # "Build completed successfully (11 jobs)."
+```
+
+`pnpm test` is green afterwards. `pnpm test --project cli` (and any project without `*.oracle.test.ts`) does not need it.
+
+## Why Not Fixed
+
+CI runs `leanprover/lean-action` with `build: true` before the test steps (`.github/workflows/check.yaml`), so the artifact exists there; the gap is worktree provisioning outside the repository, which cannot pre-build a Lean artifact it does not install. A test-side skip would hide a missing oracle in CI, so the failure stays hard.

@@ -85,7 +85,15 @@ type RunResult = {
   readonly stderr: string;
 };
 
-const run = async (args: readonly string[], env?: Record<string, string>): Promise<RunResult> => {
+/**
+ * Runs the shipped bin. `options.envelope: false` says the argv is one that legitimately carries
+ * `--json` without the CLI owing an envelope — the help exemption — so stdout is left unparsed.
+ */
+const run = async (
+  args: readonly string[],
+  env?: Record<string, string>,
+  options: { readonly envelope?: false } = {},
+): Promise<RunResult> => {
   let stdout = '';
   let stderr = '';
   let code = 0;
@@ -123,7 +131,7 @@ const run = async (args: readonly string[], env?: Record<string, string>): Promi
   }
   const trimmed = stdout.trim();
   const envelope =
-    args.includes('--json') && trimmed !== ''
+    options.envelope !== false && args.includes('--json') && trimmed !== ''
       ? EnvelopeSchema.parse(JSON.parse(trimmed))
       : undefined;
   return { code, envelope, stdout, stderr };
@@ -864,11 +872,110 @@ export const compositions = defineCompositions([
     }
   }, 120_000);
 
-  it('prints usage and exits 0 for --help', async () => {
-    const result = await run(['--help']);
+  // The help exemption exactly as the ADR enumerates it: a leading `--help`, `-h` or `help`, or the
+  // `--help`/`-h` a leading subcommand is asked for, prints usage on stdout and exits 0 with or
+  // without `--json` — and emits no envelope. Any other position (`--json --help`,
+  // `--json render entry.tsx --help`) is an unusable invocation and gets the envelope instead.
+  it.each([
+    { argv: ['--help'] },
+    { argv: ['-h'] },
+    { argv: ['help'] },
+    { argv: ['--help', '--json'] },
+    { argv: ['help', '--json'] },
+    { argv: ['render', '--help', '--json'] },
+    { argv: ['render', '-h', '--json'] },
+    { argv: ['render', 'entry.tsx', '--help'] },
+    { argv: ['frame', '--json', '-h'] },
+  ])('prints usage and exits 0 for $argv', async ({ argv }) => {
+    const result = await run(argv, undefined, { envelope: false });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('Usage: motion-kit');
+    expect(result.stdout).toContain('Usage: ');
+    // The usage line is a help answer, not an invocation error: nothing about it on stderr (which
+    // still carries Node's own warnings) and no envelope on stdout, whatever argv also carries.
+    expect(result.stderr).not.toContain('Usage: ');
+    expect(result.stderr).not.toContain('cli.invalid-arguments');
+    expect(result.stdout).not.toContain('"schemaVersion"');
   });
+
+  // The promise to an agent is one JSON document on stdout, always: an invocation that names no
+  // runnable subcommand still gets the envelope. `command` is the first positional argument, so a
+  // real subcommand written after a flag is named truthfully (and the hint says where it belongs),
+  // a flag's value never takes its place, and a reserved one is named as not implemented yet. The
+  // message follows: only a reserved subcommand's argv is well-formed, so only it must not be told
+  // its arguments are invalid.
+  it.each([
+    {
+      argv: ['--json'],
+      command: null,
+      message: 'Command-line arguments are invalid.',
+      hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+    },
+    {
+      argv: ['unknown', '--json'],
+      command: null,
+      message: 'Command-line arguments are invalid.',
+      hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+    },
+    {
+      argv: ['inspect', '--json'],
+      command: 'inspect',
+      message: 'The inspect subcommand is not implemented yet.',
+      hint: 'inspect is not implemented yet; use render or frame.',
+    },
+    {
+      argv: ['validate', '--json'],
+      command: 'validate',
+      message: 'The validate subcommand is not implemented yet.',
+      hint: 'validate is not implemented yet; use render or frame.',
+    },
+    {
+      argv: ['render', '--bogus', '--json'],
+      command: 'render',
+      message: 'Command-line arguments are invalid.',
+      hint: "required option '--out <file-or-dir>' not specified",
+    },
+    // Misplaced: `render` is named although the option's value `/tmp/a.png` comes first, and the
+    // `--composition` value `frame` is not mistaken for the command. `--help` after the subcommand
+    // does not rescue it either: help is the leading token, or a subcommand's own --help, not any
+    // argument that happens to sit behind a misplaced one.
+    {
+      argv: ['--out', '/tmp/a.png', 'render', 'entry.tsx', '--json'],
+      command: 'render',
+      message: 'Command-line arguments are invalid.',
+      hint: 'Put the subcommand first: motion-kit render [options].',
+    },
+    {
+      argv: ['--composition', 'frame', 'render', 'entry.tsx', '--json'],
+      command: 'render',
+      message: 'Command-line arguments are invalid.',
+      hint: 'Put the subcommand first: motion-kit render [options].',
+    },
+    {
+      argv: ['--json', 'render', 'entry.tsx', '--help'],
+      command: 'render',
+      message: 'Command-line arguments are invalid.',
+      hint: 'Put the subcommand first: motion-kit render [options].',
+    },
+  ])('emits one envelope and exits 2 for $argv', async ({ argv, command, message, hint }) => {
+    const result = await run(argv);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ command, ok: false, data: null });
+    expect(envelope.diagnostics).toMatchObject([{ code: 'cli.invalid-arguments', message, hint }]);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+    // The document is the whole of the human-visible failure: no Diagnostic line on stderr.
+    expect(result.stderr).not.toContain('cli.invalid-arguments');
+  });
+
+  it.each([{ argv: [] as string[] }, { argv: ['unknown'] }])(
+    'prints an invocation error to stderr and nothing to stdout for $argv',
+    async ({ argv }) => {
+      const result = await run(argv);
+      expect(result.code).toBe(2);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('Usage: motion-kit');
+    },
+  );
 
   it('prints a human summary instead of JSON when --json is absent', async () => {
     const output = join(outputRoot, 'human.png');

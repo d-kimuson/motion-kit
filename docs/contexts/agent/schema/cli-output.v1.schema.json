@@ -12,6 +12,9 @@
     },
     {
       "$ref": "#/$defs/__schema20"
+    },
+    {
+      "$ref": "#/$defs/__schema21"
     }
   ],
   "allOf": [
@@ -581,6 +584,31 @@
               "type": "null"
             }
           ]
+        }
+      },
+      "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
+      "additionalProperties": false
+    },
+    "__schema21": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "ok": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "command": {
+          "type": "null"
+        },
+        "data": {
+          "type": "null"
         }
       },
       "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
