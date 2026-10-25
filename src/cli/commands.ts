@@ -39,6 +39,11 @@ const valueTakingLongs = (command: Command): string[] =>
  * The options that consume the following argv token as their value, derived from the declarations
  * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`
  * and `--frame` today, while `--json` and `--help` take none.
+ *
+ * Only long names are collected: `--opt <value>` is the form the resolver skips. A value-taking
+ * option declared with a short alias (`-o <value>`) would slip past it, so none has one today, and
+ * `invocation.test.ts` fails the moment a value-taking option gains a short name — the resolver then
+ * has to collect `option.short` here too instead of falling behind silently.
  */
 export const valueTakingOptions: ReadonlySet<string> = new Set(
   Object.values(commands).flatMap(valueTakingLongs),

@@ -9,20 +9,19 @@ import { valueTakingOptions } from './commands.ts';
 
 /**
  * The first positional argument of argv: the first token that is neither a flag nor a flag's
- * value. A flag written as `--opt=value` carries its value in the same token, and a flag declared
- * to take a value consumes the next one (`valueTakingOptions`, derived from the CLI's own command
- * declarations), so neither the `value` nor `--opt`'s neighbour is a positional argument. That is
- * what keeps `--out /tmp/a.png render entry.tsx` naming `render` rather than the path. The `--`
- * terminator needs no case of its own: it is a flag-shaped token taking no value, so the scan
- * simply continues past it.
+ * value. A flag declared to take a value consumes the next token (`valueTakingOptions`, derived from
+ * the CLI's own command declarations), so `--out`'s neighbour is not a positional argument — that is
+ * what keeps `--out /tmp/a.png render entry.tsx` naming `render` rather than the path. A flag
+ * written as `--opt=value` needs no case of its own: it carries its value in the same token, so it
+ * never equals a declared flag name and the scan simply continues to the next token, which stays
+ * positional (`--out=/tmp/a.png render entry.tsx` names `render`). The `--` terminator needs no
+ * case either: it is a flag-shaped token taking no value, so the scan continues past it.
  */
 const firstPositional = (argv: readonly string[]): string | undefined => {
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === undefined) return undefined;
     if (!token.startsWith('-')) return token;
-    // `--opt=value` already carries the value, so the next token is positional again.
-    if (token.includes('=')) continue;
     if (valueTakingOptions.has(token)) index += 1;
   }
   return undefined;

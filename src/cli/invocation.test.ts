@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import { CommandSchema, EnvelopeSchema, type Envelope } from '../agent/cli-output.ts';
-import { valueTakingOptions } from './commands.ts';
+import { valueTakingOptions, commands } from './commands.ts';
 // How an agent's argv becomes the envelope's `command`, checked against the committed schema: an
 // unusable invocation must still yield one envelope the contract accepts.
 import { resolveCommand } from './invocation.ts';
@@ -70,6 +70,22 @@ describe('resolveCommand', () => {
       '--out',
       '--props',
     ]);
+  });
+
+  it('collects long names only, and no value-taking option has a short alias to miss', () => {
+    // `valueTakingOptions` holds the long form the resolver skips, because `--opt <value>` is what
+    // argv carries. A value-taking short alias (`-o <value>`) would not be skipped, so this test
+    // fails as soon as one is declared: the derivation in `commands.ts` then has to collect
+    // `option.short` too rather than let the resolver fall behind silently.
+    const valueTaking = Object.values(commands).flatMap((command) =>
+      command.options.filter((option) => option.required || option.optional),
+    );
+    expect(valueTaking.map((option) => option.long).filter((long) => long === undefined)).toEqual(
+      [],
+    );
+    expect(
+      valueTaking.filter((option) => option.short !== undefined).map((option) => option.long),
+    ).toEqual([]);
   });
 
   it.each([...valueTakingOptions].map((option) => ({ option })))(
