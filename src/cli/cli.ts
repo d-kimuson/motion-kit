@@ -10,7 +10,7 @@ import {
 } from '../agent/cli-output.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
-import { coverOnExit } from '../lib/exit.ts';
+import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
@@ -372,31 +372,52 @@ const emit = (envelope: Envelope, json: boolean): number => {
   return code;
 };
 
-/** The two signals a caller stops a run with; both mean the same thing to the CLI. */
-const signals = ['SIGINT', 'SIGTERM'] as const;
-type StopSignal = (typeof signals)[number];
+/** Every signal a caller stops a run with; each one means the same thing to the CLI. */
+const stopSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+type StopSignal = (typeof stopSignals)[number];
 
 /** 128 + the signal number: the shell's own reading of a run the caller interrupted. */
-const abortExitCodes: Readonly<Record<StopSignal, number>> = { SIGINT: 130, SIGTERM: 143 };
+const abortExitCodes: Readonly<Record<StopSignal, number>> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+  SIGHUP: 129,
+};
+
+const isStopSignal = (value: unknown): value is StopSignal =>
+  stopSignals.some((name) => name === value);
 
 /** The exit code of a cancelled run; a programmatic abort means the same as Ctrl-C. */
 export const abortedExitCode = (signal: AbortSignal): number =>
-  signal.reason === 'SIGTERM' ? abortExitCodes.SIGTERM : abortExitCodes.SIGINT;
+  isStopSignal(signal.reason) ? abortExitCodes[signal.reason] : abortExitCodes.SIGINT;
 
-/** Binds SIGINT/SIGTERM to one controller. `once` leaves a second signal to the default
- * handler, so pressing Ctrl-C twice is never held up by cleanup.
+/**
+ * Binds SIGINT/SIGTERM/SIGHUP to one controller. The first signal is a cancellation: it aborts,
+ * and the run cleans up asynchronously. A second one is the caller insisting, so it ends the
+ * process immediately instead of waiting for that cleanup — but through the covers, because a
+ * signal this process does not handle is a fatal termination that runs no `exit` listener, and
+ * the encoder's temporary sibling, its child and the loading service would outlive the run.
  */
 export const watchSignals = (): { readonly signal: AbortSignal; readonly stop: () => void } => {
   const controller = new AbortController();
-  const handlers: Record<StopSignal, () => void> = {
-    SIGINT: () => controller.abort('SIGINT'),
-    SIGTERM: () => controller.abort('SIGTERM'),
+  let stoppedBy: StopSignal | undefined;
+  const handle = (name: StopSignal): void => {
+    if (stoppedBy === undefined) {
+      stoppedBy = name;
+      controller.abort(name);
+      return;
+    }
+    exitThroughCovers(abortExitCodes[name]);
   };
-  for (const name of signals) process.once(name, handlers[name]);
+  const handlers: Record<StopSignal, () => void> = {
+    SIGINT: () => handle('SIGINT'),
+    SIGTERM: () => handle('SIGTERM'),
+    SIGHUP: () => handle('SIGHUP'),
+  };
+  for (const name of stopSignals) process.on(name, handlers[name]);
   return {
     signal: controller.signal,
     stop: () => {
-      for (const name of signals) process.removeListener(name, handlers[name]);
+      for (const name of stopSignals) process.removeListener(name, handlers[name]);
     },
   };
 };
@@ -471,6 +492,9 @@ export const runCli = async (
       report();
       return abortedExitCode(signal);
     }
+    // The run is not cancelled, so it owes the caller no aborted line any more: a signal from
+    // here on must not describe a finished render as one that produced nothing.
+    releaseCover();
     return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);
   } finally {
     releaseCover();

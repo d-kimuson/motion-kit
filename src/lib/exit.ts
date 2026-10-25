@@ -38,3 +38,15 @@ export const coverOnExit = (cover: ExitCover): (() => void) => {
     covers.delete(cover);
   };
 };
+
+/**
+ * Performs every pending cover now and ends the process with `code`. A signal the process handles
+ * can still leave through `process.exit` and reuse the `exit` listener, but a signal it does not
+ * handle — the second one, once the caller has already asked to stop — is a fatal termination
+ * that runs no listener at all, so the caller that decides to leave has to run the covers itself
+ * before the signal takes the process away.
+ */
+export const exitThroughCovers = (code: number): never => {
+  runCovers();
+  process.exit(code);
+};
