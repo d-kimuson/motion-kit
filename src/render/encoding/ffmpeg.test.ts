@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -338,6 +340,23 @@ describe('FfmpegEncoder.encode', () => {
     });
     expect(invocations()).toEqual(['version', 'encoders']);
     expect(existsSync(output)).toBe(false);
+  });
+
+  it('reports a refused rename as internal.unexpected, not as a pre-spawn unwritable target', async () => {
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+    });
+    const encoder = await openEncoder(binary);
+    // A directory at the target path: the sibling is created and the child writes it, then the
+    // rename onto `output` is refused. `unwritable` means "no child was started", so not this.
+    const output = outputPath('target.mp4');
+    mkdirSync(output);
+    const outcome = await encoder.encode(
+      request({ frames: streamOf(pngFrames(2)), frameCount: 2, output }),
+    );
+    expect(errorsOf(outcome)[0]).toMatchObject({ code: 'internal.unexpected' });
+    expect(statSync(output).isDirectory()).toBe(true);
+    expect(pathsLeftBehind(directory)).toEqual([]);
   });
 
   it('reports a zero-byte sibling after a successful exit as encode.output-invalid', async () => {

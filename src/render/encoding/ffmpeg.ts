@@ -446,8 +446,14 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
   try {
     renameSync(temporary, output);
   } catch {
-    // The destination directory refused the rename; the corrective action is writability.
-    return fail([outputInvalidDiagnostic({ output, reason: 'unwritable' })]);
+    // A child ran and wrote the sibling, so this is not the pre-spawn `unwritable` observation;
+    // the destination refused the rename, and no frame-or-FFmpeg reason describes that.
+    return fail([
+      encoderInvariantDiagnostic(
+        'The encoded file could not be moved onto the target path.',
+        'Check that --out names a file path and not an existing directory; report it as a bug if it persists.',
+      ),
+    ]);
   }
   const receipt: EncodeReceipt = {
     output,
