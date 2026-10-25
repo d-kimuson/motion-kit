@@ -69,13 +69,25 @@ const isCommandName = (value: unknown): value is 'render' | 'frame' =>
 /**
  * Why argv named no command the CLI can run. Each hint says what the caller can do next: `--json`
  * alone has to be told which subcommands exist, a reserved one which ones ship, and a subcommand
- * written after a flag where it belongs. The list is the contract's enum, not a copy of it.
+ * written after a flag where it belongs. The list is the contract's enum, not a copy of it, so it
+ * names `inspect` and `validate` too: they are known names, not shipped ones.
  */
-const noCommandHint = (command: EnvelopeCommand | null): string => {
+const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
   if (command === null)
-    return `Pass one of the known subcommands: ${CommandSchema.options.join(', ')}.`;
-  if (!isCommandName(command)) return `${command} is not implemented yet; use render or frame.`;
-  return `Put the subcommand first: motion-kit ${command} [options].`;
+    return invalidArguments(
+      `Pass one of the known subcommands: ${CommandSchema.options.join(', ')}.`,
+    );
+  // `inspect` and `validate` are reserved, not misspelled: argv is well-formed and asks for a
+  // command this CLI does not ship yet, so the message must not call its arguments invalid. The
+  // code stays `cli.invalid-arguments` (the contract's invocation-error code) — only the sentence
+  // differs (agent ADR: invocation without a known subcommand).
+  if (!isCommandName(command))
+    return diagnostic(
+      'cli.invalid-arguments',
+      `The ${command} subcommand is not implemented yet.`,
+      `${command} is not implemented yet; use render or frame.`,
+    );
+  return invalidArguments(`Put the subcommand first: motion-kit ${command} [options].`);
 };
 
 const parseRaw = (argv: readonly string[]): ParseOutcome => {
@@ -475,11 +487,7 @@ export const runCli = async (
     // With it, the caller still gets the one document it was promised, naming `command: null` when
     // argv named no known subcommand (agent ADR: nullable `command`, no sentinel member).
     return emit(
-      buildEnvelope(
-        parsed.command,
-        failure([invalidArguments(noCommandHint(parsed.command))]),
-        durationMs(),
-      ),
+      buildEnvelope(parsed.command, failure([noCommandDiagnostic(parsed.command)]), durationMs()),
       true,
     );
   }
