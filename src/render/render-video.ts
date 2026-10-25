@@ -55,8 +55,14 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
   let resolved = encoder;
   if (resolved === undefined) {
     // Probe before the first frame is rendered, so a missing binary fails without a capture run.
-    const probed = await createFfmpegEncoder({ ffmpegPath });
-    if (!probed.ok) return { ok: false, error: [probed.error] };
+    const probed = await createFfmpegEncoder({
+      ffmpegPath,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    if (!probed.ok)
+      return 'aborted' in probed
+        ? { ok: false, aborted: true }
+        : { ok: false, error: [probed.error] };
     resolved = probed.value;
   }
   if (cancelled()) return { ok: false, aborted: true };

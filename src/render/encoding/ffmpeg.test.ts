@@ -14,9 +14,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { currentDate } from '../../lib/clock.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
-import { type EncodeOutcome, type EncodeProgress, type Encoder } from './encoder.ts';
+import {
+  type EncodeOutcome,
+  type EncodeProbeOutcome,
+  type EncodeProgress,
+  type Encoder,
+} from './encoder.ts';
 import { createFfmpegEncoder } from './ffmpeg.ts';
 
 let directory: string;
@@ -90,10 +96,12 @@ const streamOf = (
 type FakeVariant = {
   /** The first line `ffmpeg -version` prints; `undefined` prints nothing parseable. */
   readonly version?: string;
+  /** Makes `-version` a child that never answers, so a probe cancellation is observable. */
+  readonly versionStall?: boolean;
   /** Whether `-encoders` lists libx264. */
   readonly libx264?: boolean;
   /** What the encode invocation does after draining stdin. */
-  readonly encode?: 'ok' | 'fail' | 'empty' | 'stall';
+  readonly encode?: 'ok' | 'fail' | 'empty' | 'stall' | 'stall-after-eof';
 };
 
 /**
@@ -103,14 +111,22 @@ type FakeVariant = {
 const fakeFfmpeg = (variant: FakeVariant): string => {
   const log = join(directory, 'invocations.log');
   const argv = join(directory, 'invocations.args');
+  const pid = join(directory, 'encode.pid');
+  const eof = join(directory, 'stdin.eof');
   const script = `#!/bin/sh
 log="${log}"
 argv="${argv}"
+pid="${pid}"
+eof="${eof}"
 case "$1" in
   -version)
     echo version >> "$log"
-    ${variant.version === undefined ? '' : `printf '%s\\n' "${variant.version}"`}
-    exit 0
+    ${
+      variant.versionStall === true
+        ? 'exec sleep 60'
+        : `${variant.version === undefined ? '' : `printf '%s\\n' "${variant.version}"`}
+    exit 0`
+    }
     ;;
   -hide_banner)
     echo encoders >> "$log"
@@ -121,20 +137,25 @@ case "$1" in
 esac
 echo encode >> "$log"
 printf '%s\\n' "$*" > "$argv"
+printf '%s' "$$" > "$pid"
 last=""
 for argument in "$@"; do last="$argument"; done
 ${
   variant.encode === 'stall'
     ? // A reader that never drains stdin and never exits, so a write stays blocked.
       `exec sleep 60`
-    : 'cat > /dev/null'
+    : variant.encode === 'stall-after-eof'
+      ? // Drains stdin to EOF, records it, then outlives the last frame the way a real
+        // FFmpeg does while it finishes writing the file.
+        `cat > /dev/null\nprintf 'eof' > "$eof"\nexec sleep 60`
+      : 'cat > /dev/null'
 }
 ${
   variant.encode === 'fail'
     ? `printf 'boom: the encoder exploded\\n' >&2\nexit 1`
     : variant.encode === 'empty'
       ? 'exit 0'
-      : variant.encode === 'stall'
+      : variant.encode === 'stall' || variant.encode === 'stall-after-eof'
         ? ''
         : `printf 'fake-mp4-bytes' > "$last"`
 }
@@ -166,6 +187,28 @@ const encodeArgv = (): string[] => {
 
 const outputPath = (name = 'out.mp4'): string => join(directory, name);
 
+/** The encode child's PID, recorded by the stand-in so an orphan child is observable. */
+const encodePid = (): number => Number(readFileSync(join(directory, 'encode.pid'), 'utf8'));
+
+const childGone = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
+};
+
+/** Polls a fact the stand-in binary records; a child's progress has no other signal. */
+const waitFor = async (ready: () => boolean, timeoutMs: number): Promise<void> => {
+  const started = currentDate().getTime();
+  while (!ready()) {
+    if (currentDate().getTime() - started > timeoutMs)
+      throw new Error('timed out waiting for the child');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+};
+
 const request = (options: {
   frames: AsyncIterable<FrameCaptureResult>;
   frameCount: number;
@@ -184,7 +227,7 @@ const request = (options: {
 
 const openEncoder = async (ffmpegPath: string): Promise<Encoder> => {
   const probed = await createFfmpegEncoder({ ffmpegPath });
-  if (!probed.ok) throw new Error(`probe failed: ${JSON.stringify(probed.error)}`);
+  if (!probed.ok) throw new Error(`probe failed: ${JSON.stringify(probed)}`);
   return probed.value;
 };
 
@@ -193,17 +236,22 @@ const errorsOf = (outcome: EncodeOutcome) => {
   return outcome.error;
 };
 
+const probeErrorsOf = (outcome: EncodeProbeOutcome) => {
+  if (outcome.ok) throw new Error('expected a probe failure');
+  if ('aborted' in outcome) throw new Error('expected a probe Diagnostic, not an abort');
+  return outcome.error;
+};
+
 describe('createFfmpegEncoder probe', () => {
   it('reports a missing binary as encode.ffmpeg-not-found', async () => {
     const result = await createFfmpegEncoder({ ffmpegPath: join(directory, 'absent-ffmpeg') });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('expected a probe failure');
-    expect(result.error).toMatchObject({
+    expect(probeErrorsOf(result)).toMatchObject({
       code: 'encode.ffmpeg-not-found',
       severity: 'error',
       details: { binary: join(directory, 'absent-ffmpeg') },
     });
-    expect(result.error.hint).toBeTruthy();
+    expect(probeErrorsOf(result).hint).toBeTruthy();
   });
 
   it('reports a version below the floor as encode.ffmpeg-unsupported', async () => {
@@ -213,8 +261,7 @@ describe('createFfmpegEncoder probe', () => {
     });
     const result = await createFfmpegEncoder({ ffmpegPath: binary });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('expected a probe failure');
-    expect(result.error).toMatchObject({
+    expect(probeErrorsOf(result)).toMatchObject({
       code: 'encode.ffmpeg-unsupported',
       details: { found: '4.4.2', required: '6.0', missing: [] },
     });
@@ -227,8 +274,7 @@ describe('createFfmpegEncoder probe', () => {
     });
     const result = await createFfmpegEncoder({ ffmpegPath: binary });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('expected a probe failure');
-    expect(result.error).toMatchObject({
+    expect(probeErrorsOf(result)).toMatchObject({
       code: 'encode.ffmpeg-unsupported',
       details: { found: '9.0.1', required: '6.0', missing: ['libx264'] },
     });
@@ -238,9 +284,20 @@ describe('createFfmpegEncoder probe', () => {
     const binary = fakeFfmpeg({ encode: 'fail' });
     const result = await createFfmpegEncoder({ ffmpegPath: binary });
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('expected a probe failure');
-    expect(result.error).toMatchObject({ code: 'encode.ffmpeg-unsupported' });
+    expect(probeErrorsOf(result)).toMatchObject({ code: 'encode.ffmpeg-unsupported' });
   });
+
+  it('ends a cancelled probe as aborted control flow, without a Diagnostic', async () => {
+    const binary = fakeFfmpeg({ versionStall: true });
+    const controller = new AbortController();
+    const pending = createFfmpegEncoder({ ffmpegPath: binary, signal: controller.signal });
+    // The child is inside `-version`; cancelling now is the probe's only way out.
+    await waitFor(() => invocations().includes('version'), 10_000);
+    controller.abort();
+    expect(await pending).toEqual({ ok: false, aborted: true });
+    // The probe stopped at `-version`; the cancel is not a licence to run `-encoders`.
+    expect(invocations()).toEqual(['version']);
+  }, 10_000);
 
   it('probes once per encoder and never re-probes for the frames it encodes', async () => {
     const binary = fakeFfmpeg({
@@ -540,6 +597,32 @@ describe('FfmpegEncoder.encode', () => {
     expect(await pending).toEqual({ ok: false, aborted: true });
     expect(existsSync(output)).toBe(false);
     expect(pathsLeftBehind(directory)).toEqual([]);
+  }, 10_000);
+
+  it('kills a child that outlives the last frame when a cancel arrives', async () => {
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+      encode: 'stall-after-eof',
+    });
+    const encoder = await openEncoder(binary);
+    const output = outputPath();
+    const controller = new AbortController();
+    const pending = encoder.encode(
+      request({
+        frames: streamOf(pngFrames(1)),
+        frameCount: 1,
+        output,
+        signal: controller.signal,
+      }),
+    );
+    // stdin reached EOF, so every frame was handed over and the encode is waiting for the
+    // child alone; cancelling there must kill it instead of waiting for it to finish.
+    await waitFor(() => existsSync(join(directory, 'stdin.eof')), 10_000);
+    controller.abort();
+    expect(await pending).toEqual({ ok: false, aborted: true });
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+    expect(childGone(encodePid())).toBe(true);
   }, 10_000);
 
   it('kills the child, removes the sibling and aborts on a caller cancellation', async () => {

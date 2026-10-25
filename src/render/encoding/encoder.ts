@@ -55,8 +55,12 @@ export type Encoder = {
   encode: (request: EncodeRequest) => Promise<EncodeOutcome>;
 };
 
+/** A finished probe is a `Result`; a cancelled one is aborted control flow, not a Diagnostic. */
+export type EncodeProbeOutcome = Result<Encoder> | { readonly ok: false; readonly aborted: true };
+
 /** Probes PATH once per invocation; its Result is how a missing or too-old binary reports. */
 export type FfmpegEncoderOptions = {
   readonly ffmpegPath?: string;
+  /** Cancels the probe's children; the probe then returns `{ ok: false, aborted: true }`. */
   readonly signal?: AbortSignal;
 };

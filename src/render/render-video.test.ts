@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -234,4 +235,32 @@ describe('renderVideo', () => {
     expect(rendered).toBe(0);
     expect(existsSync(join(directory, 'absent.mp4'))).toBe(false);
   });
+
+  it('treats a cancelled probe as aborted control flow, not as a Diagnostic', async () => {
+    // The probe child never answers, so the cancellation is the only thing that ends it.
+    const binary = join(directory, 'ffmpeg-stalls');
+    writeFileSync(binary, '#!/bin/sh\nexec sleep 60\n');
+    chmodSync(binary, 0o755);
+    const output = join(directory, 'cancelled.mp4');
+    const controller = new AbortController();
+    const pending = renderVideo({
+      composition: {
+        descriptor: () => ({
+          id: 'cancelled',
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 1,
+        }),
+        renderFrames: () => asyncIterableOf<FrameCaptureResult>([]),
+      },
+      output,
+      ffmpegPath: binary,
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(), 100);
+    expect(await pending).toEqual({ ok: false, aborted: true });
+    expect(existsSync(output)).toBe(false);
+    expect(readdirSync(directory).filter((name) => name.includes('.part'))).toEqual([]);
+  }, 10_000);
 });

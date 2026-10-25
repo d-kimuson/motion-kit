@@ -16,9 +16,9 @@ import {
 } from './diagnostics.ts';
 import {
   type EncodeOutcome,
+  type EncodeProbeOutcome,
   type EncodeReceipt,
   type EncodeRequest,
-  type Encoder,
   type FfmpegEncoderOptions,
 } from './encoder.ts';
 
@@ -47,11 +47,34 @@ type ProcessRun = {
 };
 
 /** One probe child: no stdin, bounded output, no shell, converted to a value at this boundary. */
-const runProbe = (binary: string, args: readonly string[]): Promise<ProcessRun> =>
+const runProbe = (
+  binary: string,
+  args: readonly string[],
+  signal?: AbortSignal,
+): Promise<ProcessRun | 'aborted'> =>
   new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      resolve('aborted');
+      return;
+    }
     const child = spawn(binary, [...args], { stdio: ['ignore', 'pipe', 'pipe'], shell: false });
     let stdout = '';
     let stderr = '';
+    let killed = false;
+    let killTimer: NodeJS.Timeout | undefined;
+    const onAbort = (): void => {
+      killed = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
+        child.kill('SIGKILL');
+      }, KILL_GRACE_MS);
+      killTimer.unref();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const settle = (): void => {
+      signal?.removeEventListener('abort', onAbort);
+      if (killTimer !== undefined) clearTimeout(killTimer);
+    };
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
@@ -60,9 +83,17 @@ const runProbe = (binary: string, args: readonly string[]): Promise<ProcessRun> 
     child.stderr.on('data', (chunk: string) => {
       stderr = (stderr + chunk).slice(-STDERR_TAIL_LIMIT);
     });
-    child.on('error', reject);
-    child.on('close', (code, signal) => {
-      resolve({ code, signal, stdout, stderr: redact(stderr) });
+    child.on('error', (error) => {
+      settle();
+      reject(error);
+    });
+    child.on('close', (code, exitSignal) => {
+      settle();
+      if (killed) {
+        resolve('aborted');
+        return;
+      }
+      resolve({ code, signal: exitSignal, stdout, stderr: redact(stderr) });
     });
   });
 
@@ -95,14 +126,18 @@ const compareVersions = (left: string, right: string): number => {
 };
 
 /** Probes once per invocation: `-version` for a parseable version, `-encoders` for libx264. */
-const probe = async (binary: string): Promise<Result<undefined>> => {
-  let versionRun: ProcessRun;
+const probe = async (
+  binary: string,
+  signal?: AbortSignal,
+): Promise<Result<undefined> | 'aborted'> => {
+  let versionRun: ProcessRun | 'aborted';
   try {
-    versionRun = await runProbe(binary, ['-version']);
+    versionRun = await runProbe(binary, ['-version'], signal);
   } catch (error) {
     if (isMissingBinary(error)) return { ok: false, error: ffmpegNotFoundDiagnostic(binary) };
     throw error;
   }
+  if (versionRun === 'aborted') return 'aborted';
   // A `-version` that does not exit 0 means the binary is present but not runnable.
   if (versionRun.code !== 0) return { ok: false, error: ffmpegNotFoundDiagnostic(binary) };
   const parsed = parseVersion(versionRun.stdout);
@@ -116,13 +151,14 @@ const probe = async (binary: string): Promise<Result<undefined>> => {
       }),
     };
 
-  let encodersRun: ProcessRun;
+  let encodersRun: ProcessRun | 'aborted';
   try {
-    encodersRun = await runProbe(binary, ['-hide_banner', '-encoders']);
+    encodersRun = await runProbe(binary, ['-hide_banner', '-encoders'], signal);
   } catch (error) {
     if (isMissingBinary(error)) return { ok: false, error: ffmpegNotFoundDiagnostic(binary) };
     throw error;
   }
+  if (encodersRun === 'aborted') return 'aborted';
   // Only the encoder-name column counts: a description that mentions libx264 is not support.
   const hasH264 =
     encodersRun.code === 0 &&
@@ -393,9 +429,13 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
   });
 
   const written = await pump({ child, request, stop: stopped, aborted: () => aborted });
+  if (written.stop === 'frames-end') {
+    // After the last frame the child is expected to finish alone, but a cancellation that
+    // arrives during that wait must still kill it rather than outlive the command.
+    await Promise.race([closed, stopped]);
+    if (aborted) await terminate(child, closed);
+  } else await terminate(child, closed);
   signal?.removeEventListener('abort', onAbort);
-  if (written.stop === 'frames-end') await closed;
-  else await terminate(child, closed);
 
   const fail = (diagnostics: readonly Diagnostic[]): EncodeOutcome => {
     removeSibling(temporary);
@@ -470,9 +510,10 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
 /** Probes `ffmpeg` (or `ffmpegPath`) once and returns the port bound to that binary. */
 export const createFfmpegEncoder = async (
   options: FfmpegEncoderOptions = {},
-): Promise<Result<Encoder>> => {
+): Promise<EncodeProbeOutcome> => {
   const binary = options.ffmpegPath ?? 'ffmpeg';
-  const probed = await probe(binary);
+  const probed = await probe(binary, options.signal);
+  if (probed === 'aborted') return abortedOutcome;
   if (!probed.ok) return probed;
   return {
     ok: true,
