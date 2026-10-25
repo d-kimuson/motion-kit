@@ -10,6 +10,18 @@ export type BrowserOptions = {
 export const chromiumOptions = (options: BrowserOptions = {}): LaunchOptions => ({
   headless: true,
   chromiumSandbox: options.disableSandbox !== true,
+  // Cancellation belongs to the caller, not to the browser launcher. Playwright installs its own
+  // `SIGINT`/`SIGTERM`/`SIGHUP` handlers on the first launch (`addProcessHandlerIfNeeded`). Its
+  // `SIGINT` handler exits the process with 130 as soon as its browsers have closed — inside the
+  // same signal dispatch, ahead of the asynchronous cleanup that has to kill the encoder, remove
+  // its temporary file and report the cancellation; its `SIGTERM` and `SIGHUP` handlers only
+  // close the browsers, which would still take a signal the CLI owns away from it and turn a
+  // hangup into a mid-render browser failure. The CLI watches all three itself
+  // (`watchSignals`), so every one of them ends as the same cancellation. Playwright's `exit`
+  // handler still kills the processes it tracks, so nothing it started outlives the process.
+  handleSIGINT: false,
+  handleSIGTERM: false,
+  handleSIGHUP: false,
   ignoreDefaultArgs: options.softwareWebGL === true ? [] : ['--enable-unsafe-swiftshader'],
   args:
     options.softwareWebGL === true

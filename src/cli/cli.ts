@@ -1,6 +1,6 @@
 import { Command, CommanderError } from 'commander';
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 
 import {
   EnvelopeSchema,
@@ -10,13 +10,18 @@ import {
 } from '../agent/cli-output.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
+import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
+import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
 import { CliArgsSchema, type FrameArgs, type RenderArgs } from './args.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
 // `internal.unexpected` (exit 3); `cli.*` diagnostics are invocation errors
-// (exit 2); every other domain diagnostic is exit 1; success is exit 0.
+// (exit 2); every other domain diagnostic is exit 1; success is exit 0. A
+// cancelled run is not a result: it emits no envelope at all and exits 128 plus
+// the signal number, because aborted control flow carries no Diagnostic and the
+// envelope cannot express "stopped" without inventing one (agent CONTEXT.md).
 
 const diagnostic = (code: Diagnostic['code'], message: string, hint: string): Diagnostic => ({
   code,
@@ -45,7 +50,7 @@ const internalUnexpected = (): Diagnostic =>
 const renderCommand = new Command('render')
   .argument('<entry>')
   .option('--composition <id>')
-  .requiredOption('--out <file>')
+  .requiredOption('--out <file-or-dir>')
   .option('--props <json>')
   .option('--json')
   .exitOverride()
@@ -112,7 +117,8 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
   return { kind: 'args', value: raw };
 };
 
-type CommandOutcome =
+/** Every outcome that becomes an envelope: a result, or a failure carrying Diagnostics. */
+type EnvelopeOutcome =
   | {
       readonly ok: true;
       readonly data: RenderData | FrameData;
@@ -120,19 +126,58 @@ type CommandOutcome =
     }
   | { readonly ok: false; readonly data: null; readonly diagnostics: readonly Diagnostic[] };
 
-const failure = (diagnostics: readonly Diagnostic[]): CommandOutcome => ({
+type CommandOutcome =
+  | EnvelopeOutcome
+  // Cancellation is not a failure of the Composition or of the CLI, so it carries no Diagnostic.
+  | { readonly ok: false; readonly aborted: true };
+
+const failure = (diagnostics: readonly Diagnostic[]): EnvelopeOutcome => ({
   ok: false,
   data: null,
   diagnostics,
 });
 
+const abortedOutcome: CommandOutcome = { ok: false, aborted: true };
+
+/**
+ * Records that the run's outcome is final: the artifact is on disk, or the failure is.
+ *
+ * Only the outcome is settled here, not the run: the renderer's teardown follows and takes far
+ * longer than the commit did (a page-dispose deadline, a service-dispose race, a browser kill).
+ * While that teardown runs, the aborted line would deny an output that already exists, so the
+ * caller's report cover is released the moment an outcome is decided, before the awaits.
+ * Aborted control flow is not decided — that line is exactly what its caller needs.
+ */
+type Decide = (outcome: CommandOutcome) => CommandOutcome;
+
 const rendererFailure = (
   outcome: Extract<RenderOutcome<Renderer>, { ok: false }>,
 ): CommandOutcome =>
-  'error' in outcome ? failure([outcome.error]) : failure([internalUnexpected()]);
+  'aborted' in outcome
+    ? abortedOutcome
+    : 'error' in outcome
+      ? failure([outcome.error])
+      : failure([internalUnexpected()]);
 
 const frameFailure = (result: Extract<FrameCaptureResult, { ok: false }>): CommandOutcome =>
-  'error' in result ? failure([...result.error]) : failure([internalUnexpected()]);
+  'aborted' in result
+    ? abortedOutcome
+    : 'error' in result
+      ? failure([...result.error])
+      : failure([internalUnexpected()]);
+
+/** The one format rule: an .mp4 target is encoded video; every other target is a PNG directory. */
+const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() === '.mp4';
+
+/**
+ * The aborted line is the caller's only signal, so it says what the route actually left behind
+ * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
+ * as it arrived, while the mp4 route removes its temporary sibling and leaves no target.
+ */
+const abortedLine = (args: RenderArgs | FrameArgs): string =>
+  args.command === 'render' && !isVideoOutput(args.out)
+    ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
+    : `${args.command} aborted; no output was produced`;
 
 const isFile = (path: string): boolean => {
   try {
@@ -142,7 +187,7 @@ const isFile = (path: string): boolean => {
   }
 };
 
-const openRenderer = async (args: RenderArgs | FrameArgs) => {
+const openRenderer = async (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
   const projectRoot = process.cwd();
   const entryAbsolute = resolve(projectRoot, args.entry);
   if (!isFile(entryAbsolute))
@@ -152,20 +197,60 @@ const openRenderer = async (args: RenderArgs | FrameArgs) => {
     entry: args.entry,
     ...(args.composition === undefined ? {} : { compositionId: args.composition }),
     ...('props' in args && args.props !== undefined ? { props: args.props } : {}),
+    signal,
   });
   if (!renderer.ok) return { ok: false as const, outcome: rendererFailure(renderer) };
   return { ok: true as const, renderer: renderer.value };
 };
 
-const runRender = async (args: RenderArgs): Promise<CommandOutcome> => {
-  const opened = await openRenderer(args);
+const runRender = async (
+  args: RenderArgs,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
+  // Checked before the browser exists, so a run cancelled while it started does no work.
+  if (signal.aborted) return abortedOutcome;
+  const opened = await openRenderer(args, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
-    if (!rate.ok) return failure([rate.error]);
+    if (!rate.ok) return decide(failure([rate.error]));
     const outAbsolute = resolve(process.cwd(), args.out);
+    // The target's extension selects the format: an `.mp4` file is encoded video, and any
+    // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
+    if (isVideoOutput(outAbsolute)) {
+      mkdirSync(dirname(outAbsolute), { recursive: true });
+      // The same signal reaches the encoder, which kills its child and removes the sibling.
+      const encoded = await renderVideo({ composition: renderer, output: outAbsolute, signal });
+      if (!encoded.ok)
+        return decide(
+          'aborted' in encoded
+            ? abortedOutcome
+            : 'error' in encoded
+              ? failure([...encoded.error])
+              : failure([internalUnexpected()]),
+        );
+      return decide({
+        ok: true,
+        // The frames route forwards each frame's warnings; the mp4 route reports the same
+        // warnings the receipt carried, so a Tier C Composition is flagged on both.
+        diagnostics: [...encoded.value.diagnostics],
+        data: {
+          output: encoded.value.output,
+          format: 'mp4',
+          width: encoded.value.width,
+          height: encoded.value.height,
+          fps: {
+            numerator: encoded.value.fps.numerator,
+            denominator: encoded.value.fps.denominator,
+          },
+          frameCount: encoded.value.frameCount,
+          durationSeconds: encoded.value.durationSeconds,
+        },
+      });
+    }
     mkdirSync(outAbsolute, { recursive: true });
     const files: string[] = [];
     const diagnostics: Diagnostic[] = [];
@@ -174,8 +259,9 @@ const runRender = async (args: RenderArgs): Promise<CommandOutcome> => {
     for await (const result of renderer.renderFrames({
       from: 0,
       to: descriptor.durationInFrames,
+      signal,
     })) {
-      if (!result.ok) return frameFailure(result);
+      if (!result.ok) return decide(frameFailure(result));
       const name = `frame-${String(result.value.frame).padStart(5, '0')}.png`;
       writeFileSync(join(outAbsolute, name), result.value.png);
       files.push(name);
@@ -201,7 +287,7 @@ const runRender = async (args: RenderArgs): Promise<CommandOutcome> => {
         2,
       )}\n`,
     );
-    return {
+    return decide({
       ok: true,
       diagnostics,
       data: {
@@ -214,25 +300,31 @@ const runRender = async (args: RenderArgs): Promise<CommandOutcome> => {
         frameCount: descriptor.durationInFrames,
         durationSeconds: toSeconds(frameToTime(BigInt(descriptor.durationInFrames), rate.value)),
       },
-    };
+    });
   } finally {
+    // The outcome above is already on disk; this teardown is all that is left of the run.
     await renderer.dispose();
   }
 };
 
-const runFrame = async (args: FrameArgs): Promise<CommandOutcome> => {
-  const opened = await openRenderer(args);
+const runFrame = async (
+  args: FrameArgs,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
+  if (signal.aborted) return abortedOutcome;
+  const opened = await openRenderer(args, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
-    if (!rate.ok) return failure([rate.error]);
-    const result = await renderer.renderFrame({ frame: args.frame });
-    if (!result.ok) return frameFailure(result);
+    if (!rate.ok) return decide(failure([rate.error]));
+    const result = await renderer.renderFrame({ frame: args.frame, signal });
+    if (!result.ok) return decide(frameFailure(result));
     const outAbsolute = resolve(process.cwd(), args.out);
     writeFileSync(outAbsolute, result.value.png);
-    return {
+    return decide({
       ok: true,
       diagnostics: [...result.value.diagnostics],
       data: {
@@ -243,7 +335,7 @@ const runFrame = async (args: FrameArgs): Promise<CommandOutcome> => {
         width: result.value.width,
         height: result.value.height,
       },
-    };
+    });
   } finally {
     await renderer.dispose();
   }
@@ -251,7 +343,7 @@ const runFrame = async (args: FrameArgs): Promise<CommandOutcome> => {
 
 const buildEnvelope = (
   command: 'render' | 'frame',
-  outcome: CommandOutcome,
+  outcome: EnvelopeOutcome,
   durationMs: number,
 ): Envelope =>
   EnvelopeSchema.parse({
@@ -275,8 +367,9 @@ const summarize = (envelope: Envelope): string => {
   if (envelope.ok && envelope.data !== null) {
     if (envelope.command === 'render') {
       const data = envelope.data;
+      const verb = data.format === 'mp4' ? 'encoded' : 'rendered';
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
-      return `rendered ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
+      return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
     }
     if (envelope.command === 'frame')
       return `captured frame ${envelope.data.frame} to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
@@ -301,15 +394,74 @@ const emit = (envelope: Envelope, json: boolean): number => {
   return code;
 };
 
-export const runCli = async (argv: readonly string[]): Promise<number> => {
+/** Every signal a caller stops a run with; each one means the same thing to the CLI. */
+const stopSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+type StopSignal = (typeof stopSignals)[number];
+
+/** 128 + the signal number: the shell's own reading of a run the caller interrupted. */
+const abortExitCodes: Readonly<Record<StopSignal, number>> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+  SIGHUP: 129,
+};
+
+const isStopSignal = (value: unknown): value is StopSignal =>
+  stopSignals.some((name) => name === value);
+
+/** The exit code of a cancelled run; a programmatic abort means the same as Ctrl-C. */
+export const abortedExitCode = (signal: AbortSignal): number =>
+  isStopSignal(signal.reason) ? abortExitCodes[signal.reason] : abortExitCodes.SIGINT;
+
+/**
+ * Binds SIGINT/SIGTERM/SIGHUP to one controller. The first signal is a cancellation: it aborts,
+ * and the run cleans up asynchronously. A second one is the caller insisting, so it ends the
+ * process immediately instead of waiting for that cleanup — but through the covers, because a
+ * signal this process does not handle is a fatal termination that runs no `exit` listener, and
+ * the encoder's temporary sibling, its child and the loading service would outlive the run.
+ */
+export const watchSignals = (): { readonly signal: AbortSignal; readonly stop: () => void } => {
+  const controller = new AbortController();
+  let stoppedBy: StopSignal | undefined;
+  const handle = (name: StopSignal): void => {
+    if (stoppedBy === undefined) {
+      stoppedBy = name;
+      controller.abort(name);
+      return;
+    }
+    exitThroughCovers(abortExitCodes[name]);
+  };
+  const handlers: Record<StopSignal, () => void> = {
+    SIGINT: () => handle('SIGINT'),
+    SIGTERM: () => handle('SIGTERM'),
+    SIGHUP: () => handle('SIGHUP'),
+  };
+  for (const name of stopSignals) process.on(name, handlers[name]);
+  return {
+    signal: controller.signal,
+    stop: () => {
+      for (const name of stopSignals) process.removeListener(name, handlers[name]);
+    },
+  };
+};
+
+export type RunCliOptions = {
+  /** Aborts every renderer, frame and encoder the command starts (the CLI's cancellation). */
+  readonly signal?: AbortSignal;
+};
+
+export const runCli = async (
+  argv: readonly string[],
+  options: RunCliOptions = {},
+): Promise<number> => {
   const started = process.hrtime.bigint();
   const durationMs = (): number => Number(process.hrtime.bigint() - started) / 1e6;
+  const signal = options.signal ?? new AbortController().signal;
   const parsed = parseRaw(argv);
 
   if (parsed.kind === 'help') return 0;
   if (parsed.kind === 'usage') {
     process.stdout.write(
-      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a frame sequence to PNG files\n\nRun `motion-kit <command> --help` for command options.\n',
+      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir)\n\nRun `motion-kit <command> --help` for command options.\n',
     );
     return 0;
   }
@@ -335,15 +487,45 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
   }
 
   let outcome: CommandOutcome;
+  // A cancelled run's line is written below, but a library that exits the process from its own
+  // signal handler can end the run before that line is reached; this cover is the last chance to
+  // keep the caller's one statement about what the interrupted run left behind (lib/exit.ts).
+  let reported = false;
+  const report = (): void => {
+    if (reported) return;
+    reported = true;
+    process.stderr.write(`${abortedLine(checked.data)}\n`);
+  };
+  const releaseCover = coverOnExit(report);
+  // The route reports its own outcome as final the moment it commits (or fails for good), which is
+  // before the teardown those functions still owe: the line above must not outlive that commit, or
+  // a stop during teardown would deny an output the directory already holds.
+  const decide: Decide = (decided) => {
+    if (!('aborted' in decided)) releaseCover();
+    return decided;
+  };
   try {
-    outcome =
-      checked.data.command === 'render'
-        ? await runRender(checked.data)
-        : await runFrame(checked.data);
-  } catch (error) {
-    if (error instanceof Error && error.stack !== undefined)
-      process.stderr.write(`${error.stack}\n`);
-    outcome = failure([internalUnexpected()]);
+    try {
+      outcome =
+        checked.data.command === 'render'
+          ? await runRender(checked.data, signal, decide)
+          : await runFrame(checked.data, signal, decide);
+    } catch (error) {
+      if (error instanceof Error && error.stack !== undefined)
+        process.stderr.write(`${error.stack}\n`);
+      outcome = failure([internalUnexpected()]);
+    }
+    // A cancelled run has no envelope: aborted control flow carries no Diagnostic, and the
+    // schema forbids `ok: false` without one. `--json` therefore prints nothing at all.
+    if ('aborted' in outcome) {
+      report();
+      return abortedExitCode(signal);
+    }
+    // The run is not cancelled, so it owes the caller no aborted line any more: a signal from
+    // here on must not describe a finished render as one that produced nothing.
+    releaseCover();
+    return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);
+  } finally {
+    releaseCover();
   }
-  return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);
 };

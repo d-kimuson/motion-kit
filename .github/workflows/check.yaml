@@ -57,6 +57,25 @@ jobs:
           }
           EOF
 
+      # The encoder, the CLI's mp4 route and the frame-transport video test spawn the system
+      # FFmpeg, and every case fails on a missing binary (there is no skip), so the install is
+      # asserted here instead of left to whatever the runner image happens to ship. It comes
+      # before the test steps because `render-video.test.ts` runs in the frame-transport project.
+      - name: Install FFmpeg for the encoder tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+          encoders="$(ffmpeg -hide_banner -encoders)"
+          case "$encoders" in
+            *'libx264 '*) ;;
+            *)
+              echo '::error::The installed FFmpeg has no libx264 encoder, which the MP4 route requires.'
+              exit 1
+              ;;
+          esac
+
       - name: Run unit tests
         run: pnpm test --project unit
 
@@ -68,6 +87,12 @@ jobs:
 
       - name: Run frame transport and PNG determinism tests
         run: pnpm test --project frame-transport
+
+      - name: Run encoder port tests
+        run: pnpm test --project encoding
+
+      - name: Run CLI tests
+        run: pnpm test --project cli
 
   gitleaks:
     name: gitleaks

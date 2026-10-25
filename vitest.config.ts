@@ -56,12 +56,24 @@ export default defineConfig({
           name: 'frame-transport',
           include: [
             'src/render/renderer.test.ts',
+            'src/render/render-video.test.ts',
             'src/render/capture/**/*.test.ts',
             // Later contexts register reference Compositions as *.determinism.test.ts.
             'src/**/*.determinism.test.ts',
           ],
           testTimeout: 60_000,
           hookTimeout: 60_000,
+        },
+      },
+      {
+        // The Encoder port spawns the system FFmpeg; every case needs the binary, and a
+        // missing one must fail here rather than skip.
+        extends: true,
+        test: {
+          name: 'encoding',
+          include: ['src/render/encoding/**/*.test.ts'],
+          testTimeout: 60_000,
+          hookTimeout: 20_000,
         },
       },
       {

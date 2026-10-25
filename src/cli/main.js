@@ -18,5 +18,13 @@ registerHooks({
     return nextLoad(url, context);
   },
 });
-const { runCli } = await import('./cli.ts');
-process.exitCode = await runCli(process.argv.slice(2));
+const { runCli, watchSignals } = await import('./cli.ts');
+// Ctrl-C (SIGINT), a supervisor's SIGTERM or a closed terminal (SIGHUP) cancels the run through
+// one controller: it reaches the renderer and the encoder, which kills its child and removes its
+// temporary file. A second signal ends the process at once, through the same synchronous covers.
+const watched = watchSignals();
+try {
+  process.exitCode = await runCli(process.argv.slice(2), { signal: watched.signal });
+} finally {
+  watched.stop();
+}

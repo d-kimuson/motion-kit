@@ -7,6 +7,7 @@ import { type BrowserContext, type Page } from 'playwright';
 import { z } from 'zod';
 
 import { DiagnosticSchema, type Diagnostic } from '../../lib/diagnostic.ts';
+import { coverOnExit } from '../../lib/exit.ts';
 import { ownershipSchema, type Ownership } from '../../lib/frame-protocol.ts';
 import {
   descriptorSchema,
@@ -83,6 +84,7 @@ export const openLoadingSession = async (
   let workspace: string | undefined;
   let creatingWorkspace: Promise<string> | undefined;
   let child: ChildProcess | undefined;
+  let releaseServiceCover: (() => void) | undefined;
   let owned: OwnedBrowser | undefined;
   let launching: ReturnType<typeof launchBrowser> | undefined;
   let published = false;
@@ -177,6 +179,9 @@ export const openLoadingSession = async (
         })(),
         terminateChild(),
       ]);
+      // The service is gone, so the exit guard has nothing left to do.
+      releaseServiceCover?.();
+      releaseServiceCover = undefined;
       try {
         const directory = workspace ?? (await creatingWorkspace);
         if (directory !== undefined) await rm(directory, { recursive: true, force: true });
@@ -245,6 +250,18 @@ export const openLoadingSession = async (
         ],
         { detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], execArgv: [] },
       );
+      // The service is its own process-group leader, so it outlives an abrupt exit unless it is
+      // killed on the way out; disposal is asynchronous and cannot be the only owner
+      // (lib/exit.ts).
+      const service = child;
+      releaseServiceCover = coverOnExit(() => {
+        if (service.pid === undefined) return;
+        try {
+          process.kill(-service.pid, 'SIGKILL');
+        } catch {
+          service.kill('SIGKILL');
+        }
+      });
       child.stdout?.pipe(process.stderr, { end: false });
       child.stderr?.pipe(process.stderr, { end: false });
       const ready = Promise.withResolvers<string>();
