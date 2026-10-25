@@ -7,7 +7,8 @@ An Architecture Decision Record captures a decision that is hard to reverse or t
 - Cross-context: `docs/decisions/YYYYMMDD-<name>.<status>.md`.
 - One context: `docs/contexts/<context>/adr/YYYYMMDD-<name>.<status>.md`.
 - `<status>` is one of `proposed`, `accepted`, `rejected`, `deprecated`, `superseded`. Change the status by renaming the file; a superseded ADR links to its successor in `Consequences`.
-- Amend an accepted ADR in place, with an `_Amended <date> (<task key>):_` sentence at the changed paragraph saying what it supersedes and what supersedes it (for example `_Amended 2026-10-25 (TASK-159):_`). Neither the status nor the file name changes; that is the rename in the line above, for an ADR replaced by a successor (`docs/guidelines/auto-pilot.md`, Precedence when documents disagree).
+- Amend an accepted ADR in place, with an `_Amended <date> (<task key>):_` sentence at the changed paragraph saying what it supersedes and what supersedes it (for example `_Amended 2026-10-25 (TASK-159):_`). The task key is required for a new amendment; the ones written before this rule carry only a date, or a note such as `(review)`.
+- An amendment changes neither the status nor the file name: the rename in the line above is for an ADR a successor replaces (`docs/guidelines/auto-pilot.md`, Precedence when documents disagree).
 
 ## Template
 

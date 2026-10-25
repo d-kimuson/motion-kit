@@ -34,8 +34,10 @@ Start it as a SubAgent that uses a worktree. In this harness (pi), worktree isol
 
 When the task and the documents disagree, the product owner decision recorded on the task wins. `docs/guidelines/review/index.md` (Precedence) has the order, the marker, and the reviewer's check; this section has what the auto-pilot and the implementer do.
 
-- Implementer: do not follow the superseded document and do not widen the PR for it. Amend that document in the same PR when the change is a paragraph (`docs/guidelines/writing/adr.md`), or, when it is larger, file a follow-up docs task and say so in the PR body.
-- Rounds: a round is a review on the PR that returns at least one finding; `tasks/<id>.md` keeps the count under `review rounds`. Two rounds whose findings only re-litigate the same document conflict are the limit: after the second, stop iterating and ask the product owner by `docs/guidelines/team-channel.md` with the disagreement and the precedence reading, instead of a third round on the same conflict. A correctness or regression finding is always raised and never counts toward the limit.
+- Implementer: do not follow the superseded document and do not widen the PR for it. Amend that document in the same PR when the change is a paragraph (`docs/guidelines/writing/adr.md`, `docs/guidelines/writing/design-doc.md`), or, when it is larger, file a follow-up docs task and say so in the PR body.
+- Rounds: a round is a review on the PR that returns at least one finding. You keep the count in `tasks/<id>.md` under `review rounds` when you record the review result.
+- The counter is your state: `tasks/` is untracked, so an implementer in its own worktree cannot read it and does not count or stop on it — you tell it when the rule stops the loop.
+- Limit: two rounds whose findings only re-litigate the same document conflict are the limit. After the second, stop iterating and ask the product owner by `docs/guidelines/team-channel.md` with the disagreement and the precedence reading, instead of a third round on the same conflict. A correctness or regression finding is always raised and never counts toward the limit.
 - After the answer, recorded on the task as `team-channel.md` requires: either the document is amended and the change stands, or the finding is dropped and the PR merges as it is. Until the answer comes, keep other work going and do not merge the PR.
 
 ## Turn

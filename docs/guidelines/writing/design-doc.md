@@ -9,6 +9,10 @@ A Design Doc describes how a non-trivial piece of work will be built before it i
 
 When the work is done, the Design Doc stays as the record of why the code looks the way it does; decisions it contains that must outlive it become ADRs (`docs/guidelines/writing/adr.md`).
 
+## Amendment
+
+Amend it in place, with the same `_Amended <date> (<task key>):_` sentence an accepted ADR carries, at the changed paragraph (`docs/guidelines/writing/adr.md`; `docs/guidelines/auto-pilot.md`, Precedence when documents disagree).
+
 ## Template
 
 ```markdown
