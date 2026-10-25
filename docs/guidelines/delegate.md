@@ -7,6 +7,7 @@ The boundary of responsibility between the user and the agent, and how far an im
 - The user decides the Goal (what to achieve and to what extent). How to get there is left to the agent.
 - The approach (whether to use SubAgents, whether to do everything at once, the order of steps) is the agent's decision within the guidelines. Do not ask the user to approve the approach.
 - Do not change the Goal on your own. Reporting completion while part of the scope is deferred because it seemed large, or finishing with a narrower scope than instructed, is a change of Goal. Ask the user only when the Goal cannot be achieved without changing it.
+- When a product owner decision recorded on the task supersedes an accepted document, the task wins; follow `docs/guidelines/auto-pilot.md` (Precedence when documents disagree).
 - Problems outside the Goal found during work (another bug, a mismatch with the design) are not fixed; attach them to the completion report. File them in the Backlog (`docs/guidelines/backlog.md`) and attach the task link.
 
 ## Definition of done
@@ -32,7 +33,7 @@ Until the repository has a GitHub remote (`git remote -v` prints nothing), the t
 
 - **Feedback Loop**: before committing, run every command in the Feedback Loop of AGENTS.md whose "When to run" applies, and fix what fails.
 - **CI Pass**: after pushing, wait for CI with `gh pr checks --watch` and fix what fails.
-- **Review**: delegate to a SubAgent with this instruction, verbatim: "Review PR #<number> by `REVIEW.md` and post the findings as review comments on the PR." (Main Push: "Review the commits <range> by `REVIEW.md` and return the findings as a list.") Fix the findings and repeat until there are none.
+- **Review**: delegate to a SubAgent with this instruction, verbatim: "Review PR #<number> for TASK-<number> (or the maintenance or feedback item named in the request) by `REVIEW.md` and post the findings as review comments on the PR." (Main Push: "Review the commits <range> for TASK-<number> by `REVIEW.md` and return the findings as a list.") Fix the findings and repeat until there are none. The round count and the stop belong to the auto-pilot (`docs/guidelines/auto-pilot.md`, Precedence when documents disagree), which records the count in its own state and tells you when the rule stopped the loop: stop and report then, instead of opening another round.
 - **QA Check**: delegate to a SubAgent with this instruction, verbatim: "Verify <summary of the change> by the QA Check steps in `docs/guidelines/quality-assurance/index.md` and comment the result on PR #<number>." (Main Push: "... and return the result.") `approve` passes. On `reject`, fix and ask again. On `human-check`, attach the human-check content of the result to the completion report as it is, for the user to verify.
 
 The main agent does not read `REVIEW.md` or the QA guidelines itself; it hands them to the SubAgents.

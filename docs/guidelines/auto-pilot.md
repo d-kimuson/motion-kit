@@ -20,7 +20,7 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
   - Recent decisions: what was decided and why. Remove an entry once later turns no longer use it
   - Notes for the next turn
   - The wait interval (Wait, below)
-- `tasks/<id>.md`: one file per task in progress. `<id>` is the Backlog task id, or `maintenance-<name>` for a maintenance task in progress (which also records the commit HEAD was at when it started). Write who it was delegated to, what was asked, links (PR, worktree, task), what it is waiting for, and what has been decided. Delete the file when the task is done or dropped; for a maintenance task, after recording it with `done`.
+- `tasks/<id>.md`: one file per task in progress. `<id>` is the Backlog task id, or `maintenance-<name>` for a maintenance task in progress (which also records the commit HEAD was at when it started). Write who it was delegated to, what was asked, links (PR, worktree, task), what it is waiting for, its `review rounds` (Precedence when documents disagree), and what has been decided. Delete the file when the task is done or dropped; for a maintenance task, after recording it with `done`.
 - `maintenance-tasks/`: maintenance tasks (Maintenance tasks, below).
 - `troubleshots/<topic>.md`: workarounds for the auto-pilot mechanism itself, in the format of `docs/guidelines/writing/troubleshoot.md`. When a command or integration fails unexpectedly, look here first.
 
@@ -29,6 +29,16 @@ Kept in `.agents/auto-pilot/`. `context.md`, `tasks/`, and `maintenance-tasks/la
 Independent Agent, SubAgent, user task, and maintenance task are defined in `docs/CONTEXT-MAP.md`. Run at most 3 Independent Agents at a time.
 
 Start it as a SubAgent that uses a worktree. In this harness (pi), worktree isolation needs a workflow script, so: keep the git tree clean; write the script to `/tmp/auto-pilot-launch/<task>.js` (outside the repository) containing `runs.run("<key>", { agent: "delegate", model: "openai-codex/gpt-6-astra:high", task, worktree: true })`; then call `subagent({ workflow: "/tmp/auto-pilot-launch/<task>.js", async: true })`. In Claude Code, start it with the Agent tool and `isolation: "worktree"` instead. In Command Code, start it with `agent({ subagent_type: "general", run_in_background: true })` and tell it in the prompt to create its own persistent worktree under `/Users/kaito/repos/worktrees/motion-kit/<task>` and to commit and push early; a finished run leaves that worktree on disk, so a fix round is a new run pointed at the same path. Use `delegate` with an explicit model where the harness offers it: the builtin `worker` agent is disabled by a user settings override. A builtin SubAgent cannot start SubAgents, so run the Review and QA Check of the definition of done yourself with your own SubAgents and hand the findings back to the Independent Agent, which then fixes and merges. Check its state by the SubAgent's completion notification and by the PR's state and checks (`gh pr list`, `gh pr checks <number>`). On a launch failure, see `.agents/auto-pilot/troubleshots/independent-agent-launch.md`.
+
+## Precedence when documents disagree
+
+When the task and the documents disagree, the product owner decision recorded on the task wins. `docs/guidelines/review/index.md` (Precedence) has the order, the marker, and the reviewer's check; this section has what the auto-pilot and the implementer do.
+
+- Implementer: do not follow the superseded document and do not widen the PR for it. Amend that document in the same PR when the change is a paragraph (`docs/guidelines/writing/adr.md`, `docs/guidelines/writing/design-doc.md`), or, when it is larger, file a follow-up docs task and say so in the PR body.
+- Rounds: a round is a review on the PR that returns at least one finding. You keep the count in `tasks/<id>.md` under `review rounds` when you record the review result.
+- The counter is your state: `tasks/` is untracked, so an implementer in its own worktree cannot read it and does not count or stop on it — you tell it when the rule stops the loop.
+- Limit: two rounds whose findings only re-litigate the same document conflict are the limit. After the second, stop iterating and ask the product owner by `docs/guidelines/team-channel.md` with the disagreement and the precedence reading, instead of a third round on the same conflict. A correctness or regression finding is always raised and never counts toward the limit.
+- After the answer, recorded on the task as `team-channel.md` requires: either the document is amended and the change stands, or the finding is dropped and the PR merges as it is. Until the answer comes, keep other work going and do not merge the PR.
 
 ## Turn
 
