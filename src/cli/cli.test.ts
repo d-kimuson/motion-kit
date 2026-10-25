@@ -871,19 +871,56 @@ export const compositions = defineCompositions([
   });
 
   // The promise to an agent is one JSON document on stdout, always: an invocation that names no
-  // runnable subcommand still gets the envelope, with `command: null` when argv named none.
+  // runnable subcommand still gets the envelope. `command` is the first positional argument, so a
+  // real subcommand written after a flag is named truthfully (and the hint says where it belongs),
+  // a flag's value never takes its place, and a reserved one is named as not implemented yet.
   it.each([
-    { argv: ['--json'], command: null },
-    { argv: ['unknown', '--json'], command: null },
-    { argv: ['render', '--bogus', '--json'], command: 'render' },
-  ])('emits one envelope and exits 2 for $argv', async ({ argv, command }) => {
+    {
+      argv: ['--json'],
+      command: null,
+      hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+    },
+    {
+      argv: ['unknown', '--json'],
+      command: null,
+      hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+    },
+    {
+      argv: ['inspect', '--json'],
+      command: 'inspect',
+      hint: 'inspect is not implemented yet; use render or frame.',
+    },
+    {
+      argv: ['validate', '--json'],
+      command: 'validate',
+      hint: 'validate is not implemented yet; use render or frame.',
+    },
+    {
+      argv: ['render', '--bogus', '--json'],
+      command: 'render',
+      hint: "required option '--out <file-or-dir>' not specified",
+    },
+    // Misplaced: `render` is named although the option's value `/tmp/a.png` comes first, and the
+    // `--composition` value `frame` is not mistaken for the command.
+    {
+      argv: ['--out', '/tmp/a.png', 'render', 'entry.tsx', '--json'],
+      command: 'render',
+      hint: 'Put the subcommand first: motion-kit render [options].',
+    },
+    {
+      argv: ['--composition', 'frame', 'render', 'entry.tsx', '--json'],
+      command: 'render',
+      hint: 'Put the subcommand first: motion-kit render [options].',
+    },
+  ])('emits one envelope and exits 2 for $argv', async ({ argv, command, hint }) => {
     const result = await run(argv);
     expect(result.code).toBe(2);
     const envelope = assertValidEnvelope(result);
     expect(envelope).toMatchObject({ command, ok: false, data: null });
-    expect(envelope.diagnostics).toMatchObject([{ code: 'cli.invalid-arguments' }]);
+    expect(envelope.diagnostics).toMatchObject([{ code: 'cli.invalid-arguments', hint }]);
     expect(result.stdout.trim().split('\n')).toHaveLength(1);
-    expect(envelope.diagnostics[0]?.hint).toBeDefined();
+    // The document is the whole of the human-visible failure: no Diagnostic line on stderr.
+    expect(result.stderr).not.toContain('cli.invalid-arguments');
   });
 
   it.each([{ argv: [] as string[] }, { argv: ['unknown'] }])(
