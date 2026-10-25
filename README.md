@@ -27,8 +27,12 @@ pnpm build
 node dist/cli.js render entry.tsx --out out.mp4
 ```
 
-A registry entry (`entry.tsx` above) exports a `compositions` registry. Only the exports of
-`src/index.ts` are used here:
+Rendering needs a Chromium that Playwright can launch
+(`pnpm exec playwright install chromium`), and an `.mp4` target also needs FFmpeg on `PATH`
+(see [CLI](#cli)).
+
+A registry entry (`entry.tsx` above) exports a `compositions` registry. Every import below
+ships from the package root today:
 
 ```tsx
 import { defineComposition, defineCompositions, useFrame } from '@kimuson/motion-kit';
@@ -49,8 +53,8 @@ export const compositions = defineCompositions([
 ]);
 ```
 
-`durationInFrames` and a rational `fps` fix the timeline; props come from the Zod `schema`, and
-the component reads time through the timeline hooks, never through `Date`.
+`durationInFrames` and a rational `fps` fix the timeline; props come from the `zod` schema, so
+the project installs `zod` for itself.
 
 ## CLI
 
@@ -82,19 +86,18 @@ before the first frame; `frame` and an `--out` directory need no FFmpeg at all.
 Exit codes: `0` success, `1` domain failure (e.g. invalid props), `2` invocation error (e.g.
 missing entry or unknown id), `3` unexpected internal error. Failures are always Diagnostics in
 the envelope. Under `--json` stdout carries one JSON document even for an unusable invocation;
-`command` is then the subcommand argv names, or `null` when it names none. A run you cancel
-emits no envelope: it writes one line to stderr and exits `130` (`SIGINT`), `143` (`SIGTERM`) or
-`129` (`SIGHUP`).
+`command` is the subcommand argv named, or `null` when it named none. A run you cancel emits no
+envelope: it writes one line to stderr and exits `130` (`SIGINT`), `143` (`SIGTERM`) or `129`
+(`SIGHUP`).
 
 ## Package surface
 
 The published package has one subpath per context, and only the three below ship today:
 
-| Subpath                      | Contains                                                                                                                     |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `@kimuson/motion-kit`        | The authoring surface: `defineComposition`, `defineCompositions`, timeline hooks, `Sequence`, `TransitionSeries`, `useAsset` |
-| `@kimuson/motion-kit/render` | `createRenderer` and its types; Node only                                                                                    |
-| `@kimuson/motion-kit/agent`  | The CLI output envelope schemas                                                                                              |
+- `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
+  timeline hooks (`useFrame`, `useTime`), `Sequence`, `TransitionSeries`, `useAsset`.
+- `@kimuson/motion-kit/render` — `createRenderer` and its types; Node only.
+- `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
 
 `/browser`, `/motion`, `/theme`, `/presets` and `/three` are planned and do not exist yet; [the
 context map](docs/CONTEXT-MAP.md) says what each will hold.
