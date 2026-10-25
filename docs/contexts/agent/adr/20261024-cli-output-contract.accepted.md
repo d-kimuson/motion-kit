@@ -30,6 +30,8 @@ Every JSON document has these required fields:
 
 There is no exit-code field in the envelope. Exit selection and stdout/stderr routing are obligations of the future CLI, not schema validation.
 
+_Amended 2026-10-25 (TASK-159):_ the table above stays closed for envelopes that are **emitted**, and a cancelled run emits none. `SIGINT`/`SIGTERM` (or a programmatic abort) is aborted control flow: no JSON document on stdout, one line on stderr, and exit code **`128` plus the signal number** (`130` for `SIGINT`, `143` for `SIGTERM`) — the code a shell itself reports for an interrupted process, which keeps a cancelled run distinguishable from a domain failure (1), an invocation error (2) and an internal bug (3). No cancellation Diagnostic is invented, because the [time control and frame capture decision](../../decisions/20261024-time-control-and-frame-capture.accepted.md) reserves a CLI cancellation envelope for its own contract decision and `ok` follows "true iff no error Diagnostic" and "success must have data"; an aborted run has neither. See [agent CONTEXT](../CONTEXT.md#cancellation).
+
 ### Diagnostic
 
 A Diagnostic contains `code`, `severity`, and a nonempty `message`: one sentence explaining what is wrong, never a stack trace. `hint` says what to do next; a nonempty hint is required for errors and warnings and optional for infos. Sentence quality and excluding stack traces from free text are producer obligations, not language-dependent heuristics in the schema.
