@@ -48,12 +48,24 @@ const common = {
 // Inspect and validate own their future data contracts; only JSON objects are reserved here.
 const deferredData = z.record(z.string(), z.json());
 
+/** The known subcommands. `command` is this enum or null, never a sentinel member. */
+export const CommandSchema = z.enum(['render', 'frame', 'inspect', 'validate']);
+export type Command = z.infer<typeof CommandSchema>;
+
+/** The envelope's own reading of `command`: a known subcommand, or null when argv named none. */
+export const EnvelopeCommandSchema = CommandSchema.nullable();
+
 export const EnvelopeSchema = z
   .discriminatedUnion('command', [
     z.strictObject({ ...common, command: z.literal('render'), data: RenderDataSchema.nullable() }),
     z.strictObject({ ...common, command: z.literal('frame'), data: FrameDataSchema.nullable() }),
     z.strictObject({ ...common, command: z.literal('inspect'), data: deferredData.nullable() }),
     z.strictObject({ ...common, command: z.literal('validate'), data: deferredData.nullable() }),
+    // No subcommand could be identified from argv (`motion-kit --json`, `motion-kit unknown --json`).
+    // A discriminated union needs a literal per member, so this is `z.null()` rather than
+    // `EnvelopeCommandSchema`; no producer can name a command that was not invoked, so `data` is
+    // null too. The nullable enum is the exported type, not a fifth command.
+    z.strictObject({ ...common, command: z.null(), data: z.null() }),
   ])
   .superRefine((envelope, context) => {
     if (

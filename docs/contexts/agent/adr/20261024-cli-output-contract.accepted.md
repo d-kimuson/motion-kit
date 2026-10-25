@@ -8,27 +8,29 @@ Coding agents need one machine-readable result from every CLI command before the
 
 ### Output and exit codes
 
-JSON output requires an explicit `--json` flag for the MVP. A non-TTY stdout does not imply it. In JSON mode stdout contains exactly one JSON document and nothing else; human-readable logs go to stderr. Without the flag, the same diagnostics are printed for humans, with no fixed presentation format.
+JSON output requires an explicit `--json` flag for the MVP. A non-TTY stdout does not imply it. In JSON mode stdout contains exactly one JSON document and nothing else — including when argv names no known subcommand — and human-readable logs go to stderr. Without the flag, the same diagnostics are printed for humans, with no fixed presentation format.
 
-Every JSON document has these required fields:
+Every JSON document has these required fields (`command` is required but nullable; every other field is required and non-nullable):
 
 | Field           | Contract                                                                                                                                 |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | Integer literal `1`; bump only for a breaking change.                                                                                    |
-| `command`       | `render`, `frame`, `inspect`, or `validate`.                                                                                             |
+| `command`       | `render`, `frame`, `inspect`, `validate`, or `null` when argv names no known subcommand. Nullable, never a sentinel member.              |
 | `ok`            | True if and only if no Diagnostic has severity `error`.                                                                                  |
 | `data`          | Command-specific object; null on failure when nothing usable was produced. A failure may retain usable data, but success must have data. |
 | `diagnostics`   | Diagnostic array, including warnings and infos on success.                                                                               |
 | `durationMs`    | Finite, nonnegative wall time of the command in milliseconds; fractional milliseconds are allowed.                                       |
 
-| Exit code | Meaning                                                                                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0         | `ok: true`; warnings and infos are allowed.                                                                                                                |
-| 1         | `ok: false` from domain diagnostics: invalid composition, asset failure, render or encode failure.                                                         |
-| 2         | Invocation error: unknown flag, missing argument, entry file not found. Emit the envelope with a `cli.*` Diagnostic when `--json` was parseable from argv. |
-| 3         | Internal failure: a bug or unconverted exception. Emit `internal.unexpected`; send the stack trace only to stderr, never JSON.                             |
+| Exit code | Meaning                                                                                                                                                                                                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0         | `ok: true`; warnings and infos are allowed.                                                                                                                                                                                                                                                    |
+| 1         | `ok: false` from domain diagnostics: invalid composition, asset failure, render or encode failure.                                                                                                                                                                                             |
+| 2         | Invocation error: unknown flag, missing argument, entry file not found, or no known subcommand. Emit the envelope with a `cli.*` Diagnostic whenever `--json` appears in argv, `command: null` included; without `--json`, a human-readable message on stderr, exit code 2, nothing on stdout. |
+| 3         | Internal failure: a bug or unconverted exception. Emit `internal.unexpected`; send the stack trace only to stderr, never JSON.                                                                                                                                                                 |
 
 There is no exit-code field in the envelope. Exit selection and stdout/stderr routing are obligations of the future CLI, not schema validation.
+
+_Amended 2026-10-24 (TASK-172):_ `command` became nullable and row 2 now covers an invocation that names no known subcommand. The [invocation decision](#invocation-without-a-known-subcommand) below replaces the open case this document previously left to the product owner. The field stays required and carries no sentinel such as `"unknown"`; `data` stays null in that case, because no command ran and success must have data.
 
 _Amended 2026-10-25 (TASK-159):_ the table above stays closed for envelopes that are **emitted**, and a cancelled run emits none. `SIGINT`/`SIGTERM`/`SIGHUP` (or a programmatic abort) is aborted control flow: no JSON document on stdout, one line on stderr, and exit code **`128` plus the signal number** (`130` for `SIGINT`, `143` for `SIGTERM`, `129` for `SIGHUP`) — the code a shell itself reports for an interrupted process, which keeps a cancelled run distinguishable from a domain failure (1), an invocation error (2) and an internal bug (3). A second signal does not wait for that run's asynchronous cleanup: it performs the same synchronous cleanup an exit performs, then leaves at once with `128` plus the second signal's number, so a second `Ctrl-C` is never held up — and still leaves no envelope, no temporary file and no child. The aborted line is owed only while the run can still be stopped before it commits: the route releases it once its outcome is final and before it tears the renderer down, so a stop inside a finished run's teardown leaves the committed output in place and says nothing to deny it (still no envelope). No cancellation Diagnostic is invented, because the [time control and frame capture decision](../../decisions/20261024-time-control-and-frame-capture.accepted.md) reserves a CLI cancellation envelope for its own contract decision and `ok` follows "true iff no error Diagnostic" and "success must have data"; an aborted run has neither. See [agent CONTEXT](../CONTEXT.md#cancellation).
 
@@ -86,7 +88,8 @@ Schemas accept POSIX, Windows drive-rooted, and Windows UNC absolute output path
 ### Module placement and generation
 
 - `src/lib/diagnostic.ts`: `DiagnosticCodeSchema`, `LocationSchema`, `DiagnosticSchema`, and inferred types, exported through the package root. This is the smallest shared protocol module beside the planned `Result` utility: any context can import it without depending on agent or Node.js. It contains no diagnostic-producing domain behavior. agent owns the vocabulary, but the plain boundary data must be available to core as well.
-- `src/agent/cli-output.ts`: `EnvelopeSchema`, `RenderDataSchema`, `FrameDataSchema`, and inferred types, exposed through the `/agent` package subpath. CLI-specific data does not become a core dependency. There is no duplicate handwritten TypeScript contract.
+- `src/agent/cli-output.ts`: `CommandSchema` (the known subcommands), `EnvelopeSchema`, `RenderDataSchema`, `FrameDataSchema`, and inferred types, exposed through the `/agent` package subpath. `command` is `CommandSchema.nullable()` in the envelope's type; the null case is a union member of its own, because a discriminated union needs a literal per member. CLI-specific data does not become a core dependency. There is no duplicate handwritten TypeScript contract.
+- `src/cli/invocation.ts`: `resolveCommand`, the argv-to-command resolver the envelope's `command` comes from even when parsing fails. It names a member of `CommandSchema` or `null`, so it cannot invent a command.
 - `src/agent/cli-output-json-schema.ts`: converts the Zod envelope to draft 2020-12 JSON Schema. Because Zod cannot translate `superRefine`, the generator expresses the `ok`/error and successful-data predicates as JSON Schema conditionals. Both validators are tested against the same valid, invalid, and property-generated envelopes. The hint rule is a discriminated union and translates directly.
 - `docs/contexts/agent/schema/cli-output.v1.schema.json`: committed generated schema. Regenerate with `pnpm schema:cli-output`, then `pnpm fix`. The sync test compares the parsed artifact to fresh generation, ignoring formatting only.
 
@@ -96,9 +99,13 @@ Zod is a production dependency (MIT, on the license allowlist); it is needed by 
 
 Adding a Diagnostic code is a normal compatible change: update the enum, this code reference, and the generated schema. Consumers must tolerate newly added codes within a supported schema version. Renaming or removing a code is breaking and requires a `schemaVersion` bump and amendment of this ADR. Breaking field, severity, or envelope changes follow the same versioning rule. Do not bump `schemaVersion` for an additive code or ordinary implementation work.
 
-### Open invocation case
+### Invocation without a known subcommand
 
-When argv contains `--json` but no subcommand can be identified, the envelope's `command` has no truthful value. The CLI (TASK-161) must not invent one; this needs a product-owner decision. The closed four-command enum remains unchanged here.
+_Amended 2026-10-24 (TASK-172):_ this section replaced the open invocation case, which left "argv has `--json` but names no subcommand" to the product owner because the envelope had no truthful `command` value for it. The decision is a nullable `command` — not a string sentinel — with the invocation still reported in the envelope. The closed four-command enum is unchanged, and `schemaVersion` stays `1`, because widening a field to nullable before any consumer exists is additive.
+
+The CLI derives `command` from the first positional argument of argv when it names a known subcommand, so `motion-kit render --bogus --json` reports `command: "render"` with `cli.invalid-arguments`. When no known subcommand can be identified (`motion-kit --json`, `motion-kit unknown --json`), the envelope is still emitted with `command: null`, `ok: false`, `data: null`, exit code 2, and one `cli.invalid-arguments` Diagnostic whose hint lists the known subcommands. Without `--json` an invocation error stays as before: a human-readable message on stderr, exit code 2, nothing on stdout.
+
+The rationale is the promise to a coding agent — one JSON document on stdout, always. `null` is a shape consumers already handle for `data`, whereas an `"unknown"` member would enlarge the enum with a value no command produces. A subcommand the CLI does not implement yet (`inspect`, `validate`) is named truthfully with a hint saying so rather than reported as unknown, because the enum is the contract's, not the implementation's.
 
 ## Consequences
 

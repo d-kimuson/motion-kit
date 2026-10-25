@@ -16,6 +16,7 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 ## Invariants
 
 - Every failure the CLI reports is a Diagnostic; stack traces are never included in JSON; an internal-failure stack goes to stderr only.
+- An invocation that names no known subcommand still emits one envelope with `command: null` (never a sentinel member) and a `cli.invalid-arguments` hint listing the known subcommands; without `--json` it stays a stderr message and exit code 2.
 - Include known location information in each Diagnostic according to the accepted CLI output contract.
 - The [accepted CLI output contract](adr/20261024-cli-output-contract.accepted.md) fixes the JSON envelope, severity semantics, exit codes, and versioning policy.
 

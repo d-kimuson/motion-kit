@@ -870,6 +870,32 @@ export const compositions = defineCompositions([
     expect(result.stdout).toContain('Usage: motion-kit');
   });
 
+  // The promise to an agent is one JSON document on stdout, always: an invocation that names no
+  // runnable subcommand still gets the envelope, with `command: null` when argv named none.
+  it.each([
+    { argv: ['--json'], command: null },
+    { argv: ['unknown', '--json'], command: null },
+    { argv: ['render', '--bogus', '--json'], command: 'render' },
+  ])('emits one envelope and exits 2 for $argv', async ({ argv, command }) => {
+    const result = await run(argv);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ command, ok: false, data: null });
+    expect(envelope.diagnostics).toMatchObject([{ code: 'cli.invalid-arguments' }]);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+    expect(envelope.diagnostics[0]?.hint).toBeDefined();
+  });
+
+  it.each([{ argv: [] as string[] }, { argv: ['unknown'] }])(
+    'prints an invocation error to stderr and nothing to stdout for $argv',
+    async ({ argv }) => {
+      const result = await run(argv);
+      expect(result.code).toBe(2);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('Usage: motion-kit');
+    },
+  );
+
   it('prints a human summary instead of JSON when --json is absent', async () => {
     const output = join(outputRoot, 'human.png');
     const result = await run([

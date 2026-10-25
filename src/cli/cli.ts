@@ -3,7 +3,9 @@ import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 
 import {
+  CommandSchema,
   EnvelopeSchema,
+  type Command as EnvelopeCommand,
   type Envelope,
   type FrameData,
   type RenderData,
@@ -15,6 +17,7 @@ import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
 import { CliArgsSchema, type FrameArgs, type RenderArgs } from './args.ts';
+import { resolveCommand } from './invocation.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
 // `internal.unexpected` (exit 3); `cli.*` diagnostics are invocation errors
@@ -71,7 +74,7 @@ const commands: Readonly<Record<'render' | 'frame', Command>> = {
 };
 
 type ParseOutcome =
-  | { readonly kind: 'no-command' }
+  | { readonly kind: 'no-command'; readonly command: EnvelopeCommand | null }
   | { readonly kind: 'help' }
   | { readonly kind: 'usage' }
   | {
@@ -85,13 +88,30 @@ type ParseOutcome =
 const isCommandName = (value: unknown): value is 'render' | 'frame' =>
   value === 'render' || value === 'frame';
 
+/**
+ * Why argv named no command the CLI can run. Each hint says what the caller can do next: `--json`
+ * alone has to be told which subcommands exist, a reserved one which ones ship, and a subcommand
+ * written after a flag where it belongs. The list is the contract's enum, not a copy of it.
+ */
+const noCommandHint = (command: EnvelopeCommand | null): string => {
+  if (command === null)
+    return `Pass one of the known subcommands: ${CommandSchema.options.join(', ')}.`;
+  if (!isCommandName(command)) return `${command} is not implemented yet; use render or frame.`;
+  return `Put the subcommand first: motion-kit ${command} [options].`;
+};
+
 const parseRaw = (argv: readonly string[]): ParseOutcome => {
   const name = argv[0];
   if (name === 'help' || name === '--help' || name === '-h') return { kind: 'usage' };
-  if (name === undefined || !isCommandName(name)) return { kind: 'no-command' };
-  const command = commands[name];
+  // Only an implemented subcommand in the leading position can be parsed: the CLI has no global
+  // flags, so a name anywhere else, a reserved name and an unknown one all fail here with the
+  // command argv named, and the envelope still reports it (agent ADR: nullable `command`).
+  const command = resolveCommand(argv);
+  if (command === null || name !== command || !isCommandName(command))
+    return { kind: 'no-command', command };
+  const parsable = commands[command];
   try {
-    command.parse(['node', 'motion-kit', ...argv.slice(1)], { from: 'node' });
+    parsable.parse(['node', 'motion-kit', ...argv.slice(1)], { from: 'node' });
   } catch (error) {
     if (
       error instanceof CommanderError &&
@@ -102,18 +122,18 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
       error instanceof Error
         ? error.message.replace(/^error: /u, '').replace(/^motion-kit: /u, '')
         : 'Check the arguments.';
-    return { kind: 'invalid', command: name, json: argv.includes('--json'), hint };
+    return { kind: 'invalid', command, json: argv.includes('--json'), hint };
   }
-  const options = command.opts<Record<string, unknown>>();
+  const options = parsable.opts<Record<string, unknown>>();
   const raw: Record<string, unknown> = {
-    command: name,
-    entry: command.processedArgs[0],
+    command,
+    entry: parsable.processedArgs[0],
     composition: options['composition'],
     out: options['out'],
     json: options['json'] === true,
   };
-  if (name === 'render') raw['props'] = options['props'];
-  if (name === 'frame') raw['frame'] = options['frame'];
+  if (command === 'render') raw['props'] = options['props'];
+  if (command === 'frame') raw['frame'] = options['frame'];
   return { kind: 'args', value: raw };
 };
 
@@ -342,7 +362,7 @@ const runFrame = async (
 };
 
 const buildEnvelope = (
-  command: 'render' | 'frame',
+  command: EnvelopeCommand | null,
   outcome: EnvelopeOutcome,
   durationMs: number,
 ): Envelope =>
@@ -374,7 +394,7 @@ const summarize = (envelope: Envelope): string => {
     if (envelope.command === 'frame')
       return `captured frame ${envelope.data.frame} to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
   }
-  return `${envelope.command} failed`;
+  return `${envelope.command ?? 'motion-kit'} failed`;
 };
 
 const printHuman = (envelope: Envelope): void => {
@@ -466,10 +486,23 @@ export const runCli = async (
     return 0;
   }
   if (parsed.kind === 'no-command') {
-    process.stderr.write(
-      'Usage: motion-kit <render|frame> <entry> [options]\nRun motion-kit --help for usage.\n',
+    // Without `--json` the human route is unchanged: a usage line on stderr and nothing on stdout.
+    if (!argv.includes('--json')) {
+      process.stderr.write(
+        'Usage: motion-kit <render|frame> <entry> [options]\nRun motion-kit --help for usage.\n',
+      );
+      return 2;
+    }
+    // With it, the caller still gets the one document it was promised, naming `command: null` when
+    // argv named no known subcommand (agent ADR: nullable `command`, no sentinel member).
+    return emit(
+      buildEnvelope(
+        parsed.command,
+        failure([invalidArguments(noCommandHint(parsed.command))]),
+        durationMs(),
+      ),
+      true,
     );
-    return 2;
   }
   if (parsed.kind === 'invalid')
     return emit(
