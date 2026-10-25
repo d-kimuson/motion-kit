@@ -1,10 +1,11 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -162,6 +163,54 @@ describe('motion-kit CLI', () => {
     for (let frame = 0; frame < 6; frame++)
       expect(existsSync(join(output, `frame-${String(frame).padStart(5, '0')}.png`))).toBe(true);
   }, 60_000);
+
+  it('renders a Composition to an MP4 with the v1 mp4 render envelope', async () => {
+    const output = join(outputRoot, 'video.mp4');
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      schemaVersion: 1,
+      command: 'render',
+      ok: true,
+      data: {
+        output,
+        format: 'mp4',
+        frameCount: 6,
+        width: 64,
+        height: 64,
+        fps: { numerator: 30000, denominator: 1001 },
+      },
+    });
+    if (envelope.command !== 'render') throw new Error('expected render envelope');
+    const data = envelope.data;
+    if (data === null || data.format !== 'mp4') throw new Error('mp4 data missing');
+    expect(data.durationSeconds).toBeCloseTo(6 / (30000 / 1001), 3);
+    expect(statSync(output).size).toBeGreaterThan(0);
+    // The temporary sibling is renamed onto the target, never left behind.
+    expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
+    const probed = execFileSync('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=codec_name,nb_frames',
+      '-of',
+      'default=noprint_wrappers=1',
+      output,
+    ]).toString();
+    expect(probed).toContain('codec_name=h264');
+    expect(probed).toContain('nb_frames=6');
+  }, 120_000);
 
   it('prints usage and exits 0 for --help', async () => {
     const result = await run(['--help']);
