@@ -12,9 +12,9 @@ import {
   slides,
 } from './slides/plan.ts';
 
-// The slideshow's placeholder step: FFmpeg `color`/`testsrc2` stills and a `sine`/`anoisesrc` tone bed
-// into the gitignored `assets.local/`. No network, no engine, no committed bytes — the whole example
-// renders from these files, and CI runs this same function as the smoke test's own setup
+// The slideshow's placeholder step: eight FFmpeg `gradients`/`noise` stills and a `sine`/`anoisesrc`
+// tone bed into the gitignored `assets.local/`. No network, no engine, no committed bytes — the whole
+// example renders from these files, and CI runs this same function as the smoke test's own setup
 // (docs/design-doc/20261025-reference-examples.md, "Assets and provenance").
 //
 // This is a Node.js process but still an example: it uses Node.js and its own modules only, never a
@@ -27,40 +27,193 @@ export const repositoryRoot = new URL('../../', import.meta.url).pathname;
 
 const PHOTO_SIZE = 1440;
 
-/** One FFmpeg `-vf` chain per slide: stills built from `testsrc2` and `color`, all 1440x1440 so a
- *  9:16 frame and a 16:9 frame both crop it without upscaling. */
-const photoFilters = (slide: Slide, index: number): string => {
-  const hue = index * 43;
-  // Alternating sources, so the eight slides read as eight different pictures rather than a hue ramp.
-  if (index % 2 === 0) return `hue=h=${String(hue)}:s=0.85,vignette=angle=PI/5,format=rgb24`;
-  const band = PHOTO_SIZE * (0.5 + 0.06 * index);
-  return `drawbox=x=0:y=0:w=${String(PHOTO_SIZE)}:h=${String(PHOTO_SIZE * 0.16)}:color=0xffffff@0.14:t=fill,drawbox=x=${String(PHOTO_SIZE * 0.1)}:y=${String(Math.round(band))}:w=${String(PHOTO_SIZE * 0.8)}:h=${String(PHOTO_SIZE * 0.24)}:color=0x000000@0.32:t=fill,format=rgb24`;
+/** One placeholder's palette and light, so the eight slides read as eight photographs rather than as a
+ *  hue ramp or a test pattern. Colours are CSS hex here and converted by `hexColour` on the way out. */
+type PhotoLook = Readonly<{
+  /** Two colours down the top of the frame: the sky, light at the top edge to deeper at the middle. */
+  readonly sky: readonly [string, string];
+  /** Two colours for the bottom: the ground at the horizon to the darkest corner. */
+  readonly ground: readonly [string, string];
+  /** The light source's colour, and where it sits as a fraction of the frame. */
+  readonly light: string;
+  readonly lightX: number;
+  readonly lightY: number;
+}>;
+
+/** A scene per slide, keyed by the slide's stable id, so the file name and the picture agree. */
+const PHOTO_LOOKS: Readonly<Record<string, PhotoLook>> = {
+  'dune-light': {
+    sky: ['#f8e4c2', '#eec394'],
+    ground: ['#a86f42', '#4a2c1c'],
+    light: '#fff6e2',
+    lightX: 0.76,
+    lightY: 0.12,
+  },
+  'cold-water': {
+    sky: ['#a9cfd2', '#4f8791'],
+    ground: ['#143842', '#040c11'],
+    light: '#dff4f4',
+    lightX: 0.24,
+    lightY: 0.1,
+  },
+  'stone-stair': {
+    sky: ['#f2e4d2', '#dcc6ab'],
+    ground: ['#7a6554', '#241d19'],
+    light: '#fff4e4',
+    lightX: 0.6,
+    lightY: 0.2,
+  },
+  'pine-ridge': {
+    sky: ['#e4ecd8', '#b3c8a4'],
+    ground: ['#22392c', '#080f0c'],
+    light: '#f4fbe6',
+    lightX: 0.38,
+    lightY: 0.08,
+  },
+  harbour: {
+    sky: ['#e9f0f6', '#bccdd9'],
+    ground: ['#3d576b', '#101a23'],
+    light: '#fbfdff',
+    lightX: 0.62,
+    lightY: 0.14,
+  },
+  'long-field': {
+    sky: ['#f6e9c4', '#dcd39a'],
+    ground: ['#6c7a3c', '#181e11'],
+    light: '#fff8dc',
+    lightX: 0.42,
+    lightY: 0.1,
+  },
+  'night-road': {
+    sky: ['#3f5273', '#27324a'],
+    ground: ['#141c2a', '#05070d'],
+    light: '#f6bd76',
+    lightX: 0.54,
+    lightY: 0.56,
+  },
+  'morning-window': {
+    sky: ['#fdf5ea', '#f6e0cc'],
+    ground: ['#9c7168', '#33241f'],
+    light: '#fffdf8',
+    lightX: 0.28,
+    lightY: 0.08,
+  },
 };
 
-/** Flat tint per odd-index slide, so no two placeholders are the same file. */
-const FLAT_COLOURS = ['0x1b2b3a', '0x3a2b25', '0x24322b', '0x2b2f22'] as const;
+/** A neutral look for a slide this table has not learned yet, so a new slide still renders a picture. */
+const DEFAULT_LOOK: PhotoLook = {
+  sky: ['#d9dde2', '#aab0b8'],
+  ground: ['#5b6068', '#1c1f24'],
+  light: '#f5f7fa',
+  lightX: 0.5,
+  lightY: 0.2,
+};
 
-const photoInput = (index: number): string =>
-  index % 2 === 0
-    ? `testsrc2=size=${String(PHOTO_SIZE)}x${String(PHOTO_SIZE)}:rate=1:duration=1`
-    : `color=c=${FLAT_COLOURS[Math.floor(index / 2) % FLAT_COLOURS.length] ?? '0x242424'}:size=${String(PHOTO_SIZE)}x${String(PHOTO_SIZE)}:duration=1`;
+const hexColour = (colour: string): string => `0x${colour.replace('#', '')}`;
 
-const photoArgs = (slide: Slide, index: number, out: string): string[] => [
-  '-y',
-  '-v',
-  'error',
-  '-f',
-  'lavfi',
-  '-i',
-  photoInput(index),
-  '-vf',
-  photoFilters(slide, index),
-  '-frames:v',
-  '1',
-  '-update',
-  '1',
-  out,
-];
+/**
+ * The one seed every random filter in this file is given. `gradients` draws its colour-stop positions,
+ * `noise` draws its grain and `anoisesrc` draws the tone bed, and all three default to `-1`, which
+ * FFmpeg reads as "seed from the clock": without a fixed seed two runs write different files, so a
+ * re-run would not reproduce the set CI renders. With this seed the whole set is byte-identical run
+ * to run, which is what makes `assets.local/` a function of this code rather than of the clock.
+ */
+const PLACEHOLDER_SEED = 0;
+
+/**
+ * One FFmpeg `gradients` source: a linear ramp down the frame for the backdrop, a radial one for the
+ * light, a radial white-to-grey one for the vignette. Every source is a still (`rate=1`, `duration=1`,
+ * `speed=0`) with a pinned `seed`, so the frame that lands on disk is a pure function of the colours,
+ * the geometry and `PLACEHOLDER_SEED`.
+ */
+const gradientSource = (
+  options: Readonly<{
+    readonly colours: readonly string[];
+    readonly type: 'linear' | 'radial';
+    readonly from: readonly [number, number];
+    readonly to: readonly [number, number];
+  }>,
+): string =>
+  [
+    `gradients=size=${String(PHOTO_SIZE)}x${String(PHOTO_SIZE)}`,
+    'rate=1',
+    'duration=1',
+    'speed=0',
+    `seed=${String(PLACEHOLDER_SEED)}`,
+    `type=${options.type}`,
+    `nb_colors=${String(options.colours.length)}`,
+    ...options.colours.map((colour, index) => `c${String(index)}=${hexColour(colour)}`),
+    `x0=${String(Math.round(PHOTO_SIZE * options.from[0]))}`,
+    `y0=${String(Math.round(PHOTO_SIZE * options.from[1]))}`,
+    `x1=${String(Math.round(PHOTO_SIZE * options.to[0]))}`,
+    `y1=${String(Math.round(PHOTO_SIZE * options.to[1]))}`,
+  ].join(':');
+
+/**
+ * The picture, built from three soft fields rather than a pattern: a four-stop linear ramp from the
+ * sky to the ground (the horizon is where the ramp changes direction), a radial light source blended
+ * in with `softlight`, a radial white-to-grey field multiplied over the frame as a vignette, and film
+ * grain on top. The result is a full-bleed abstract photograph, which is what makes the Ken Burns
+ * read as a camera move over a picture instead of a pan across a test pattern.
+ *
+ * The two blends and the grain run in RGB (`format=rgb24` between the layers): `blend` and `vignette`
+ * in the default YUV leave chroma behind in the shadows, and a warm ramp comes out magenta.
+ */
+const PHOTO_GRAPH = [
+  '[0:v]format=rgb24[sky]',
+  '[1:v]format=rgb24[light]',
+  '[2:v]format=rgb24[vignette]',
+  '[sky][light]blend=all_mode=softlight:all_opacity=0.5[lit]',
+  `[lit][vignette]blend=all_mode=multiply:all_opacity=0.55,noise=alls=8:allf=t+u:all_seed=${String(PLACEHOLDER_SEED)},gblur=sigma=1.6,format=rgb24[photo]`,
+].join(';');
+
+const photoArgs = (slide: Slide, out: string): string[] => {
+  const look = PHOTO_LOOKS[slide.id] ?? DEFAULT_LOOK;
+  const backdrop = gradientSource({
+    colours: [look.sky[0], look.sky[1], look.ground[0], look.ground[1]],
+    type: 'linear',
+    from: [0.12, 0],
+    to: [0.88, 1],
+  });
+  const light = gradientSource({
+    colours: [look.light, '#000000'],
+    type: 'radial',
+    from: [look.lightX, look.lightY],
+    to: [look.lightX + 0.62, look.lightY + 0.62],
+  });
+  const vignette = gradientSource({
+    colours: ['#ffffff', '#a8a8a8'],
+    type: 'radial',
+    from: [0.5, 0.5],
+    to: [1.3, 1.3],
+  });
+  return [
+    '-y',
+    '-v',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    backdrop,
+    '-f',
+    'lavfi',
+    '-i',
+    light,
+    '-f',
+    'lavfi',
+    '-i',
+    vignette,
+    '-filter_complex',
+    PHOTO_GRAPH,
+    '-map',
+    '[photo]',
+    '-frames:v',
+    '1',
+    '-update',
+    '1',
+    out,
+  ];
+};
 
 /** The tone bed: a low sine under filtered pink noise, faded in and out, exactly as long as the full
  *  `slideshow` so the music ends with the last slide instead of being cut off. No Composition declares
@@ -79,7 +232,7 @@ const musicArgs = (out: string): string[] => {
     '-f',
     'lavfi',
     '-i',
-    `anoisesrc=colour=pink:amplitude=0.03:sample_rate=48000:duration=${seconds}`,
+    `anoisesrc=colour=pink:amplitude=0.03:sample_rate=48000:duration=${seconds}:seed=${String(PLACEHOLDER_SEED)}`,
     '-filter_complex',
     `[0:a]volume=0.12[low];[1:a]lowpass=f=900,volume=0.5[air];[low][air]amix=inputs=2:duration=shortest,afade=t=in:st=0:d=1.5,afade=t=out:st=${fadeOut}:d=1.5[bed]`,
     '-map',
@@ -144,14 +297,14 @@ export const generatePlaceholders = async (
 
   const written: string[] = [];
   const skipped: string[] = [];
-  for (const [index, slide] of slides.entries()) {
+  for (const slide of slides) {
     const out = join(photosDirectory, slide.file);
     if (!force && (await exists(out))) {
       skipped.push(out);
       report(`kept    ${slide.file}`);
       continue;
     }
-    await run(ffmpeg, photoArgs(slide, index, out));
+    await run(ffmpeg, photoArgs(slide, out));
     written.push(out);
     report(`wrote   ${slide.file}`);
   }
