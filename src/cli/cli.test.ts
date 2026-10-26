@@ -158,6 +158,11 @@ const waitFor = async (ready: () => boolean, timeoutMs: number, what: string): P
   }
 };
 
+/**
+ * Whether the process is gone. A process that has been killed but not reaped yet still answers,
+ * and a cover cannot wait for the reap (`src/lib/exit.ts`), so a caller that checks this right
+ * after a signalled run ends polls for it instead of reading it once.
+ */
 const childGone = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -668,7 +673,13 @@ process.on('newListener', (event) => {
         expect(abortedLines(run.stderr())).toEqual(['render aborted; no output was produced']);
         expect(existsSync(output)).toBe(false);
         expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
-        expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
+        // The cover `SIGKILL`s the encoder on the way out but cannot wait for it: an exiting
+        // process runs no promise. The run is gone at once, while the OS still has to schedule the
+        // child's death and reap it, so "gone" is a fact a moment after `exit`, not at it. Poll for
+        // it, within a bound far shorter than the 30 s the stand-in would live on its own, so the
+        // wait still proves the run killed it.
+        const encoder = Number(readFileSync(encoderPid, 'utf8'));
+        await waitFor(() => childGone(encoder), 10_000, 'the encoder it killed to be gone');
         await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
         expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
       } finally {
