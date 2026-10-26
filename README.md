@@ -8,14 +8,15 @@ GUI. motion-kit is an MIT alternative to Remotion, named `@kimuson/motion-kit`.
 
 ## Status
 
-Phase 0 spikes and the Phase 1 renderer, CLI and MP4 encoder exist on `main`. There is no
+Phase 0 spikes and the Phase 1 renderer, CLI and MP4 encoder exist on `main`, and a Composition
+may declare audio tracks that the `.mp4` route muxes onto the same timeline. There is no
 release yet, so the package is not on a registry and the commands below run from a checkout of
 this repository.
 
-Pending: reference examples, audio muxing, and Linux qualification. The planned contexts and
-their subpath exports are in [the context map](docs/CONTEXT-MAP.md); the Phase 0 browser
-experiments stay separate from the framework, each with its own README and `pnpm spike:*`
-script under `spikes/<name>/`.
+Pending: reference examples, in-browser preview audio, audio-reactive visuals and Linux
+qualification. The planned contexts and their subpath exports are in [the context
+map](docs/CONTEXT-MAP.md); the Phase 0 browser experiments stay separate from the framework,
+each with its own README and `pnpm spike:*` script under `spikes/<name>/`.
 
 ## Getting started
 
@@ -44,6 +45,28 @@ export const compositions = defineCompositions([
 
 `durationInFrames` and a rational `fps` fix the timeline; props come from the `zod` schema, so
 the project installs `zod` for itself.
+
+Audio is the Composition's own data, declared next to the frames as an optional `audio` array
+of clips. Times are frame counts, not seconds, so the render places each clip through the same
+timeline the frames use:
+
+```tsx
+defineComposition({
+  // …id, component, schema, width, height, fps, durationInFrames
+  audio: [
+    { src: 'audio/voice.wav', startInFrames: 30 },
+    { src: 'audio/music.mp3', endInFrames: 150, volume: 0.25 },
+  ],
+});
+```
+
+`src` resolves against the directory the CLI runs in (an absolute path is used as given),
+`startInFrames` is where the clip begins on the timeline (default `0`), `endInFrames` stops it
+later, `offsetInFrames` trims its head, and `volume` is a linear gain (default `1`). All clips
+are mixed into one 48 kHz stereo AAC stream inside the same FFmpeg invocation that encodes the
+frames, and the stream ends with the Composition rather than with the longest clip
+([audio muxing decision](docs/contexts/render/adr/20261026-audio-track-muxing.accepted.md)).
+Audio plays in the rendered file only: preview has no sound yet.
 
 In a checkout of this repository, build once and render that entry to an MP4:
 
@@ -85,6 +108,12 @@ ships and downloads no binary, so this is a prerequisite you install yourself
 ([encoding decision](docs/contexts/render/adr/20261025-system-ffmpeg-encoder.accepted.md)). A
 missing or unsupported FFmpeg is `encode.ffmpeg-not-found` or `encode.ffmpeg-unsupported`
 before the first frame; `frame` and an `--out` directory need no FFmpeg at all.
+
+Audio has no flag either: the `.mp4` route muxes whatever the Composition declares in `audio`,
+resolving each `src` against the directory the command runs in. A declared file that is not
+readable is `asset.load-failed` with the file in `location`, reported before FFmpeg starts and
+with no output written, and a Composition that declares no audio renders exactly as it did
+before audio existed.
 
 Exit codes: `0` success, `1` domain failure (e.g. invalid props), `2` invocation error (e.g.
 missing entry or unknown id), `3` unexpected internal error. Failures are always Diagnostics in
