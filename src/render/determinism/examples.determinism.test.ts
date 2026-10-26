@@ -7,7 +7,10 @@ import { defineDeterminismSuite, runDeterminismSuite } from './suite.ts';
 // The probe registry is reached as a module path string, and the suite imports it inside its own
 // temporary project: an example never imports the suite, and package.json#exports gains no subpath.
 // Each row renders the example's `<name>-probe` Composition (480x270, 30 frames) at exact PNG bytes.
-const probes = [{ name: 'teaser', compositionId: 'teaser-probe' }] as const;
+const probes = [
+  { name: 'teaser', compositionId: 'teaser-probe' },
+  { name: 'chart', compositionId: 'chart-probe' },
+] as const;
 
 const frames = [0, 15, 29] as const;
 

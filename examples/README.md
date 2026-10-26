@@ -57,14 +57,15 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
 
 ## What is a placeholder
 
-- **`teaser` is the only example implemented so far** (TASK-206). `explainer`, `chart` and
+- **`teaser` (TASK-206) and `chart` (TASK-207) are the examples implemented so far.** `explainer` and
   `slideshow` follow on this scaffolding; their rows above are the targets their entries must hit.
 - **Motion is hand-rolled arithmetic.** `/motion` (`interpolate`, `easing`, `spring`, `Stagger`) and
   `/theme` are Phase 2 and have no public subpath yet, so every example computes its animation from
   `useTime()`/`useSequence()` with plain arithmetic and hard-coded values. The example that lands
   after Phase 2 replaces that arithmetic; the Composition ids and the acceptance look do not change.
-- **`teaser` commits no asset.** It draws with the system sans stack, so its frames are fixed on one
-  machine rather than across machines: the determinism evidence is fixed-environment, as the
+- **`teaser` and `chart` commit no font.** Both draw with the system sans stack, so their frames are
+  fixed on one machine rather than across machines: the determinism evidence is fixed-environment, as
+  the
   [Phase 1 determinism record](../docs/contexts/render/knowledge/20261024-phase1-determinism.md)
   states. The design doc allows an OFL font with its `OFL.txt`; that is a later refinement.
 - **`explainer` and `slideshow` media are generated locally.** The voices, sprites, photos and music

@@ -1,0 +1,42 @@
+{
+  "title": "Thirty years of a synthetic index",
+  "unit": "index points",
+  "source": "Synthetic series authored for motion-kit; not a real index, a real fund or investment advice.",
+  "series": [
+    {
+      "label": "Synthetic index, yearly close",
+      "points": [
+        { "year": 1995, "value": 100 },
+        { "year": 1996, "value": 122 },
+        { "year": 1997, "value": 149 },
+        { "year": 1998, "value": 178 },
+        { "year": 1999, "value": 214 },
+        { "year": 2000, "value": 201 },
+        { "year": 2001, "value": 165 },
+        { "year": 2002, "value": 128 },
+        { "year": 2003, "value": 152 },
+        { "year": 2004, "value": 178 },
+        { "year": 2005, "value": 187 },
+        { "year": 2006, "value": 205 },
+        { "year": 2007, "value": 224 },
+        { "year": 2008, "value": 141 },
+        { "year": 2009, "value": 187 },
+        { "year": 2010, "value": 214 },
+        { "year": 2011, "value": 205 },
+        { "year": 2012, "value": 235 },
+        { "year": 2013, "value": 278 },
+        { "year": 2014, "value": 302 },
+        { "year": 2015, "value": 296 },
+        { "year": 2016, "value": 322 },
+        { "year": 2017, "value": 379 },
+        { "year": 2018, "value": 351 },
+        { "year": 2019, "value": 424 },
+        { "year": 2020, "value": 502 },
+        { "year": 2021, "value": 598 },
+        { "year": 2022, "value": 494 },
+        { "year": 2023, "value": 611 },
+        { "year": 2024, "value": 742 }
+      ]
+    }
+  ]
+}
