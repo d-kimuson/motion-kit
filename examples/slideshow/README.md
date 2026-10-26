@@ -50,10 +50,15 @@ dissolve between slides:
   scrim. Both come from the slide list in `plan.ts`, never from the file, so a slide whose photo never
   arrives still says which slide it is. The type scale is 7.5% of the **shorter** side, so 1080×1920
   and 1920×1080 use the same size and the caption stays inside the safe area at both aspects.
-- **Crossfade.** The pictures dissolve linearly (`1 - p` and `p`), so their opacities sum to exactly 1
-  in every frame and the fade never dips; the captions use the faster `p³` pair, so two legible
-  captions never sit on top of each other at half opacity. In the middle of a 0.5-second fade both
-  captions are close to invisible for a few frames — that is the intended swap, not a dropped frame.
+- **Crossfade.** The outgoing picture is the opaque base of the fade and the incoming one dissolves in
+  over it at `p`, so a frame is exactly `(1 - p)·outgoing + p·incoming`: full brightness throughout,
+  never a dip towards the ground. Each slide keeps its ink ground _inside_ its own fading layer — an
+  opaque ground on the stacked upper frame paints over the picture below it, which turns the dissolve
+  into a fade from black. The captions use the faster `p³` pair and the incoming one is held back to
+  the midpoint of the fade, so two legible captions never sit on top of each other: the outgoing
+  caption is nearly gone before the incoming one starts. In the middle of a 0.5-second fade the
+  outgoing caption is at `(1 - p)³ ≈ 0.13` and the incoming one is still at zero — that faint
+  outgoing line is the intended swap, not a dropped frame.
 - **Music.** `fetch-assets.ts` writes a 30-second `sine`/`anoisesrc` tone bed that fades in and out and
   ends with the last slide. No Composition declares audio yet (TASK-171), so nothing muxes it: the
   video is silent, and the file is what the muxing step will read.
