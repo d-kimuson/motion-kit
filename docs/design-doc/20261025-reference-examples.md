@@ -24,20 +24,21 @@ Verification of this document: every API, flag, path and package name it names e
 
 ### What is decided, and by whom
 
-| Point                                                                    | Status                                               |
-| ------------------------------------------------------------------------ | ---------------------------------------------------- |
-| Four examples and the axis each stresses                                 | Decided by the owner, 2026-10-24                     |
-| Every example works silent first; audio arrives with the muxing pipeline | Decided by the owner                                 |
-| No Three.js/shader example before Phase 3 and Spike B                    | Decided by the owner                                 |
-| `examples/<name>/` layout, Composition ids, CLI invocation               | Decided here                                         |
-| The public surface an example may import                                 | Decided here                                         |
-| Asset provenance rule and `assets.manifest.json`                         | Decided here; the license allowlist is TASK-169      |
-| CI gates: determinism, smoke MP4, resolution, frame counts, budget       | Decided here                                         |
-| Explainer script content, schema and disclaimer wording                  | Open: TASK-170 (owner reviews the script)            |
-| Which Voice/sprites/fonts/music may be committed, and the credit lines   | Open: TASK-169                                       |
-| Audio declaration and muxing behaviour                                   | Open: TASK-171                                       |
-| Video clips in the slideshow                                             | Open: needs the owner to schedule a task (see below) |
-| Teaser's fictional product, and the chart's data source                  | Open: owner ([Open questions](#open-questions))      |
+| Point                                                                    | Status                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Four examples and the axis each stresses                                 | Decided by the owner, 2026-10-24                                    |
+| Every example works silent first; audio arrives with the muxing pipeline | Decided by the owner                                                |
+| No Three.js/shader example before Phase 3 and Spike B                    | Decided by the owner                                                |
+| `examples/<name>/` layout, Composition ids, CLI invocation               | Decided here                                                        |
+| The public surface an example may import                                 | Decided here                                                        |
+| Asset provenance rule and `assets.manifest.json`                         | Decided here; the license allowlist is TASK-169                     |
+| CI gates: determinism, smoke MP4, resolution, frame counts, budget       | Decided here                                                        |
+| Explainer script content, schema and disclaimer wording                  | Open: TASK-170 (owner reviews the script)                           |
+| Which Voice/sprites/fonts/music may be committed, and the credit lines   | Open: TASK-169                                                      |
+| Audio declaration and muxing behaviour                                   | Open: TASK-171                                                      |
+| Video clips in the slideshow                                             | Open: needs the owner to schedule a task (see below)                |
+| Teaser's fictional product, and the chart's data source                  | Open: owner ([Open questions](#open-questions))                     |
+| Determinism of images inside `Sequence`s                                 | Open: needs a Backlog task, not scheduled ([CI policy](#ci-policy)) |
 
 ### Layout
 
@@ -46,30 +47,33 @@ examples/
 ├── README.md                     # the four targets, how to render each, what is placeholder
 ├── explainer/
 │   ├── entry.tsx                 # exports `compositions`: explainer, explainer-ci
-│   ├── script.ts                 # the structured script (TASK-170) and its Zod schema
-│   ├── script.schema.ts          # the script schema, next to the data it validates
+│   ├── probe.tsx                 # exports `compositions`: explainer-probe (the determinism gate)
+│   ├── script.ts                 # the structured script data (TASK-170 fills it in)
+│   ├── script.schema.ts          # the Zod schema for that script, next to the data it validates
 │   ├── slides/                   # slide components the script's cues select
-│   ├── Sprites.tsx               # character sprite + expression switching
+│   ├── Sprites.tsx               # character sprite + expression and mouth switching
 │   ├── Subtitles.tsx             # the subtitle line component
 │   ├── assets/                   # committed original/generated assets, and the ADR's allowlist
 │   ├── assets.local/             # fetched/generated third-party assets, gitignored
 │   ├── fetch-assets.ts           # Node script that fills assets.local/ (VOICEVOX, sprites)
 │   ├── assets.manifest.json      # every file under assets/ and assets.local/, with provenance
-│   ├── explainer.determinism.test.ts
 │   ├── explainer.smoke.test.ts
 │   └── README.md
 ├── teaser/                       # same shape, no script/
 ├── chart/
 │   ├── entry.tsx                 # exports `compositions`: chart, chart-ci
+│   ├── probe.tsx                 # exports `compositions`: chart-probe
 │   ├── data/                     # JSON props objects, one file per dataset
 │   └── ...
 └── slideshow/
     ├── entry.tsx                 # exports `compositions`: slideshow, slideshow-landscape, slideshow-ci
+    ├── probe.tsx                 # exports `compositions`: slideshow-probe
     ├── slides/                   # Ken Burns slide components
     └── ...
 ```
 
 - One directory per example; the directory name is the Composition id prefix. Each entry file exports a `compositions` registry (`defineCompositions`) with exactly two definitions: the full Composition `<name>` and the CI Composition `<name>-ci`. `slideshow` adds a third, `slideshow-landscape`, which reuses the same slide components at 16:9 (that is its aspect-switching axis); no other example needs a second full Composition.
+- `probe.tsx` is a separate registry with one short Composition, `<name>-probe` (480×270, 30 frames), used only by the determinism gate ([CI policy](#ci-policy)). It is not a second full Composition and no CLI command in this document renders it; keeping it out of `entry.tsx` is what lets the entry document exactly the two Compositions a reader renders.
 - Because every entry holds more than one Composition, `--composition <id>` is always required. There is no single-entry entry file under `examples/`.
 - `examples/<name>/README.md` states the expected look, the asset provenance, the known limitations, the exact local QA commands, and the credit lines the TASK-169 ADR requires.
 - `examples/README.md` indexes the four targets, one row each: Composition id, resolution, fps, frame count, axis, CI gate.
@@ -105,6 +109,7 @@ Not available yet, so no example may use them:
 - Audio: no Composition may declare audio until TASK-171.
 - Video assets: `AssetDescriptor` is a union of `FontAssetDescriptor` and `ImageAssetDescriptor`; there is no video kind and no frame-seeking integration.
 - `inspect`, `validate` (Phase 4; the CLI reserves the subcommand names and reports them as not implemented).
+- The determinism suite. `defineDeterminismSuite`/`runDeterminismSuite` live in `src/render/determinism/suite.ts`; `/render` exports `createRenderer` and its types only, and `package.json#exports` has no third subpath, so no file under `examples/` can import them without violating the boundary below. The gate reaches an example from the outside instead ([CI policy](#ci-policy)).
 
 Consequences the example tasks must live with:
 
@@ -121,11 +126,12 @@ The CLI's `projectRoot` is `process.cwd()`, and React, ReactDOM and Zod resolve 
 pnpm install
 pnpm build                                   # the loading session resolves @kimuson/motion-kit to dist/
 pnpm exec playwright install chromium        # once; the renderer launches Chromium
+mkdir -p out                                 # gitignored, so a clean checkout has no out/
 
 # Full render (needs FFmpeg 6.0+ with libx264 on PATH for the .mp4 route)
 node dist/cli.js render examples/teaser/entry.tsx --composition teaser --out out/teaser.mp4 --json
 
-# A still frame for visual review
+# A still frame for visual review (teaser has no required props; see the chart note below)
 node dist/cli.js frame examples/teaser/entry.tsx --composition teaser --frame 42 --out out/teaser-42.png
 
 # Same Composition, different data (the chart axis)
@@ -140,18 +146,34 @@ node dist/cli.js render examples/explainer/entry.tsx --composition explainer \
 
 - `motion-kit` is the same bin (`bin.motion-kit` → `dist/cli.js`); a reader with an installed package writes `motion-kit render …`. Under `--json` the envelope carries `data.format`, `width`, `height`, `fps`, `frameCount` and `durationSeconds`, which is how an example's smoke test asserts its own output.
 - `--out` picks the format from the extension: `.mp4` encodes H.264, anything else writes PNG frames plus `manifest.json`. There is no `--format` flag.
+- `render` creates the directories its output path needs; `frame` does not, and fails with `internal.unexpected` on a missing parent, which is why the block starts with `mkdir -p out`.
+- `frame` has no `--props` (only `render` declares one, `src/cli/commands.ts`). An example whose schema has a required prop therefore has no still route: `chart`'s `series` has no default, so its still is a frames render (`render … --out out/chart-frames`, which writes every frame plus `manifest.json`) rather than `frame`. A `--props` on `frame` is a CLI follow-up, not this document's.
 - A missing entry is `cli.entry-not-found` (exit 2), an unknown `--composition` id is `cli.composition-not-found`, `--props` that is not a JSON object string is `cli.invalid-arguments`, and valid JSON that fails the Composition's schema is `composition.props-invalid`. All four are what an example README tells the reader to expect when they get the command wrong.
 - Every render writes under `out/` at the repository root. `assets.local/` is the only other generated location.
 
 ### `explainer` — long duration, many Sequences and Transitions, subtitles against audio
 
-**Composition.** `explainer`: 1920×1080, 30 fps, `durationInFrames` = `frameCount(createTimelineTime(totalSeconds), { numerator: 30, denominator: 1 })` with the `Result` unwrapped to its `bigint` and then to the plain safe integer the registry declares (`durationInFrames: number`); `totalSeconds` is the script's dialogue total plus a 3-second tail for the disclaimer and credits; target 180–300 seconds (5400–9000 frames). `explainer-ci`: 960×540, 60 frames.
+**Composition.** `explainer`: 1920×1080, 30 fps, `durationInFrames` derived from the script (both Time Module calls return a `Result`, so both are unwrapped):
+
+```ts
+import { createFrameRate, createTimelineTime, frameCount, type Result } from '@kimuson/motion-kit';
+
+const unwrap = <T>(result: Result<T>): T => {
+  if (!result.ok) throw new Error(`explainer: ${result.error.message}`);
+  return result.value;
+};
+
+const fps = unwrap(createFrameRate({ numerator: 30, denominator: 1 })); // FrameRate
+const durationInFrames = Number(unwrap(frameCount(unwrap(createTimelineTime(totalSeconds)), fps))); // bigint → the number the registry declares
+```
+
+`totalSeconds` is the script's dialogue total plus a 3-second tail for the disclaimer and credits; target 180–300 seconds (5400–9000 frames, exact in a `Number`). `explainer-ci`: 960×540, 60 frames. `explainer-probe`: 480×270, 30 frames ([CI policy](#ci-policy)).
 
 **Structure.** Three layers, all computed from `script.ts` at module load, so the video and the data cannot disagree:
 
 1. **Slide layer** — one `TransitionSeries` from frame 0. Each script slide cue becomes a `TransitionScene`; adjacent slides get a `Transition` of 0.4 s (12 frames) with the shared `CrossFade`. `TransitionScene` duration is "the sum of that slide's lines' seconds + its outgoing overlap (0.4 s, zero for the last slide)". With that rule the series total is exactly `Σ lines + Σ overlaps − Σ overlaps = Σ lines`, and slide `i` starts exactly at its first line because its predecessor's outgoing overlap is what pays for the crossfade; the overlap then runs over the first 0.4 s of slide `i`'s first line.
 2. **Subtitle layer** — one `Sequence` per line, `from` = the cumulative sum of the preceding lines' seconds, `duration` = the line's seconds. This layer has no transitions: it proves that many Sequences in one Composition keep exact timing.
-3. **Sprite layer** — the speaker's sprite for the lines in view, switched by the line's `expression`, inside its own `Sequence`s. Two characters side by side, the non-speaker dimmed to 60% opacity.
+3. **Sprite layer** — the speaker's sprite for the lines in view, switched by the line's `expression`, inside its own `Sequence`s. Two characters side by side, the non-speaker dimmed to 60% opacity. `expression` is not the only channel: each expression ships a resting and an open-mouth frame, and the sprite alternates them every 0.15 s inside a speaking line, so the owner's "expression/mouth" axis is covered without a lip-sync asset contract. Both frames come from the same place as the sprite itself (§Asset table): authored silhouettes under `assets/` for `placeholder`, the 立ち絵 set under `assets.local/` for `final`.
 
 Slide content is DOM and inline SVG only (no chart library): title, bullet list, or a `chart` cue that renders the same SVG chart component as the `chart` example, from the same JSON.
 
@@ -189,7 +211,7 @@ type Script = {
 
 **Acceptance look.** A calm 16:9 deck: warm off-white background, one accent colour, the two characters at the lower corners, a three-line subtitle band at the bottom third in a legible Japanese face (≥72 px at 1080p, no clipped descenders), and a slide that changes every 15–25 seconds with a 0.4-second crossfade that never shows both slides at full opacity. Numbers and charts enter by counting up while the narration reaches them. Nothing in the frame moves while nobody speaks. A person watching it should be able to follow the argument with the sound off (subtitles) and with the picture off (narration).
 
-**CI.** `explainer-ci` at 960×540 for 60 frames selects the disclaimer slide plus one dialogue line plus one crossfade, with placeholder assets and no audio — it exercises the three layers, a `Transition` overlap, `useAsset` for two placeholder images, and Japanese text through the fallback stack. It is the only explainer render in CI; the full-length render is a local QA Check.
+**CI.** `explainer-ci` at 960×540 for 60 frames selects the disclaimer slide plus one dialogue line plus one crossfade, with placeholder assets and no audio — it exercises the three layers, a `Transition` overlap, `useAsset` for two placeholder images, and Japanese text through the fallback stack. It is the only explainer render in CI; the full-length render is a local QA Check. `explainer-probe` ([CI policy](#ci-policy)) carries the determinism gate: the same three layers at 480×270 for 30 frames, with the media steps of the sprite and slide layers replaced by flat placeholders, because images inside `Sequence`s are not traversal-deterministic today (see the open dependency in [CI policy](#ci-policy)).
 
 ### `teaser` — dense springs, Stagger, Theme tokens, determinism under heavy motion
 
@@ -203,7 +225,7 @@ type Script = {
 
 **Acceptance look.** 15–30 seconds of type that never sits still and never looks busy: high contrast on a dark ground, one accent colour, words that snap in with a spring overshoot of a few percent and settle, letters that stagger by 30–50 ms, and a final frame that holds the product name for the last second. Played twice, every frame is identical; that is the point of the example.
 
-**CI.** `teaser-ci` renders as an MP4 in CI, plus the determinism suite over the full `teaser` at four frames (0, one mid-transition frame, one mid-hold frame, the last frame). Exact PNG bytes, no tolerance: the teaser is the Composition that would expose a wall-clock or history-dependent animation first.
+**CI.** `teaser-ci` renders as an MP4 in CI; the determinism gate runs over `teaser-probe` — the opening word plus the first two transitions at 480×270 for 30 frames, at determinism frames `[0, 15, 29]`. Exact PNG bytes, no tolerance: the teaser is the Composition that would expose a wall-clock or history-dependent animation first, and it has no media, so its probe covers the real tree rather than a stand-in.
 
 ### `chart` — schema-first props, SVG, animated numbers, regenerate from other data
 
@@ -225,7 +247,7 @@ const chartProps = z.object({
 });
 ```
 
-- `series` has no schema default, so the entry's own `data/index-30y.json` is passed as `--props` in the documented command; a reader who omits `--props` gets `composition.props-invalid` with the failing path, which is the schema-first behaviour the example exists to demonstrate. The example README documents both commands.
+- `series` has no schema default, so the entry's own `data/index-30y.json` is passed as `--props` in the documented command; a reader who omits `--props` gets `composition.props-invalid` with the failing path, which is the schema-first behaviour the example exists to demonstrate. The example README documents both commands, and the still route is a frames render rather than `frame` (see [Running an example](#running-an-example)).
 - Each file under `examples/chart/data/` is a complete props object (`{ "title": …, "source": …, "series": […] }`), not a bare array, so `--props "$(cat examples/chart/data/index-30y.json)"` works verbatim and the from/to year range is derived from the points rather than declared twice.
 - Rendering is inline `<svg>` written as JSX: axes, gridlines, a polyline per series, a marker per point, and a value label that counts up from 0 to the final value over the last 1.5 s. No chart library, so no dependency and no nondeterminism.
 - Number formatting is a small local function, not `Intl.NumberFormat`: ICU data differs between a developer machine and the CI runner, and the determinism suite compares PNG bytes.
@@ -236,7 +258,7 @@ const chartProps = z.object({
 
 **Acceptance look.** A single large chart on a light ground with the title top-left, the unit on the y-axis, years on the x-axis, and the source line in 24 px grey at the bottom. The line draws on left to right in 3 seconds, points pop in as the draw passes them, and the final value counts up and then holds for 4 seconds. Regenerating with a different dataset changes the shape and the numbers and nothing else about the layout: the y-domain, tick count and label positions are computed from the data, so a 1995–2024 series and a 2005–2024 series both fill the frame correctly.
 
-**CI.** `chart-ci` renders as an MP4 with `--props` pointing at a second, small dataset committed under `examples/chart/data/`, so CI covers the regeneration axis rather than only the default data; plus the determinism suite over the full `chart` with the same props at four frames.
+**CI.** `chart-ci` renders as an MP4 with `--props` pointing at a second, small dataset committed under `examples/chart/data/`, so CI covers the regeneration axis rather than only the default data; the determinism gate runs over `chart-probe`, which renders one small dataset held as a module constant in `probe.tsx` and takes no props. That is deliberate: `DeterminismComposition.props` is a flat `Record<string, string | number | boolean | null>` (`src/render/determinism/suite.ts`), so a nested `series` cannot be passed through the suite at all; keeping the probe's props empty is what keeps the gate inside the shipped types. Widening that record is a `src/render` change (the loading session already accepts nested JSON through `Selection.props`), and it is not this document's.
 
 ### `slideshow` — 9:16 vertical, Ken Burns, audio mixing, aspect switching
 
@@ -244,13 +266,13 @@ const chartProps = z.object({
 
 **Structure.** One `TransitionSeries` over the slides, 0.5 s crossfades, each slide a Ken Burns move computed from `useSequence().time` and `useSequence().duration` (scale 1.0 → 1.12 and a pan of ±4%, alternating direction per slide). Images load through `useAsset({ kind: 'image', … })` inside a local `<Suspense>`; the slide's alt text or caption is drawn from the same props so a missing image is a visible diagnostic, not a blank frame.
 
-**Dependencies.** `useAsset` image readiness (TASK-158), `Sequence`/`TransitionSeries` (TASK-156/154), MP4 encoding (TASK-159) and the CLI (TASK-161) exist. Background music needs TASK-171. Video clips need a `video` asset kind and a frame-seeking integration (Tier B at best, per the [Phase 0 ADR](../decisions/20261024-time-control-and-frame-capture.accepted.md)) — no task exists, so the first version is images-only and the video-clip axis is deferred ([Open questions](#open-questions)).
+**Dependencies.** `useAsset` image readiness (TASK-158), `Sequence`/`TransitionSeries` (TASK-156/154), MP4 encoding (TASK-159) and the CLI (TASK-161) exist. Background music needs TASK-171. Video clips need a `video` asset kind and a frame-seeking integration — no task exists, and the Phase 0 ADR's R12 leaves the frame-selection mechanism open (priority P3, Phase 2; it assigns no tier), so the first version is images-only and the video-clip axis is deferred ([Open questions](#open-questions)).
 
 **Assets.** Photos are CC0 sources fetched into `assets.local/photos/`, or original generated placeholders committed under `assets/` (a gradient plus a label, as SVG). Music is a CC0 track or a synthesized tone bed via FFmpeg, both subject to TASK-169. Placeholder photos are committed because they are authored here; nothing third-party is committed before that ADR.
 
 **Acceptance look.** A vertical feed video: full-bleed images, slow Ken Burns with no visible stepper, white captions in the lower third with a subtle shadow, 0.5-second crossfades, and a music bed that ends with the last slide rather than being cut off. The same components at 16:9 must fill the wider frame without letterboxing and without the caption leaving the safe area.
 
-**CI.** `slideshow-ci` at 540×960 renders as an MP4 with placeholder images and no audio, plus the determinism suite over the full `slideshow` at four frames. The landscape variant is checked by its descriptor and one still frame in the same test, not by a full render.
+**CI.** `slideshow-ci` at 540×960 renders as an MP4 with placeholder images and no audio; the landscape variant is checked by its descriptor and one still frame in the same test, not by a full render. The determinism gate runs over `slideshow-probe`: the `TransitionSeries` crossfade and the `useTimeline().width/height` aspect switch with flat placeholder surfaces rather than the `useAsset` photos, for the reason in [CI policy](#ci-policy).
 
 ### Assets and provenance
 
@@ -261,7 +283,7 @@ Two directories, one rule:
 
 `assets.manifest.json` declares every file in both directories with `path`, `kind` (`font`/`image`/`audio`/`video`/`data`), `source` (URL or "authored"), `license` (SPDX id or "authored") and `credit`. The TASK-169 ADR supplies the allowed SPDX set and the exact credit strings; the check that reads the manifest (`scripts/check-licenses.ts` reading the manifests under `examples/`) lands with that ADR, so this document fixes the mechanism and the ADR fixes the policy.
 
-Every example's props schema carries one shared switch, so a run without the fetched media is still a complete video:
+Every example whose look depends on fetched media — `explainer` and `slideshow` — carries one shared switch, so a run without that media is still a complete video. `teaser` (its Latin font is committed or the system stack) and `chart` (its data is `series`, passed as `--props`) need no switch:
 
 ```ts
 const assets = z.enum(['placeholder', 'final']).default('placeholder');
@@ -269,38 +291,43 @@ const assets = z.enum(['placeholder', 'final']).default('placeholder');
 
 `placeholder` uses only what `assets/` provides (the authored silhouette SVGs, the authored gradient photos, the system sans-serif stack, no audio); `final` uses `assets.local/`. CI and every commit-time render use the default; the local QA render passes `--props '{"assets":"final"}'`. When TASK-169 allows an asset to be committed, it moves into `assets/` and stops depending on the switch, but the prop stays: it is how a reader without VOICEVOX still renders the explainer.
 
-| Example     | Asset                           | Where                              | Committed today         | Decided by                       |
-| ----------- | ------------------------------- | ---------------------------------- | ----------------------- | -------------------------------- |
-| `explainer` | Script and slide outline        | `script.ts`                        | Yes, authored           | TASK-170                         |
-| `explainer` | Silhouette sprite placeholders  | `assets/sprites/*.svg`             | Yes, authored           | this document                    |
-| `explainer` | VOICEVOX voices (2 characters)  | `assets.local/voice/*.wav`         | No, generated locally   | TASK-169 (terms), TASK-171 (mux) |
-| `explainer` | Character sprites (expressions) | `assets.local/sprites/*.png`       | No, fetched             | TASK-169                         |
-| `explainer` | Japanese font                   | `assets/fonts/` or `assets.local/` | Only if the ADR allows  | TASK-169                         |
-| `explainer` | Slide charts                    | inline SVG in `slides/`            | Yes, authored           | this document                    |
-| `teaser`    | One font (Latin)                | `assets/fonts/` or system stack    | Only if the ADR allows  | TASK-169                         |
-| `chart`     | Series JSON (2 datasets)        | `data/*.json`                      | Yes, authored/synthetic | this document; real source open  |
-| `slideshow` | Photos (8 placeholders)         | `assets/photos/*.svg`              | Yes, authored           | this document                    |
-| `slideshow` | Photos (final) and music        | `assets.local/photos`, `music`     | No, fetched             | TASK-169                         |
-| `slideshow` | Video clips                     | —                                  | No                      | Open (no task)                   |
+| Example     | Asset                                                | Where                              | Committed today         | Decided by                       |
+| ----------- | ---------------------------------------------------- | ---------------------------------- | ----------------------- | -------------------------------- |
+| `explainer` | Script and slide outline                             | `script.ts`                        | Yes, authored           | TASK-170                         |
+| `explainer` | Silhouette sprite placeholders                       | `assets/sprites/*.svg`             | Yes, authored           | this document                    |
+| `explainer` | VOICEVOX voices (2 characters)                       | `assets.local/voice/*.wav`         | No, generated locally   | TASK-169 (terms), TASK-171 (mux) |
+| `explainer` | Character sprites (expressions, rest and open mouth) | `assets.local/sprites/*.png`       | No, fetched             | TASK-169                         |
+| `explainer` | Japanese font                                        | `assets/fonts/` or `assets.local/` | Only if the ADR allows  | TASK-169                         |
+| `explainer` | Slide charts                                         | inline SVG in `slides/`            | Yes, authored           | this document                    |
+| `teaser`    | One font (Latin)                                     | `assets/fonts/` or system stack    | Only if the ADR allows  | TASK-169                         |
+| `chart`     | Series JSON (2 datasets)                             | `data/*.json`                      | Yes, authored/synthetic | this document; real source open  |
+| `slideshow` | Photos (8 placeholders)                              | `assets/photos/*.svg`              | Yes, authored           | this document                    |
+| `slideshow` | Photos (final) and music                             | `assets.local/photos`, `music`     | No, fetched             | TASK-169                         |
+| `slideshow` | Video clips                                          | —                                  | No                      | Open (no task)                   |
 
 Audio is never committed by this document's rules except generated tones; a committed voice track is exactly what TASK-169 must allow or forbid.
 
 ### CI policy
 
-CI proves three things about the examples: they typecheck and lint, their frames are traversal-independent, and the CLI can render them to a valid MP4. It does not prove the videos look right — that is a human check.
+CI proves three things about the examples: they typecheck and lint, the structure of each axis is traversal-independent at a bounded size, and the CLI can render each `-ci` Composition to a valid MP4. It does not prove the videos look right — that is a human check.
 
-| Gate               | Where                                                                                                | What runs                                                                                                                                                                                                                         | Added cost budget                 |
-| ------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| Typecheck and lint | `pnpm lint`, `pnpm typecheck` in the existing `check` job                                            | `examples/**` through `tsconfig.json#include`, oxlint, oxfmt, the manifest check once TASK-169 lands                                                                                                                              | < 10 s                            |
-| Determinism        | `frame-transport` project: add `examples/**/*.determinism.test.ts` to `include` (`vitest.config.ts`) | One `defineDeterminismSuite` per example over the **full** Composition: 4 frames (0, one mid-scene, one mid-transition or mid-move, the last). Exact PNG bytes, no tolerance.                                                     | ≤ 45 s per example, ≤ 120 s total |
-| Smoke MP4          | `cli` project: add `examples/**/*.smoke.test.ts` to `include` (`vitest.config.ts`)                   | `<name>-ci` → `out/examples/<name>-ci.mp4` through `node dist/cli.js render … --json`, then `ffprobe` asserts 60 frames, 30/1 fps, the CI width/height and a 2.0 s duration. `chart-ci` passes `--props` from the second dataset. | ≤ 20 s per example, ≤ 60 s total  |
-| Not in CI          | —                                                                                                    | Full-length renders of `explainer`, `teaser`, `chart`, `slideshow`; any audio; any `assets: 'final'` render; the landscape variants' full renders                                                                                 | —                                 |
+| Gate               | Where                                                                                           | What runs                                                                                                                                                                                                                         | Added cost budget                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Typecheck and lint | `pnpm lint`, `pnpm typecheck` in the existing `check` job                                       | `examples/**` through `tsconfig.json#include`, oxlint, oxfmt, the manifest check once TASK-169 lands                                                                                                                              | < 10 s                                            |
+| Determinism probe  | `frame-transport` project, no config change: `src/**/*.determinism.test.ts` is already included | `src/render/determinism/examples.determinism.test.ts` runs one `defineDeterminismSuite` per axis over `examples/<name>/probe.tsx` (`<name>-probe`, 480×270, 30 frames) at frames `[0, 15, 29]`. Exact PNG bytes, no tolerance.    | ≤ 5 s per probe (measured 3.9 s), ≤ 20 s total    |
+| Smoke MP4          | `cli` project: add `examples/**/*.smoke.test.ts` to `include` (`vitest.config.ts`)              | `<name>-ci` → `out/examples/<name>-ci.mp4` through `node dist/cli.js render … --json`, then `ffprobe` asserts 60 frames, 30/1 fps, the CI width/height and a 2.0 s duration. `chart-ci` passes `--props` from the second dataset. | ≤ 15 s per example (measured 2.8 s), ≤ 60 s total |
+| Not in CI          | —                                                                                               | Full-length renders of `explainer`, `teaser`, `chart`, `slideshow`; the same four Compositions' determinism suites; any audio; any `assets: 'final'` render; the landscape variants' full renders                                 | —                                                 |
 
-- **CI renders are 2 seconds at reduced size.** The `check` job has a 15-minute timeout and already runs six vitest projects (about 28 s for `frame-transport` before this work). A 1080p 60-frame encode plus 30 captures costs tens of seconds per example, and a full 20–30 s clip would consume minutes. The `-ci` Compositions are therefore half linear resolution (960×540, and 540×960 for the vertical) and exactly 60 frames, and they must reuse the full example's scene components — never a simplified copy.
+- **The job today, and the room the examples use.** The `check` job has a 15-minute timeout and measured **5 m 01 s, 5 m 45 s and 6 m 34 s** in the last green runs. The cap per gate is derived from the four examples (4 × 5 s = 20 s, 4 × 15 s = 60 s) and sits above the local measurement (5 s vs 3.9 s; 15 s vs 2.8 s) to absorb a slower runner: the examples add ≤ 90 s with lint and typecheck, so a green run lands near 8 minutes with about 7 minutes of headroom.
+- **CI renders are 2 seconds at reduced size.** A 1080p 60-frame encode plus 30 captures costs tens of seconds per example, and a full 20–30 s clip would consume minutes. The `-ci` Compositions are therefore half linear resolution (960×540, and 540×960 for the vertical) and exactly 60 frames, and they must reuse the full example's scene components — never a simplified copy. Measured cost of one such render end to end through the CLI, FFmpeg included: **2.84 s** wall for a 960×540, 60-frame TransitionSeries + Sequence tree (a 1920×1080 120-frame capture runs at about 78 ms per frame).
 - **No `--frame-range` flag is added.** The only way to render a short window today is a Composition with a short duration, which is what the `-ci` definitions are. If the agent context later adds a frame range to `render`, the `-ci` Compositions are removed and CI renders a window of the real Composition instead.
-- **Determinism uses the full Composition**, not the `-ci` one: capture cost is set by resolution and the frame list, not by duration. That keeps the gate on the real tree. If an example's suite exceeds 45 s on the CI runner, reduce its frame list to three frames; do not add a tolerance — the suite accepts one only as `{ purpose: 'cross-environment', maxDifferentBytes }` at the call site.
+- **The determinism gate is a probe, not the real Composition, because the suite's cost is set by the frame list's maximum.** `runDeterminismSuite` builds its baseline with `renderFrames({ from: 0, to: focus + 1 })`, `focus = max(frames)`, and the required `reverse` mode re-captures `focus..0` (`src/render/determinism/suite.ts`, `compare.ts`). One suite therefore costs about `2 × (focus + 1) + 9` captures plus two renderer opens — the Composition's duration does not enter, but the highest frame index in the list does. Measured: 1920×1080 with `[0, 60, 119]` takes **9.81 s** (a 120-frame Composition; QA measured 10.86 s on the same shape), so a 5400–9000-frame `explainer` with the last frame in its list is **minutes per example** and cannot fit the job. Shortening the list does not help while the last frame stays in it; dropping it is what makes the gate cheap. The probes are 480×270, 30 frames, `[0, 15, 29]`: measured **3.87 s and 3.92 s** per suite on macOS arm64, and 2.12 s for the same Composition at `[0, 1, 2]` — the floor is the two renderer opens, not the captures.
+- **A probe is a bounded smoke of the seven modes over one axis's structure, and it says so.** It reuses the example's components (its `TransitionSeries`/`Sequence` timing, the shared `CrossFade`, the chart's SVG component, the Ken Burns arithmetic) at 480×270 for 30 frames, and it declares an empty props schema. It is not certification of a 9000-frame video: the evidence for long compositions is the Phase 1 suite (`docs/contexts/render/knowledge/20261024-phase1-determinism.md`) plus the human QA Check, and a full-Composition suite is a local check for whoever changes a media path, not a CI step.
+- **The probe is reached from `src/render/determinism/`, never imported by an example.** `defineDeterminismSuite` has no public export (`/render` exports `createRenderer` and its types; `package.json#exports` is `.`, `./render`, `./agent`), and an example may not import `src/**` by relative path (§"The surface an example may use"). So the suite file lives next to the suite and names the example's registry by path: `composition.modulePath` is a string, `new URL('../../../examples/<name>/probe.tsx', import.meta.url).pathname`, which the loading session imports in its temporary project. That obeys the boundary in both directions and adds no package surface. There is no `examples/**/*.determinism.test.ts` include.
+- **Probe props stay flat.** `DeterminismComposition.props` is `Record<string, string | number | boolean | null>`, so a nested `series` cannot be passed through the suite; the chart probe renders a module-constant dataset and passes no props. Widening that record is a `src/render` change and not this document's.
+- **Open dependency: an image `useAsset` inside a `Sequence` is not traversal-deterministic today.** Reproduced on this branch with the suite and a 60-frame 480×270 probe built only from shipped APIs (`TransitionSeries`/`TransitionScene`/`Transition` + `Suspense` + `useAsset({ kind: 'image' })` inside `Sequence from=0.5 duration=1`): `reverse` fails at frame 38 (`3269 differing bytes, 3494 vs 3534`) while the other six modes pass; the same tree with a text-only `Sequence` passes all seven. So the probes keep their media out of `Sequence`s until that is fixed, which is why `explainer-probe` and `slideshow-probe` render flat placeholders instead of the `useAsset` images the real trees use. This document therefore claims determinism for the paths that are deterministic today and none for asset-plus-`Sequence` paths. Fixing it is a separate Backlog task (`Bug`, `[core]`/`[render]`); when it lands, the media returns to the probes and the `-ci` Compositions join the gate. This document does not number that task and does not depend on it to land the examples.
 - **Audio is manual.** CI runs are silent (no audio declarations), because the voice and music files are generated locally and gitignored. TASK-171's own tests prove muxing and onset alignment; the explainer's QA Check is where the real track is judged.
-- **What the QA Check does instead** (`docs/guidelines/quality-assurance/index.md`, human check): render each full example at its real resolution, watch it, compare against the acceptance look in this document, render the same four frames sequentially and by random seek for one example, and record the command, the wall time and the stills in the example's README or a `knowledge/` note next to the example. A change to what a video looks like is a human check by the [criteria](../guidelines/quality-assurance/human-check-criteria.md).
+- **What the QA Check does instead** (`docs/guidelines/quality-assurance/index.md`, human check): render each full example at its real resolution, watch it, compare against the acceptance look in this document, and record the command, the wall time and stills in the example's README or a `knowledge/` note next to the example. A change to what a video looks like is a human check by the [criteria](../guidelines/quality-assurance/human-check-criteria.md).
 
 ## Open questions
 
@@ -308,10 +335,12 @@ These need the owner; they do not block the layout, the CI policy or the first s
 
 1. **The teaser's fictional product.** The signature line needs a name and a tagline. Recommendation: an obviously fictional developer tool ("Zephyr — notes that think"), chosen so no real product is implied; the example ships the words in one `copy.ts` constant, so changing them is a one-line edit.
 2. **The chart's data source.** A 30-year series from a named public source (cited on screen and in the README) is more convincing than a synthetic one, but index values carry provider terms that TASK-169 does not cover. Recommendation: ship the synthetic series as the committed default and, if the owner accepts the source's terms, add one real series as a second dataset; the video never presents it as advice either way.
-3. **Video clips in the slideshow.** Frame-accurate clip playback needs a `video` asset kind plus a seeking integration, which no Backlog task covers, and it is Tier B at best. Recommendation: ship the slideshow images-only first (it still proves asset readiness, audio mixing and aspect switching), and schedule a `[render]` video-asset task when Phase 2 opens; the `slideshow` Composition id and its slide components stay unchanged when clips arrive.
+3. **Video clips in the slideshow.** Frame-accurate clip playback needs a `video` asset kind plus a seeking integration, which no Backlog task covers, and the Phase 0 ADR's R12 leaves the mechanism open (P3, Phase 2). Recommendation: ship the slideshow images-only first (it still proves asset readiness, audio mixing and aspect switching), and schedule a `[render]` video-asset task when Phase 2 opens; the `slideshow` Composition id and its slide components stay unchanged when clips arrive.
 
 ## Alternatives
 
+- **A per-example `defineDeterminismSuite` over the full Composition.** It keeps the gate on the real tree, but the suite's first mode renders every frame from 0 to the highest frame in the list and `reverse` renders them all again, so the cost follows the video's length: measured 9.81 s for a 120-frame 1920×1080 Composition (≈78 ms per frame), which extrapolates to minutes for a 5400–9000-frame explainer and to ~15 minutes for four examples — the whole job. It is also not expressible under this document's boundary, because the suite is not a package export. A bounded probe keeps the seven modes and a real Composition at ~4 s.
+- **Gating the `-ci` Compositions with the suite as they are.** They are 60 frames, so a suite would cost about 120 sequential captures (seconds), but each `-ci` Composition loads images through `useAsset` inside `Sequence`s, and that path fails `reverse` today ([CI policy](#ci-policy)); gating them would red the first example. They join the gate when that defect is fixed.
 - **One showcase video instead of four.** A single 3–5 minute demo stresses everything and isolates nothing: when it breaks, no context owns the failure, and its CI cost would be the whole budget. Four targets give each axis an owner and a cheap gate.
 - **`examples/` as its own pnpm workspace package with a `package.json` per example.** It would test the consumer install path more faithfully, but it doubles dependency resolution, hides self-reference bugs (`@kimuson/motion-kit` resolves through the loading session's alias anyway), and adds an install step to CI. The repository root stays the project root; `--props` and the loading session already cover the consumer path.
 - **Put the examples under `spikes/`.** Spikes are Phase 0 experiments with their own vitest configs: their tests run only through `pnpm spike:*`, never in `pnpm test` or CI, and they are not shipped. Reference examples are the quality bar and must be typechecked, linted and gated like `src/`.
