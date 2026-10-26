@@ -546,4 +546,45 @@ describe('Composition registry', () => {
       vi.useRealTimers();
     }
   });
+
+  it('carries audio declarations as frozen data and rejects an unplayable one', () => {
+    const declared = unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        audio: [
+          { src: 'audio/voice.wav', startInFrames: 10 },
+          { src: 'audio/music.mp3', startInFrames: 0, endInFrames: 150, volume: 0.2 },
+        ],
+      }),
+    );
+    // Data on the descriptor, so Node reads it without a page channel; frame counts, not seconds.
+    expect(declared.descriptor.audio).toEqual([
+      { src: 'audio/voice.wav', startInFrames: 10 },
+      { src: 'audio/music.mp3', startInFrames: 0, endInFrames: 150, volume: 0.2 },
+    ]);
+    expect(Object.isFrozen(declared.descriptor.audio)).toBe(true);
+    expect(Object.isFrozen(declared.descriptor.audio?.[0])).toBe(true);
+
+    // A declaration the render could not place is a declaration failure, not a silent clamp.
+    expect(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        audio: [{ src: 'audio/voice.wav', startInFrames: 20, endInFrames: 20 }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    expect(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        audio: [{ src: 'audio/voice.wav', startInFrames: -1 }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    // No audio declared: the descriptor keeps the key absent, so the silent path is unchanged.
+    expect(unwrap(entry()).descriptor.audio).toBeUndefined();
+  });
 });

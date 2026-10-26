@@ -10,6 +10,26 @@ import {
 import { type Result } from './result.ts';
 
 export const loadingProtocolVersion = 1;
+
+/**
+ * One audio clip a Composition declares. Times are frame counts, not seconds, so the encoder
+ * derives every offset from the same timeline the frames use (render audio muxing ADR). This is
+ * the wire shape: `defineComposition` validates the cross-field rules before emitting it.
+ */
+export const audioTrackSchema = z.object({
+  /** File path, resolved against the project root; an absolute path is used as given. */
+  src: z.string().min(1),
+  /** Timeline frame where the clip starts; zero when omitted. */
+  startInFrames: z.number().int().nonnegative().optional(),
+  /** Exclusive timeline frame where the clip stops; the source's natural end when omitted. */
+  endInFrames: z.number().int().nonnegative().optional(),
+  /** Source frame to read from, trimming the head of the clip; zero when omitted. */
+  offsetInFrames: z.number().int().nonnegative().optional(),
+  /** Linear gain; one when omitted, zero is silent. */
+  volume: z.number().nonnegative().optional(),
+});
+export type AudioTrack = z.infer<typeof audioTrackSchema>;
+
 export const descriptorSchema = z.object({
   id: z.string().min(1),
   width: z.number().int().positive(),
@@ -19,6 +39,8 @@ export const descriptorSchema = z.object({
     denominator: z.number().int().positive(),
   }),
   durationInFrames: z.number().int().nonnegative(),
+  /** Declared audio clips in declaration order; absent or empty renders silently. */
+  audio: z.array(audioTrackSchema).optional(),
 });
 export type LoadingDescriptor = z.infer<typeof descriptorSchema>;
 export const resultSchema = <T extends z.ZodType>(value: T) =>

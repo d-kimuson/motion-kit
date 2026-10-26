@@ -234,7 +234,14 @@ const runRender = async (
     if (isVideoOutput(outAbsolute)) {
       mkdirSync(dirname(outAbsolute), { recursive: true });
       // The same signal reaches the encoder, which kills its child and removes the sibling.
-      const encoded = await renderVideo({ composition: renderer, output: outAbsolute, signal });
+      // Audio is the Composition's own declaration, so it resolves against this project root;
+      // the target's extension, not a flag, is what selected video output.
+      const encoded = await renderVideo({
+        composition: renderer,
+        output: outAbsolute,
+        projectRoot: process.cwd(),
+        signal,
+      });
       if (!encoded.ok)
         return decide(
           'aborted' in encoded

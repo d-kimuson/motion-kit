@@ -81,3 +81,17 @@ export const encoderInvariantDiagnostic = (message: string, hint: string): Diagn
   message,
   hint,
 });
+
+/**
+ * An audio file the Composition declared is not readable. It is an input problem, not an encoder
+ * failure: the file is named in `location` and in the contract's `asset.load-failed` payload, and
+ * the encode stops before any child runs (audio muxing ADR).
+ */
+export const audioFileMissingDiagnostic = (source: string): Diagnostic => ({
+  code: 'asset.load-failed',
+  severity: 'error',
+  message: `The declared audio file "${source}" could not be read.`,
+  hint: 'Check the track src: relative audio paths resolve against the project root and must name an existing file.',
+  location: { file: source },
+  details: { assets: [{ kind: 'audio', source, phase: 'open' }] },
+});

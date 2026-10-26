@@ -1,4 +1,5 @@
 import { type Diagnostic } from '../../lib/diagnostic.ts';
+import { type AudioTrack } from '../../lib/loading-protocol.ts';
 import { type Result } from '../../lib/result.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
 
@@ -24,10 +25,17 @@ export type EncodeRequest = {
   readonly frameCount: number;
   /** Absolute path of the MP4 to produce. */
   readonly output: string;
+  /** Audio clips the Composition declared, in declaration order. Absent or empty is the silent
+   * path: the child receives exactly the video-only arguments. Times are frame counts, converted
+   * once by the Time Module on the same rational timebase as `frames`.
+   */
+  readonly audio?: readonly AudioTrack[];
+  /** Directory that a relative `audio[].src` resolves against; the process working directory
+   * when omitted. Absolute sources are used as given.
+   */
+  readonly projectRoot?: string;
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: EncodeProgress) => void;
-  // TASK-171 adds the audio track here (`audioTracks?: ...`), on this same rational timebase.
-  // TASK-159 implements no audio and only leaves the field's attachment point open.
 };
 
 export type EncodeReceipt = {

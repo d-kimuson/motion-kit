@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { currentDate } from '../../lib/clock.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
+import { type AudioTrack } from '../../lib/loading-protocol.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
 import {
   type EncodeOutcome,
@@ -216,6 +217,8 @@ const request = (options: {
   fps?: { numerator: number; denominator: number };
   signal?: AbortSignal;
   onProgress?: (progress: EncodeProgress) => void;
+  audio?: readonly AudioTrack[];
+  projectRoot?: string;
 }) => ({
   frames: options.frames,
   fps: options.fps ?? { numerator: 10, denominator: 1 },
@@ -223,6 +226,8 @@ const request = (options: {
   output: options.output ?? outputPath(),
   ...(options.signal === undefined ? {} : { signal: options.signal }),
   ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
+  ...(options.audio === undefined ? {} : { audio: options.audio }),
+  ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
 });
 
 const openEncoder = async (ffmpegPath: string): Promise<Encoder> => {
@@ -650,4 +655,171 @@ describe('FfmpegEncoder.encode', () => {
     expect(existsSync(output)).toBe(false);
     expect(pathsLeftBehind(directory)).toEqual([]);
   }, 60_000);
+});
+
+describe('declared audio', () => {
+  const fakeBinary = (): string =>
+    fakeFfmpeg({ version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers' });
+
+  /** Two readable stand-ins: the encoder only stats them; the stand-in binary writes no audio. */
+  const audioFixture = (): { readonly first: string; readonly second: string } => {
+    const source = join(directory, 'audio');
+    mkdirSync(source);
+    const first = join(source, 'clip-1.wav');
+    const second = join(source, 'clip-2.wav');
+    writeFileSync(first, 'RIFF');
+    writeFileSync(second, 'RIFF');
+    return { first, second };
+  };
+
+  it('keeps the video-only vector when no audio is declared (the silent path is unchanged)', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    const outcome = await encoder.encode(
+      request({ frames: streamOf(pngFrames(2)), frameCount: 2, audio: [] }),
+    );
+    expect(outcome).toMatchObject({ ok: true });
+    // Exactly TASK-159's arguments: no -i for audio, no filter graph, no -map, no audio codec.
+    expect(encodeArgv()).toEqual([
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'image2pipe',
+      '-framerate',
+      '10/1',
+      '-c:v',
+      'png',
+      '-i',
+      'pipe:0',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-r',
+      '10/1',
+      expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
+    ]);
+  });
+
+  it('adds one input per track and a mix graph on the frame timebase', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    const { first, second } = audioFixture();
+    const output = outputPath('audio.mp4');
+    const pngs = pngFrames(30);
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf(pngs),
+        frameCount: pngs.length,
+        output,
+        audio: [
+          { src: 'audio/clip-1.wav', startInFrames: 5 },
+          {
+            src: 'audio/clip-2.wav',
+            startInFrames: 15,
+            endInFrames: 25,
+            offsetInFrames: 10,
+            volume: 0.5,
+          },
+        ],
+        projectRoot: directory,
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true });
+    // Relative sources resolve against the project root; the graph places each frame-derived
+    // offset and the output duration is the Composition's own end.
+    const graph = [
+      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=500:all=1[a0]',
+      '[2:a]atrim=start=1.000000:end=2.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=1500:all=1[a1]',
+      '[a0][a1]amix=inputs=2:duration=longest:normalize=0,apad[aout]',
+    ].join(';');
+    expect(encodeArgv()).toEqual([
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'image2pipe',
+      '-framerate',
+      '10/1',
+      '-c:v',
+      'png',
+      '-i',
+      'pipe:0',
+      '-i',
+      first,
+      '-i',
+      second,
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-r',
+      '10/1',
+      '-filter_complex',
+      graph,
+      '-map',
+      '0:v:0',
+      '-map',
+      '[aout]',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-ar',
+      '48000',
+      '-t',
+      '3.000000',
+      expect.stringMatching(/\/\.audio\.[0-9a-f-]{36}\.part\.mp4$/u),
+    ]);
+  });
+
+  it('reports a missing audio file as asset.load-failed and spawns no encode child', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    const output = outputPath();
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf([]),
+        frameCount: 2,
+        output,
+        audio: [{ src: 'absent.wav' }],
+        projectRoot: directory,
+      }),
+    );
+    const missing = join(directory, 'absent.wav');
+    expect(errorsOf(outcome)).toHaveLength(1);
+    expect(errorsOf(outcome)[0]).toMatchObject({
+      code: 'asset.load-failed',
+      severity: 'error',
+      location: { file: missing },
+      details: { assets: [{ kind: 'audio', source: missing, phase: 'open' }] },
+    });
+    expect(invocations()).toEqual(['version', 'encoders']);
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+  });
+
+  it('stops at the first unreadable track, before creating the temporary sibling', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    const output = outputPath();
+    audioFixture();
+    // A directory is not a file: the same input failure, reported before FFmpeg runs.
+    mkdirSync(join(directory, 'audio', 'directory.wav'));
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf([]),
+        frameCount: 2,
+        output,
+        audio: [{ src: 'audio/clip-1.wav' }, { src: 'audio/directory.wav' }],
+        projectRoot: directory,
+      }),
+    );
+    expect(errorsOf(outcome)[0]).toMatchObject({
+      code: 'asset.load-failed',
+      location: { file: join(directory, 'audio', 'directory.wav') },
+    });
+    expect(invocations()).toEqual(['version', 'encoders']);
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+  });
 });

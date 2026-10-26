@@ -3,11 +3,17 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, openSync, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 
-import { createFrameRate, durationFromFrameCount, toSeconds } from '../../core/timeline/time.ts';
+import {
+  createFrameRate,
+  durationFromFrameCount,
+  toSeconds,
+  type FrameRate,
+} from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { coverOnExit } from '../../lib/exit.ts';
 import { type Result } from '../../lib/result.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
+import { audioInputArguments, audioOutputArguments, resolveAudioTracks } from './audio.ts';
 import {
   encoderInvariantDiagnostic,
   ffmpegFailedDiagnostic,
@@ -328,11 +334,12 @@ const pump = async (options: {
   return { encodedFrames, size, stop: stop_, failure, diagnostics };
 };
 
-const durationSecondsOf = (request: EncodeRequest): number | undefined => {
+/** The Time Module's own reading of the request: the rational rate and the exact duration. */
+const timebaseOf = (request: EncodeRequest): { rate: FrameRate; seconds: number } | undefined => {
   const rate = createFrameRate(request.fps);
   if (!rate.ok) return undefined;
   const duration = durationFromFrameCount(BigInt(request.frameCount), rate.value);
-  return duration.ok ? toSeconds(duration.value) : undefined;
+  return duration.ok ? { rate: rate.value, seconds: toSeconds(duration.value) } : undefined;
 };
 
 /** The whole subprocess boundary: probe, pipe, rename. Nothing above it sees a child or an exception. */
@@ -342,8 +349,8 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
   if (frameCount === 0)
     return { ok: false, error: [outputInvalidDiagnostic({ output, reason: 'no-frames' })] };
   if (signal?.aborted === true) return abortedOutcome;
-  const seconds = durationSecondsOf(request);
-  if (seconds === undefined)
+  const timebase = timebaseOf(request);
+  if (timebase === undefined)
     return {
       ok: false,
       error: [
@@ -353,40 +360,48 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
         ),
       ],
     };
+  // Resolved before the sibling exists, so a missing file leaves no temporary file and no child.
+  const audio = resolveAudioTracks({
+    tracks: request.audio ?? [],
+    projectRoot: request.projectRoot ?? process.cwd(),
+    rate: timebase.rate,
+  });
+  if (!audio.ok) return { ok: false, error: [audio.error] };
 
   const sibling = createSibling(output);
   if (!sibling.ok) return { ok: false, error: [sibling.error] };
   const temporary = sibling.value;
+  const rateText = `${String(request.fps.numerator)}/${String(request.fps.denominator)}`;
+  // Exactly TASK-159's vector when no audio is declared: nothing about the silent path changes.
+  const argumentsList = [
+    // FFmpeg cannot prompt while stdin is the frame pipe, so it would refuse the
+    // temporary sibling it always finds; overwriting that file is safe, `output` never is.
+    '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-f',
+    'image2pipe',
+    '-framerate',
+    rateText,
+    '-c:v',
+    'png',
+    '-i',
+    'pipe:0',
+    ...audioInputArguments(audio.value),
+    '-c:v',
+    REQUIRED_VIDEO_ENCODER,
+    '-pix_fmt',
+    PIXEL_FORMAT,
+    '-r',
+    rateText,
+    ...(audio.value.length === 0 ? [] : audioOutputArguments(audio.value, timebase.seconds)),
+    temporary,
+  ];
 
   let child: ChildProcess;
   try {
-    child = spawn(
-      binary,
-      [
-        // FFmpeg cannot prompt while stdin is the frame pipe, so it would refuse the
-        // temporary sibling it always finds; overwriting that file is safe, `output` never is.
-        '-y',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-f',
-        'image2pipe',
-        '-framerate',
-        `${request.fps.numerator}/${request.fps.denominator}`,
-        '-c:v',
-        'png',
-        '-i',
-        'pipe:0',
-        '-c:v',
-        REQUIRED_VIDEO_ENCODER,
-        '-pix_fmt',
-        PIXEL_FORMAT,
-        '-r',
-        `${request.fps.numerator}/${request.fps.denominator}`,
-        temporary,
-      ],
-      { stdio: ['pipe', 'ignore', 'pipe'], shell: false },
-    );
+    child = spawn(binary, argumentsList, { stdio: ['pipe', 'ignore', 'pipe'], shell: false });
   } catch {
     removeSibling(temporary);
     return { ok: false, error: [ffmpegNotFoundDiagnostic(binary)] };
@@ -514,7 +529,7 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
     width: written.size.width,
     height: written.size.height,
     fps: request.fps,
-    durationSeconds: seconds,
+    durationSeconds: timebase.seconds,
     diagnostics: written.diagnostics,
   };
   return { ok: true, value: receipt };
