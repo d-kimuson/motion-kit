@@ -153,6 +153,10 @@ vite.config.ts.timestamp-*
 # docs
 docs/tmp
 
+# example assets that are fetched or generated locally and never committed
+# (docs/decisions/20261026-example-asset-licensing.accepted.md)
+assets.local/
+
 # Lean (lake build output)
 .lake/
 
