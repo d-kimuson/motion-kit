@@ -10,6 +10,7 @@ import { defineDeterminismSuite, runDeterminismSuite } from './suite.ts';
 const probes = [
   { name: 'teaser', compositionId: 'teaser-probe' },
   { name: 'chart', compositionId: 'chart-probe' },
+  { name: 'slideshow', compositionId: 'slideshow-probe' },
 ] as const;
 
 const frames = [0, 15, 29] as const;
