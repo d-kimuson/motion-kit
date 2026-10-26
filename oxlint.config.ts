@@ -21,6 +21,22 @@ const NODE_RESTRICTION = {
     },
   ],
 };
+// An example is a consumer of the published package, not part of it: it reaches the framework only
+// through `@kimuson/motion-kit`, never a relative path into `src/`, and it runs in the browser.
+const EXAMPLE_RESTRICTION = {
+  paths: [],
+  patterns: [
+    {
+      group: ['**/src/**'],
+      message:
+        'Examples import the published package (@kimuson/motion-kit), never a relative path into src/.',
+    },
+    {
+      group: ['node:*'],
+      message: 'Examples run in the browser; Node.js is allowed only in fetch-assets.ts and tests.',
+    },
+  ],
+};
 const CORE_RESTRICTION = {
   paths: [],
   patterns: [
@@ -354,6 +370,23 @@ export default defineConfig({
       ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
+        'import/no-nodejs-modules': 'off',
+      },
+    },
+    {
+      // Reference examples (docs/design-doc/20261025-reference-examples.md, "How examples/ enters
+      // the checks"): the default rules plus the consumer boundary above.
+      files: ['examples/**'],
+      rules: {
+        'no-restricted-imports': ['error', EXAMPLE_RESTRICTION],
+      },
+    },
+    {
+      // The setup script is a Node.js process, like src/render and src/cli; an example's tests spawn
+      // the built CLI and ffprobe, so they are Node processes too (the design doc's CI policy).
+      files: ['examples/*/fetch-assets.ts', 'examples/**/*.test.ts', 'examples/**/*.test.tsx'],
+      rules: {
+        'no-restricted-imports': 'off',
         'import/no-nodejs-modules': 'off',
       },
     },
