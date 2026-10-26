@@ -26,6 +26,10 @@ export type RenderVideoOptions = {
   readonly composition: VideoComposition;
   /** Absolute path of the MP4 to produce. */
   readonly output: string;
+  /** Directory the Composition's relative audio sources resolve against; the process working
+   * directory when omitted. The CLI passes its own project root explicitly.
+   */
+  readonly projectRoot?: string;
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: EncodeProgress) => void;
   /** A probed encoder; otherwise one probe happens here, once per call. */
@@ -35,9 +39,10 @@ export type RenderVideoOptions = {
 
 /** Renders `composition`'s whole frame range and pipes it into the Encoder port.
  * No PNG file ever reaches the disk: the frames go from capture to the child's stdin.
+ * Audio crosses as the descriptor's declarations: the same call, the same child.
  */
 export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOutcome> => {
-  const { composition, output, signal, onProgress, encoder, ffmpegPath } = options;
+  const { composition, output, projectRoot, signal, onProgress, encoder, ffmpegPath } = options;
   // Re-read the signal through a call so the check after the probe is not narrowed away.
   const cancelled = (): boolean => signal?.aborted === true;
   if (cancelled()) return { ok: false, aborted: true };
@@ -75,6 +80,8 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
     fps: descriptor.fps,
     frameCount: descriptor.durationInFrames,
     output,
+    ...(descriptor.audio === undefined ? {} : { audio: descriptor.audio }),
+    ...(projectRoot === undefined ? {} : { projectRoot }),
     signal,
     onProgress,
   });

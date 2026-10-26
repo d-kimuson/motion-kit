@@ -3,11 +3,24 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, openSync, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 
-import { createFrameRate, durationFromFrameCount, toSeconds } from '../../core/timeline/time.ts';
+import {
+  createFrameRate,
+  durationFromFrameCount,
+  toSeconds,
+  type FrameRate,
+} from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { coverOnExit } from '../../lib/exit.ts';
 import { type Result } from '../../lib/result.ts';
 import { type FrameCaptureResult } from '../capture/frame.ts';
+import {
+  audioChannelProbeArguments,
+  audioInputArguments,
+  audioOutputArguments,
+  parseChannelCount,
+  resolveAudioTracks,
+  withChannelCounts,
+} from './audio.ts';
 import {
   encoderInvariantDiagnostic,
   ffmpegFailedDiagnostic,
@@ -180,6 +193,40 @@ const probe = async (
   return { ok: true, value: undefined };
 };
 
+/**
+ * FFmpeg ships `ffprobe` next to `ffmpeg`; a bare name has no directory to borrow, so PATH
+ * resolves it exactly the way it resolves the encoder. The channel count decides how a source is
+ * converted to stereo (audio muxing ADR), which is why one probe runs per declared track.
+ */
+const ffprobeFor = (ffmpegBinary: string): string => {
+  const directory = dirname(ffmpegBinary);
+  if (directory === '.' || directory === '') return 'ffprobe';
+  return join(directory, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
+};
+
+/** One probe per declared track, in declaration order; the silent path probes nothing. */
+const probeSourceChannels = async (
+  binary: string,
+  sources: readonly string[],
+  signal?: AbortSignal,
+): Promise<Result<readonly (number | undefined)[]> | 'aborted'> => {
+  const counts: (number | undefined)[] = [];
+  for (const source of sources) {
+    let run: ProcessRun | 'aborted';
+    try {
+      run = await runProbe(binary, audioChannelProbeArguments(source), signal);
+    } catch (error) {
+      // A missing or unrunnable ffprobe is part of the missing FFmpeg install, not a bad track.
+      if (isMissingBinary(error)) return { ok: false, error: ffmpegNotFoundDiagnostic(binary) };
+      throw error;
+    }
+    if (run === 'aborted') return 'aborted';
+    // A file whose stream cannot be read reports no count: the encode fails later, as before.
+    counts.push(run.code === 0 ? parseChannelCount(run.stdout) : undefined);
+  }
+  return { ok: true, value: counts };
+};
+
 const createSibling = (output: string): Result<string> => {
   // FFmpeg picks the muxer from the extension, so the sibling keeps the target's extension
   // while its name stays unique and its `.` prefix keeps it out of a directory listing's way.
@@ -328,22 +375,27 @@ const pump = async (options: {
   return { encodedFrames, size, stop: stop_, failure, diagnostics };
 };
 
-const durationSecondsOf = (request: EncodeRequest): number | undefined => {
+/** The Time Module's own reading of the request: the rational rate and the exact duration. */
+const timebaseOf = (request: EncodeRequest): { rate: FrameRate; seconds: number } | undefined => {
   const rate = createFrameRate(request.fps);
   if (!rate.ok) return undefined;
   const duration = durationFromFrameCount(BigInt(request.frameCount), rate.value);
-  return duration.ok ? toSeconds(duration.value) : undefined;
+  return duration.ok ? { rate: rate.value, seconds: toSeconds(duration.value) } : undefined;
 };
 
 /** The whole subprocess boundary: probe, pipe, rename. Nothing above it sees a child or an exception. */
-const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise<EncodeOutcome> => {
+const encodeWithFfmpeg = async (
+  binary: string,
+  probeBinary: string,
+  request: EncodeRequest,
+): Promise<EncodeOutcome> => {
   const { output, frameCount, signal } = request;
   // Zero is a legal frame count: decide from the request before anything is created.
   if (frameCount === 0)
     return { ok: false, error: [outputInvalidDiagnostic({ output, reason: 'no-frames' })] };
   if (signal?.aborted === true) return abortedOutcome;
-  const seconds = durationSecondsOf(request);
-  if (seconds === undefined)
+  const timebase = timebaseOf(request);
+  if (timebase === undefined)
     return {
       ok: false,
       error: [
@@ -353,40 +405,57 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
         ),
       ],
     };
+  // Resolved before the sibling exists, so a missing file leaves no temporary file and no child.
+  const audio = resolveAudioTracks({
+    tracks: request.audio ?? [],
+    projectRoot: request.projectRoot ?? process.cwd(),
+    rate: timebase.rate,
+  });
+  if (!audio.ok) return { ok: false, error: [audio.error] };
+  // The channel counts decide the mono conversion; probed before the sibling for the same reason.
+  const channels = await probeSourceChannels(
+    probeBinary,
+    audio.value.map((track) => track.source),
+    signal,
+  );
+  if (channels === 'aborted') return abortedOutcome;
+  if (!channels.ok) return { ok: false, error: [channels.error] };
+  const tracks = withChannelCounts(audio.value, channels.value);
 
   const sibling = createSibling(output);
   if (!sibling.ok) return { ok: false, error: [sibling.error] };
   const temporary = sibling.value;
+  const rateText = `${String(request.fps.numerator)}/${String(request.fps.denominator)}`;
+  // Exactly TASK-159's vector when no audio is declared: nothing about the silent path changes.
+  const argumentsList = [
+    // FFmpeg cannot prompt while stdin is the frame pipe, so it would refuse the
+    // temporary sibling it always finds; overwriting that file is safe, `output` never is.
+    '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-f',
+    'image2pipe',
+    '-framerate',
+    rateText,
+    '-c:v',
+    'png',
+    '-i',
+    'pipe:0',
+    ...audioInputArguments(tracks),
+    '-c:v',
+    REQUIRED_VIDEO_ENCODER,
+    '-pix_fmt',
+    PIXEL_FORMAT,
+    '-r',
+    rateText,
+    ...(tracks.length === 0 ? [] : audioOutputArguments(tracks, timebase.seconds)),
+    temporary,
+  ];
 
   let child: ChildProcess;
   try {
-    child = spawn(
-      binary,
-      [
-        // FFmpeg cannot prompt while stdin is the frame pipe, so it would refuse the
-        // temporary sibling it always finds; overwriting that file is safe, `output` never is.
-        '-y',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-f',
-        'image2pipe',
-        '-framerate',
-        `${request.fps.numerator}/${request.fps.denominator}`,
-        '-c:v',
-        'png',
-        '-i',
-        'pipe:0',
-        '-c:v',
-        REQUIRED_VIDEO_ENCODER,
-        '-pix_fmt',
-        PIXEL_FORMAT,
-        '-r',
-        `${request.fps.numerator}/${request.fps.denominator}`,
-        temporary,
-      ],
-      { stdio: ['pipe', 'ignore', 'pipe'], shell: false },
-    );
+    child = spawn(binary, argumentsList, { stdio: ['pipe', 'ignore', 'pipe'], shell: false });
   } catch {
     removeSibling(temporary);
     return { ok: false, error: [ffmpegNotFoundDiagnostic(binary)] };
@@ -514,7 +583,7 @@ const encodeWithFfmpeg = async (binary: string, request: EncodeRequest): Promise
     width: written.size.width,
     height: written.size.height,
     fps: request.fps,
-    durationSeconds: seconds,
+    durationSeconds: timebase.seconds,
     diagnostics: written.diagnostics,
   };
   return { ok: true, value: receipt };
@@ -525,13 +594,15 @@ export const createFfmpegEncoder = async (
   options: FfmpegEncoderOptions = {},
 ): Promise<EncodeProbeOutcome> => {
   const binary = options.ffmpegPath ?? 'ffmpeg';
+  // The per-track channel probes only run when audio is declared; this is their binary.
+  const probeBinary = options.ffprobePath ?? ffprobeFor(binary);
   const probed = await probe(binary, options.signal);
   if (probed === 'aborted') return abortedOutcome;
   if (!probed.ok) return probed;
   return {
     ok: true,
     value: {
-      encode: (request) => encodeWithFfmpeg(binary, request),
+      encode: (request) => encodeWithFfmpeg(binary, probeBinary, request),
     },
   };
 };

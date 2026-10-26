@@ -1,8 +1,10 @@
 import { createElement, type ComponentType, type ReactNode } from 'react';
-import { type z } from 'zod';
+import { z } from 'zod';
 
 import { type Diagnostic, type DiagnosticCode } from '../../lib/diagnostic.ts';
+import { audioTrackSchema, type AudioTrack } from '../../lib/loading-protocol.ts';
 import { type Result } from '../../lib/result.ts';
+import { redactAssetSource } from '../assets/diagnostics.ts';
 import { createFrameRate, type FrameRate, type RationalInput } from '../timeline/time.ts';
 
 export type CompositionDescriptor = Readonly<{
@@ -11,6 +13,10 @@ export type CompositionDescriptor = Readonly<{
   height: number;
   fps: RationalInput;
   durationInFrames: number;
+  /** Audio the render muxes onto the frame timeline; absent or empty renders silently. Frozen at
+   * declaration like the rest of the descriptor, so neither the array nor its members are writable.
+   */
+  audio?: readonly AudioTrack[];
 }>;
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 export type JsonObject = { [key: string]: JsonValue };
@@ -267,6 +273,39 @@ const validateComponent = (component: object, id: string): Result<undefined> => 
   return pageFailure(id);
 };
 
+/**
+ * Audio declarations enter the descriptor as data, so they are validated before the render ever
+ * sees them: the encoder resolves paths and builds FFmpeg arguments from these values.
+ * Cross-field rules live here, not in the wire schema, which only describes the shape.
+ */
+const validateAudio = (audio: unknown, id: string): Result<AudioTrack[] | undefined> => {
+  if (audio === undefined) return { ok: true, value: undefined };
+  const parsed = z.array(audioTrackSchema).safeParse(audio);
+  if (!parsed.success)
+    return compositionFailure(
+      'render.page-error',
+      'Composition audio declarations are invalid.',
+      'Declare each track as { src, startInFrames?, endInFrames?, offsetInFrames?, volume? }, with nonnegative integer frame counts and a nonempty src.',
+      id,
+    );
+  const tracks: AudioTrack[] = [];
+  for (const track of parsed.data) {
+    const start = track.startInFrames ?? 0;
+    if (track.endInFrames !== undefined && track.endInFrames <= start)
+      return compositionFailure(
+        'render.page-error',
+        // A src can be URL-shaped, so the message reports it through the redacting producer.
+        `Composition audio track "${redactAssetSource(track.src)}" ends at or before it starts.`,
+        'Declare endInFrames greater than startInFrames, or omit it to play the source to its natural end.',
+        id,
+      );
+    tracks.push(Object.freeze({ ...track }));
+  }
+  // Frozen at runtime like the rest of the descriptor; the wire type stays a plain array.
+  Object.freeze(tracks);
+  return { ok: true, value: tracks };
+};
+
 /** Declaration errors are data, so a bad entry cannot throw out of module evaluation. */
 export const defineComposition = <S extends z.ZodType<object>>(
   input: CompositionDescriptor & {
@@ -302,6 +341,8 @@ export const defineComposition = <S extends z.ZodType<object>>(
     const fps = createFrameRate(input.fps);
     // Time Module input failures use props-invalid; metadata must not leak that code.
     if (!fps.ok) return pageFailure(id);
+    const audio = validateAudio(input.audio, id);
+    if (!audio.ok) return audio;
     const descriptor = Object.freeze({
       id,
       width,
@@ -311,6 +352,7 @@ export const defineComposition = <S extends z.ZodType<object>>(
         numerator: Number(fps.value.numerator),
         denominator: Number(fps.value.denominator),
       }),
+      ...(audio.value === undefined ? {} : { audio: audio.value }),
     });
     return {
       ok: true,
