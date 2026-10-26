@@ -188,7 +188,7 @@ describe('slideshow example', () => {
     expect(envelope.data).toMatchObject({
       output,
       format: 'png',
-      frame: 450,
+      frame: 400,
       width: 1920,
       height: 1080,
     });

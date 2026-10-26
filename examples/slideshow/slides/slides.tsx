@@ -190,7 +190,6 @@ const SlideFrame = ({
           inset: 0,
           opacity: layerOpacity,
           transform: `translate(${move.offsetX * 100}%, ${move.offsetY * 100}%) scale(${move.scale})`,
-          willChange: 'transform',
         }}
       >
         <Suspense fallback={<PendingPhoto slide={slide} source={source} />}>

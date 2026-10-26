@@ -18,10 +18,10 @@ const FLAT_COLOURS: Readonly<Record<string, string>> = {
   'morning-window': '#33302b',
 };
 
-const MONO_STACK = "'SF Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace";
-
 /** A flat picture: a solid field, a band and a block whose size follows the Ken Burns scale, so the
- *  probe still paints the arithmetic the real slide computes. */
+ *  probe still paints the arithmetic the real slide computes. No text: every element here sits inside
+ *  the slide's transformed picture layer, and a glyph run inside a transformed layer is exactly what
+ *  made the teaser fail `reverse` and `random` (examples/teaser/README.md, "Known limitations"). */
 export const FlatSurface = ({ slide, kenBurns: move }: SurfaceProps) => (
   <div
     style={{
@@ -29,7 +29,6 @@ export const FlatSurface = ({ slide, kenBurns: move }: SurfaceProps) => (
       width: '100%',
       height: '100%',
       background: FLAT_COLOURS[slide.id] ?? '#242424',
-      fontFamily: MONO_STACK,
     }}
   >
     <div
@@ -54,8 +53,16 @@ export const FlatSurface = ({ slide, kenBurns: move }: SurfaceProps) => (
         opacity: 0.55,
       }}
     />
-    <div style={{ position: 'absolute', left: '12%', top: '24%', color: '#f5f2ec', fontSize: 12 }}>
-      {slide.id}
-    </div>
+    <div
+      style={{
+        position: 'absolute',
+        left: '12%',
+        top: '60%',
+        width: `${Math.round(move.scale * 30)}%`,
+        height: '4%',
+        background: '#f5f2ec',
+        opacity: 0.35,
+      }}
+    />
   </div>
 );
