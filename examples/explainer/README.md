@@ -41,9 +41,12 @@ node dist/cli.js frame examples/explainer/entry.tsx --composition explainer --fr
 `--placeholders` is step 1 and the only step CI needs; a bare `node examples/explainer/fetch-assets.ts`
 also copies `assets.local/sprite-source/` into `assets.local/sprites/final/` and synthesizes the voice
 (VOICEVOX on `VOICEVOX_ENGINE_URL`, or macOS `say -v Kyoko`), skipping with an instruction when neither
-is available. `--props '{"assets":"final"}'` renders the fetched sprites instead of the placeholders.
-The full 6660-frame render is a local QA Check: `--out out/explainer.mp4` takes minutes and is never a
-CI step.
+is available. The voice is fitted to the script rather than the other way round: each clip's lead-in is
+trimmed, its pace moved by FFmpeg `atempo` inside ±25 %, and the result padded or cut to the line's own
+`seconds`, so narration starts on the line's frame and stops where the subtitle and the sprite do
+(`assets.local/voice/durations.json` records the result). `--props '{"assets":"final"}'` renders the
+fetched sprites instead of the placeholders. The full 6660-frame render is a local QA Check:
+`--out out/explainer.mp4` takes minutes and is never a CI step.
 
 ## Known limitations
 
@@ -55,6 +58,17 @@ CI step.
   antialiased edge, and the gate caught it painting differently on the first paint after a mount at
   `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at most 9/255 apart). The
   real sprite images are unaffected; only the probe's stand-in is constrained this way.
+- **A placeholder sprite is an opaque rectangle, so it covers the text under it.** Step 1's panels
+  fill the 324×605 slot at 90 % (speaker) and 60 % (the other), where the real 立ち絵 has
+  transparency: the title's tagline and the last item of a bullets slide therefore read through a
+  panel rather than beside a character, until step 2 copies the downloaded sets into
+  `assets.local/sprites/final/` and `--props '{"assets":"final"}'` draws them. This is what the
+  full-length render in a fresh clone looks like.
+- **The chart slide's year axis sits behind the subtitle band.** The slide reuses the `chart`
+  example's full-frame layout (its plot runs from 0.235 to 0.815 of the height, with the year labels
+  below the plot), and a three-line subtitle band starts around 0.62. The caption, the series and its
+  valleys read; the year labels and the source line do not. Moving the plot means a box override on
+  `ChartScene`, which is the `chart` example's own interface to change.
 
 ## Credit lines
 

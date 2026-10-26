@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { compositions as explainerCompositions, storyboard } from './entry.tsx';
-import { generatePlaceholders } from './fetch-assets.ts';
+import { fitClip, fitTempo, generatePlaceholders } from './fetch-assets.ts';
 import { mouthAt } from './look.ts';
 import { ciStoryboard } from './plan.ts';
 import { compositions as probeCompositions } from './probe.tsx';
@@ -53,6 +53,38 @@ const ffprobe = (file: string): string =>
     'default=noprint_wrappers=1',
     file,
   ]).toString();
+
+/** A clip's whole length in seconds, which for a fitted voice clip is its line's slot exactly. */
+const clipSeconds = (file: string): number =>
+  Number.parseFloat(
+    execFileSync(
+      'ffprobe',
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file],
+      { encoding: 'utf8' },
+    ).trim(),
+  );
+
+/** RMS of little-endian float32 PCM: how a fitted clip's speech and its pauses are told apart. */
+const rmsOf = (pcm: Buffer): number => {
+  const samples = Math.floor(pcm.length / 4);
+  let energy = 0;
+  for (let index = 0; index < samples; index += 1) energy += pcm.readFloatLE(index * 4) ** 2;
+  return Math.sqrt(energy / samples);
+};
+
+/** A window of a clip as float32 PCM at 48 kHz: `seek` is an input option, so `-t`/`-sseof` go first. */
+const pcmWindow = (file: string, seek: readonly string[]): Buffer =>
+  execFileSync(
+    'ffmpeg',
+    ['-v', 'error', ...seek, '-i', file, '-f', 'f32le', '-ac', '1', '-ar', '48000', '-'],
+    { maxBuffer: 64 * 1024 * 1024 },
+  );
+
+/** The clip's first `seconds`, and its last `seconds`. */
+const pcmHead = (file: string, seconds: number): Buffer => pcmWindow(file, ['-t', String(seconds)]);
+
+const pcmTail = (file: string, seconds: number): Buffer =>
+  pcmWindow(file, ['-sseof', `-${String(seconds)}`]);
 
 describe('explainer example', () => {
   // The smoke test is its own setup: CI has no committed media and no network, so the FFmpeg
@@ -184,4 +216,79 @@ describe('explainer example', () => {
     });
     expect(decoded).toBe('');
   }, 180_000);
+});
+
+describe('explainer narration fit', () => {
+  it('moves a clip toward its slot, but never past the ±25 % band', () => {
+    // A clip already on its slot is left alone; one inside the band moves by exactly its own ratio,
+    // which is what makes the speech in the file the pace the script's 5 characters a second means.
+    expect(fitTempo(13, 13)).toBe(1);
+    expect(fitTempo(10.5, 12)).toBe(0.875);
+    // Outside the band the clip keeps its own pace and the slot is padded instead, so a slow engine
+    // is not made to chatter and a fast one is not made to drawl.
+    expect(fitTempo(15, 12)).toBe(1.25);
+    expect(fitTempo(6, 12)).toBe(0.8);
+  });
+
+  it('lands every clip exactly on its line’s seconds', () => {
+    // The voice track's `endInFrames` cuts at the line's end, so a clip that is not exactly the slot
+    // long either loses its last word or leaves silence before the next line. An FFmpeg sine stands
+    // in for the engine here: the point is the `atempo`/`apad`/`-t` graph, which CI can run without
+    // `say` or VOICEVOX.
+    const dir = join(outDirectory, 'fit');
+    mkdirSync(dir, { recursive: true });
+    const source = join(dir, 'source.wav');
+    execFileSync('ffmpeg', [
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:sample_rate=48000:duration=5',
+      '-ac',
+      '1',
+      source,
+    ]);
+    // 5 s of speech into a 12 s line: the tempo clamps at 0.8 and `apad` fills the remaining 5.75 s.
+    const padded = join(dir, 'padded.wav');
+    expect(fitClip(source, padded, 12)).toBe(0.8);
+    expect(clipSeconds(padded)).toBe(12);
+    // 5 s into a 4 s line: the clamp is 1.25, so `-t` is what lands the file on the slot.
+    const cut = join(dir, 'cut.wav');
+    expect(fitClip(source, cut, 4)).toBe(1.25);
+    expect(clipSeconds(cut)).toBe(4);
+  }, 60_000);
+
+  it('starts the speech on the clip’s first sample, so nobody speaks a frame late', () => {
+    // `say` writes ~0.1 s of digital silence before the first phoneme; left in, the voice would start
+    // three frames after its subtitle and its sprite. A delayed sine stands in for that lead-in.
+    const dir = join(outDirectory, 'fit');
+    mkdirSync(dir, { recursive: true });
+    const source = join(dir, 'lead-in.wav');
+    execFileSync('ffmpeg', [
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:sample_rate=48000:duration=3',
+      '-af',
+      'adelay=400:all=1',
+      '-ac',
+      '1',
+      source,
+    ]);
+    const target = join(dir, 'lead-in-fitted.wav');
+    // 3 s of tone behind 0.4 s of silence into a 4 s slot: the silence is gone from the measurement,
+    // so the tempo is 3 s of speech over the 3.6 s the slot allows it, and not 3.4 over 3.6.
+    expect(fitClip(source, target, 4)).toBeCloseTo(3 / 3.6, 4);
+    expect(clipSeconds(target)).toBe(4);
+    // The first millisecond of the fitted clip carries the tone, not the silence it had in front of it.
+    expect(pcmHead(target, 0.001).length).toBeGreaterThan(0);
+    expect(rmsOf(pcmHead(target, 0.001))).toBeGreaterThan(0.01);
+    // And the last 0.3 s of the slot is the pause: 3.6 s of speech, then silence to the 4 s mark.
+    expect(rmsOf(pcmTail(target, 0.3))).toBeLessThan(0.001);
+  }, 60_000);
 });

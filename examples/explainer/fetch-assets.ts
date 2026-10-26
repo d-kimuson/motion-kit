@@ -9,7 +9,8 @@
 //   step 2  the real thing, locally only: the 立ち絵 sprites from a manual download, and the voice
 //           from a local VOICEVOX engine, or macOS `say -v Kyoko` where no engine is installed.
 //           Every part skips with an instruction when its input is missing, so step 1 alone always
-//           leaves a renderable tree.
+//           leaves a renderable tree. Each voice clip is fitted to its line's slot here rather than
+//           at render time: a synthesized line is rarely exactly as long as the script says it is.
 //
 //   node examples/explainer/fetch-assets.ts                # both steps
 //   node examples/explainer/fetch-assets.ts --placeholders # step 1 only (what CI runs)
@@ -17,7 +18,7 @@
 // Run it from the repository root: the paths below are relative to it.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -210,16 +211,96 @@ const voicevoxClip = async (
 const sayAvailable = (): boolean =>
   process.platform === 'darwin' && spawnSync('say', ['-v', '?'], { stdio: 'ignore' }).status === 0;
 
-const sayClip = (text: string, target: string): void => {
-  const aiff = join(root, 'tmp', 'line.aiff');
-  mkdirSync(join(root, 'tmp'), { recursive: true });
-  const spoken = spawnSync('say', ['-v', 'Kyoko', '-o', aiff, text], { stdio: 'inherit' });
-  if (spoken.status !== 0) throw new Error(`say exited ${String(spoken.status)}`);
-  ffmpeg(['-i', aiff, '-ar', '48000', '-ac', '1', target]);
-  rmSync(aiff, { force: true });
+/**
+ * The band the fit may time-stretch within: at most 25 % faster and 25 % slower than the engine
+ * spoke. Inside it a tempo change is the same voice at a slightly different pace; outside it, the
+ * clip keeps its own pace and the rest of the slot is the silence every clip is padded with.
+ */
+const maxTempo = 1.25;
+
+/**
+ * The breath the fit leaves at the end of every line. Two lines are two sentences by two speakers,
+ * so the one that ends on the frame the next begins on sounds like a single run-on line; the slot a
+ * line is given is speech time plus this pause.
+ */
+const linePauseSeconds = 0.4;
+
+/** How much of a line's slot the speech may occupy: the slot less the pause, and at least 80 % of it. */
+const speechSeconds = (slot: number): number => Math.max(slot - linePauseSeconds, slot * 0.8);
+
+/**
+ * The `atempo` that lands a `raw`-second clip on `speech` seconds of its line, clamped to the band
+ * above. Pure, so the smoke test holds the bounds without needing an engine to synthesize a clip.
+ */
+export const fitTempo = (raw: number, speech: number): number =>
+  Math.min(maxTempo, Math.max(1 / maxTempo, raw / speech));
+
+/**
+ * Fit one synthesized clip to its line: the lead-in trimmed, the speech tempo'd to the line's own
+ * pace, and the result padded or cut to exactly the line's `seconds`.
+ *
+ * The narration is timed by the script, not by the engine. `say -v Kyoko` reads a 5-character-per-
+ * second line in about 80 % of its slot, so a raw clip leaves up to three seconds of silence before
+ * the next line — and a slower engine's clip is cut mid-word by the track's `endInFrames` instead.
+ * Fitting here means every clip is exactly as long as its line, so the subtitle, the sprite and the
+ * voice start and end together, with the same pause between every pair of lines. The lead-in has to
+ * go too: `say` writes ~0.1 s of digital silence before the first phoneme, which at 30 fps is three
+ * frames of the line's slot with the mouth moving and nobody speaking.
+ *
+ * Two passes, because the length to measure is the trimmed one: a lead-in left in the measurement
+ * would be read as speech and the tempo would come out slow by its share.
+ */
+export const fitClip = (input: string, target: string, seconds: number): number => {
+  const trimmed = tempPath(`trim-${basename(target)}`);
+  ffmpeg([
+    '-i',
+    input,
+    '-af',
+    'silenceremove=start_periods=1:start_threshold=-50dB:detection=peak',
+    '-ar',
+    '48000',
+    '-ac',
+    '1',
+    trimmed,
+  ]);
+  const tempo = fitTempo(ffprobeSeconds(trimmed), speechSeconds(seconds));
+  ffmpeg([
+    '-i',
+    trimmed,
+    '-af',
+    `atempo=${tempo.toFixed(4)},apad`,
+    '-t',
+    String(seconds),
+    '-ar',
+    '48000',
+    '-ac',
+    '1',
+    target,
+  ]);
+  rmSync(trimmed, { force: true });
+  return tempo;
 };
 
-/** Step 2's voice: VOICEVOX where an engine answers, `say` where it does not, nothing otherwise. */
+const tempPath = (name: string): string => {
+  mkdirSync(join(root, 'tmp'), { recursive: true });
+  return join(root, 'tmp', name);
+};
+
+/** `say -v Kyoko`, then the same fit every engine's clip goes through. Returns the tempo it used. */
+const sayClip = (text: string, seconds: number, target: string): number => {
+  const aiff = tempPath('line.aiff');
+  const spoken = spawnSync('say', ['-v', 'Kyoko', '-o', aiff, text], { stdio: 'inherit' });
+  if (spoken.status !== 0) throw new Error(`say exited ${String(spoken.status)}`);
+  const tempo = fitClip(aiff, target, seconds);
+  rmSync(aiff, { force: true });
+  return tempo;
+};
+
+/**
+ * Step 2's voice: VOICEVOX where an engine answers, `say` where it does not, nothing otherwise.
+ * Whichever spoke, `fitClip` lands the clip on the line's own seconds before it is measured, so
+ * `durations.json` records the slots the timeline already uses rather than the engine's own timing.
+ */
 const fetchVoice = async (): Promise<void> => {
   mkdirSync(voiceDir, { recursive: true });
   const engineUrl = process.env['VOICEVOX_ENGINE_URL'] ?? 'http://127.0.0.1:50021';
@@ -231,19 +312,22 @@ const fetchVoice = async (): Promise<void> => {
     return;
   }
   const durations: Record<string, number> = {};
+  const tempos: number[] = [];
   for (const line of script.lines) {
     const target = join(voiceDir, `${line.id}.wav`);
     if (useVoicevox) {
-      const wav = await voicevoxClip(engineUrl, voicevoxSpeaker[line.speaker], line.text);
-      writeFileSync(target, wav);
+      const raw = tempPath(`${line.id}.wav`);
+      writeFileSync(raw, await voicevoxClip(engineUrl, voicevoxSpeaker[line.speaker], line.text));
+      tempos.push(fitClip(raw, target, line.seconds));
+      rmSync(raw, { force: true });
     } else {
-      sayClip(line.text, target);
+      tempos.push(sayClip(line.text, line.seconds, target));
     }
     durations[line.id] = Math.round(ffprobeSeconds(target) * 1000) / 1000;
   }
   writeFileSync(join(voiceDir, 'durations.json'), `${JSON.stringify(durations, null, 2)}\n`);
   log(
-    `step 2: ${String(script.lines.length)} voice clips via ${useVoicevox ? 'VOICEVOX' : 'say -v Kyoko'} into ${voiceDir} (durations.json is local-only)`,
+    `step 2: ${String(script.lines.length)} voice clips via ${useVoicevox ? 'VOICEVOX' : 'say -v Kyoko'} into ${voiceDir}, fitted to their lines with atempo ${Math.min(...tempos).toFixed(2)}-${Math.max(...tempos).toFixed(2)} (durations.json is local-only)`,
   );
 };
 

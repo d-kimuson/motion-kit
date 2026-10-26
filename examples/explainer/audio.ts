@@ -8,8 +8,10 @@
 //   step 1  silent placeholders (`anullsrc`), so a placeholder render is silent, not a link error;
 //   step 2  VOICEVOX, or `say -v Kyoko` where no engine is installed, into the same paths.
 //
-// `endInFrames` trims each clip at the next line's start: the timeline is frame-derived, so a clip
-// that runs long must not talk over the line that follows it.
+// `endInFrames` is a guard, not a cut: `fetch-assets.ts` fits every clip to its line's `seconds`
+// (step 2, local only), so the voice starts on the line's frame and stops where the subtitle and the
+// sprite do. The bound stays because the timeline is frame-derived: a clip that ever ran long must
+// not talk over the line that follows it.
 import { type AudioTrack } from '@kimuson/motion-kit';
 
 import { voiceSource } from './look.ts';
