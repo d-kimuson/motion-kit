@@ -58,6 +58,12 @@ fetched sprites instead of the placeholders. The full 6660-frame render is a loc
   antialiased edge, and the gate caught it painting differently on the first paint after a mount at
   `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at most 9/255 apart). The
   real sprite images are unaffected; only the probe's stand-in is constrained this way.
+- **The probe draws the reveal already settled.** For the same reason, `useSlideReveal` returns 1 under
+  `flat` instead of ramping: an element that arrives at opacity 1 was painted through the layer it
+  promoted while it was translucent, and the same frame painted without that history differs by a few
+  hundred glyph pixels. CI met exactly that at `explainer-probe` frame 29 in six of the seven traversal
+  modes (`5664` differing bytes against the sequential capture). The probe watches the layer structure
+  and the timing; the ramp belongs to the look, and only the real compositions draw it.
 - **A placeholder sprite is an opaque rectangle, so it covers the text under it.** Step 1's panels
   fill the 324×605 slot at 90 % (speaker) and 60 % (the other), where the real 立ち絵 has
   transparency: the title's tagline and the last item of a bullets slide therefore read through a

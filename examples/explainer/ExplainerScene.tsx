@@ -12,6 +12,7 @@ import { Suspense, type ReactNode } from 'react';
 
 import { FONT_FAMILY, FONT_SOURCE, FONT_STACK, GROUND, INK, type AssetsMode } from './look.ts';
 import { type Storyboard } from './plan.ts';
+import { FlatMode } from './slides/shared.ts';
 import { SlideSeries } from './slides/SlideSeries.tsx';
 import { Sprites } from './Sprites.tsx';
 import { Subtitles } from './Subtitles.tsx';
@@ -34,11 +35,11 @@ const FontGate = ({ children }: { readonly children: ReactNode }) => {
 };
 
 const Layers = ({ storyboard, assets, flat }: ExplainerSceneProps) => (
-  <>
+  <FlatMode value={flat}>
     <SlideSeries storyboard={storyboard} />
     <Sprites storyboard={storyboard} assets={assets} flat={flat} />
     <Subtitles storyboard={storyboard} assets={assets} />
-  </>
+  </FlatMode>
 );
 
 export type ExplainerSceneProps = {
