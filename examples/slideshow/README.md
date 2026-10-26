@@ -115,9 +115,12 @@ pnpm test --project frame-transport src/render/determinism/examples.determinism.
 
 The smoke test runs the placeholder generator as its own setup, then renders `slideshow-ci` to
 `out/examples/slideshow-ci.mp4` through `node dist/cli.js render … --json` and asserts the envelope and
-the file with `ffprobe`: 540×960, 60 frames, `30/1`, a 2.000 s duration and a clean FFmpeg decode. A
-missing placeholder fails that render with `asset.load-failed`, so a green envelope is also proof that
-the generated media loaded. `pnpm test` builds `dist/` first (`pretest`), so the shipped CLI is the
+the file with `ffprobe`: 540×960, 60 frames, `30/1`, a 2.000 s duration and a clean FFmpeg decode. It
+then reads the mean luma of every frame of that render (`signalstats`) and asserts that no frame-to-frame
+step exceeds a quarter of the clip's brightness range, because a dissolve that dips towards the ground is
+invisible in the envelope: the crossfade this example shipped with first fell from luma 108 to 25 in a
+single frame and every assertion above still passed. A missing placeholder fails that render with
+`asset.load-failed`, so a green envelope is also proof that the generated media loaded. `pnpm test` builds `dist/` first (`pretest`), so the shipped CLI is the
 thing under test. The landscape variant is covered by its descriptor plus one 1920×1080 still, never by
 a second full render.
 
