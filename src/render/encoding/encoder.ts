@@ -69,6 +69,10 @@ export type EncodeProbeOutcome = Result<Encoder> | { readonly ok: false; readonl
 /** Probes PATH once per invocation; its Result is how a missing or too-old binary reports. */
 export type FfmpegEncoderOptions = {
   readonly ffmpegPath?: string;
+  /** The `ffprobe` that measures a declared track's channel count; the encoder's own sibling by
+   * default. It is part of the same FFmpeg install, so a caller rarely needs to name it.
+   */
+  readonly ffprobePath?: string;
   /** Cancels the probe's children; the probe then returns `{ ok: false, aborted: true }`. */
   readonly signal?: AbortSignal;
 };

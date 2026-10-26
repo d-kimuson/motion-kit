@@ -66,7 +66,8 @@ later, `offsetInFrames` trims its head, and `volume` is a linear gain (default `
 are mixed into one 48 kHz stereo AAC stream inside the same FFmpeg invocation that encodes the
 frames, and the stream ends with the Composition rather than with the longest clip
 ([audio muxing decision](docs/contexts/render/adr/20261026-audio-track-muxing.accepted.md)).
-Audio plays in the rendered file only: preview has no sound yet.
+A mono file is duplicated into both channels, so `volume: 1` is its own level rather than 3 dB
+down; a stereo file is untouched. Audio plays in the rendered file only: preview has no sound yet.
 
 In a checkout of this repository, build once and render that entry to an MP4:
 
@@ -103,17 +104,19 @@ encoded video to `out.mp4`.
 
 `--out` selects the format: an `.mp4` file is encoded H.264, and any other target is a
 directory of PNG frames plus a `manifest.json`, reported as `"format": "frames"` in `data`.
-There is no `--format` flag. Encoding needs an FFmpeg 6.0+ with `libx264` on `PATH`: motion-kit
+There is no `--format` flag. Encoding needs an FFmpeg 6.0+ with `libx264` on `PATH` — and, for a
+Composition that declares audio, its companion `ffprobe`, which the same install provides: motion-kit
 ships and downloads no binary, so this is a prerequisite you install yourself
 ([encoding decision](docs/contexts/render/adr/20261025-system-ffmpeg-encoder.accepted.md)). A
 missing or unsupported FFmpeg is `encode.ffmpeg-not-found` or `encode.ffmpeg-unsupported`
 before the first frame; `frame` and an `--out` directory need no FFmpeg at all.
 
 Audio has no flag either: the `.mp4` route muxes whatever the Composition declares in `audio`,
-resolving each `src` against the directory the command runs in. A declared file that is not
-readable is `asset.load-failed` with the file in `location`, reported before FFmpeg starts and
-with no output written, and a Composition that declares no audio renders exactly as it did
-before audio existed.
+resolving each `src` against the directory the command runs in. `volume: 1` is the file's own
+level, mono and stereo alike. A declared file that is missing, is not a regular file, or cannot be
+opened for reading is `asset.load-failed` with the file in `location`, reported before any frame is
+encoded and with no output written, and a Composition that declares no audio renders exactly as it
+did before audio existed.
 
 Exit codes: `0` success, `1` domain failure (e.g. invalid props), `2` invocation error (e.g.
 missing entry or unknown id), `3` unexpected internal error. Failures are always Diagnostics in

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { type Diagnostic, type DiagnosticCode } from '../../lib/diagnostic.ts';
 import { audioTrackSchema, type AudioTrack } from '../../lib/loading-protocol.ts';
 import { type Result } from '../../lib/result.ts';
+import { redactAssetSource } from '../assets/diagnostics.ts';
 import { createFrameRate, type FrameRate, type RationalInput } from '../timeline/time.ts';
 
 export type CompositionDescriptor = Readonly<{
@@ -12,8 +13,10 @@ export type CompositionDescriptor = Readonly<{
   height: number;
   fps: RationalInput;
   durationInFrames: number;
-  /** Audio the render muxes onto the frame timeline; absent or empty renders silently. */
-  audio?: AudioTrack[];
+  /** Audio the render muxes onto the frame timeline; absent or empty renders silently. Frozen at
+   * declaration like the rest of the descriptor, so neither the array nor its members are writable.
+   */
+  audio?: readonly AudioTrack[];
 }>;
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 export type JsonObject = { [key: string]: JsonValue };
@@ -291,7 +294,8 @@ const validateAudio = (audio: unknown, id: string): Result<AudioTrack[] | undefi
     if (track.endInFrames !== undefined && track.endInFrames <= start)
       return compositionFailure(
         'render.page-error',
-        `Composition audio track "${track.src}" ends at or before it starts.`,
+        // A src can be URL-shaped, so the message reports it through the redacting producer.
+        `Composition audio track "${redactAssetSource(track.src)}" ends at or before it starts.`,
         'Declare endInFrames greater than startInFrames, or omit it to play the source to its natural end.',
         id,
       );

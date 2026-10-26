@@ -28,7 +28,7 @@ export const audioTrackSchema = z.object({
   /** Linear gain; one when omitted, zero is silent. */
   volume: z.number().nonnegative().optional(),
 });
-export type AudioTrack = z.infer<typeof audioTrackSchema>;
+export type AudioTrack = Readonly<z.infer<typeof audioTrackSchema>>;
 
 export const descriptorSchema = z.object({
   id: z.string().min(1),
@@ -42,7 +42,11 @@ export const descriptorSchema = z.object({
   /** Declared audio clips in declaration order; absent or empty renders silently. */
   audio: z.array(audioTrackSchema).optional(),
 });
-export type LoadingDescriptor = z.infer<typeof descriptorSchema>;
+export type LoadingDescriptor = Readonly<
+  // The registry freezes the audio array at declaration, so the type says so on both sides of
+  // the wire instead of letting a consumer write through an array that throws at runtime.
+  Omit<z.infer<typeof descriptorSchema>, 'audio'> & { audio?: readonly AudioTrack[] }
+>;
 export const resultSchema = <T extends z.ZodType>(value: T) =>
   z.discriminatedUnion('ok', [
     z.object({ ok: z.literal(true), value }),
@@ -63,7 +67,9 @@ export const mountReceiptSchema = z.object({
   revision: z.string(),
   descriptor: descriptorSchema,
 });
-export type MountReceipt = z.infer<typeof mountReceiptSchema>;
+export type MountReceipt = Readonly<
+  Omit<z.infer<typeof mountReceiptSchema>, 'descriptor'> & { descriptor: LoadingDescriptor }
+>;
 /** Loading-only protocol. Mount acknowledges preparation, never frame readiness. */
 export type LoadingPage = FramePage & {
   protocolVersion: typeof loadingProtocolVersion;

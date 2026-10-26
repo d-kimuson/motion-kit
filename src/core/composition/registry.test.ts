@@ -584,6 +584,24 @@ describe('Composition registry', () => {
         audio: [{ src: 'audio/voice.wav', startInFrames: -1 }],
       }),
     ).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    // A src can be URL-shaped, so the declaration error reports it redacted: a signed query never
+    // reaches the CLI envelope (CLI contract; the asset diagnostics producer owns the rule).
+    const secret = 'https://cdn.example.com/voice.mp3?X-Amz-Signature=deadbeef&Expires=1';
+    const rejected = defineComposition({
+      ...metadata,
+      schema,
+      component,
+      audio: [{ src: secret, startInFrames: 20, endInFrames: 20 }],
+    });
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: {
+        code: 'render.page-error',
+        message:
+          'Composition audio track "https://cdn.example.com/voice.mp3 (+2 query parameters, redacted)" ends at or before it starts.',
+      },
+    });
+    expect(JSON.stringify(rejected)).not.toContain('deadbeef');
     // No audio declared: the descriptor keeps the key absent, so the silent path is unchanged.
     expect(unwrap(entry()).descriptor.audio).toBeUndefined();
   });

@@ -51,4 +51,31 @@ export const compositions = defineCompositions([
     durationInFrames: 20,
     audio: [{ src: 'audio/absent.wav' }],
   }),
+  // One mono and one stereo clip at `volume: 1`, each alone in its own second: the absolute level
+  // of each is the file's own, so a conversion that halves one of them is visible without a ratio.
+  defineComposition({
+    id: 'audio-levels',
+    component: Scene,
+    schema,
+    width: 160,
+    height: 120,
+    fps: { numerator: 20, denominator: 1 },
+    durationInFrames: 60,
+    audio: [
+      { src: 'audio/level-mono.wav', startInFrames: 0 },
+      { src: 'audio/level-stereo.wav', startInFrames: 20 },
+    ],
+  }),
+  // A `src` written as a URL with a signed query: it resolves as a path and cannot exist, so the
+  // report must not carry the signature it was written with.
+  defineComposition({
+    id: 'audio-signed',
+    component: Scene,
+    schema,
+    width: 160,
+    height: 120,
+    fps: { numerator: 20, denominator: 1 },
+    durationInFrames: 20,
+    audio: [{ src: 'https://cdn.example.com/voice.mp3?X-Amz-Signature=deadbeef&Expires=1' }],
+  }),
 ]);

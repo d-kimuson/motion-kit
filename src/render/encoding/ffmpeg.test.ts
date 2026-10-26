@@ -176,6 +176,41 @@ const invocations = (): string[] => {
     : [];
 };
 
+/**
+ * A stand-in for `ffprobe`, which is where a declared track's channel count comes from. It answers
+ * with `counts` in call order (one per track, declaration order), records each argv, and exits
+ * non-zero when the queue says `fail`. Both the count and the number of probes stay observable.
+ */
+const fakeFfprobe = (...counts: readonly (number | 'fail')[]): string => {
+  const args = join(directory, 'ffprobe.args');
+  const queue = join(directory, 'ffprobe.counts');
+  writeFileSync(queue, `${counts.map(String).join('\n')}\n`);
+  const script = `#!/bin/sh
+printf '%s\\n' "$*" >> "${args}"
+count="$(head -n 1 "${queue}")"
+tail -n +2 "${queue}" > "${queue}.next"
+mv "${queue}.next" "${queue}"
+case "$count" in
+  ''|fail) exit 1 ;;
+  *) printf '%s\\n' "$count" ;;
+esac
+`;
+  const path = join(directory, 'ffprobe');
+  writeFileSync(path, script);
+  chmodSync(path, 0o755);
+  return path;
+};
+
+/** The argv of every `ffprobe` call, one line per track in declaration order. */
+const ffprobeArgv = (): string[] => {
+  const args = join(directory, 'ffprobe.args');
+  return existsSync(args)
+    ? readFileSync(args, 'utf8')
+        .split('\n')
+        .filter((line) => line !== '')
+    : [];
+};
+
 /** The argv the stand-in binary saw on its encode invocation, so the flag contract is pinned. */
 const encodeArgv = (): string[] => {
   const args = join(directory, 'invocations.args');
@@ -704,6 +739,7 @@ describe('declared audio', () => {
 
   it('adds one input per track and a mix graph on the frame timebase', async () => {
     const encoder = await openEncoder(fakeBinary());
+    fakeFfprobe(2, 2);
     const { first, second } = audioFixture();
     const output = outputPath('audio.mp4');
     const pngs = pngFrames(30);
@@ -772,6 +808,163 @@ describe('declared audio', () => {
       '3.000000',
       expect.stringMatching(/\/\.audio\.[0-9a-f-]{36}\.part\.mp4$/u),
     ]);
+    // One channel probe per track, in declaration order: the count is what the graph depends on.
+    expect(ffprobeArgv()).toEqual([
+      `-v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 ${first}`,
+      `-v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 ${second}`,
+    ]);
+  });
+
+  it('duplicates a mono source at unity gain instead of the constant-power matrix', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    fakeFfprobe(1);
+    audioFixture();
+    const pngs = pngFrames(4);
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf(pngs),
+        frameCount: pngs.length,
+        audio: [{ src: 'audio/clip-1.wav' }],
+        projectRoot: directory,
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true });
+    // `aformat=…:channel_layouts=stereo` would apply FFmpeg's 0.7071 mono→stereo matrix and make
+    // the same file render 3.01 dB quieter as mono than as stereo; `pan` keeps every sample.
+    const graph = encodeArgv()[encodeArgv().indexOf('-filter_complex') + 1] ?? '';
+    expect(graph).toBe(
+      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=0:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,apad[aout]',
+    );
+    expect(graph).not.toContain('channel_layouts=stereo');
+  });
+
+  it('chooses the conversion per track, so one mono clip cannot change another', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    audioFixture();
+    // The probe answers per source: the first track is mono, the second is stereo.
+    fakeFfprobe(1, 2);
+    const pngs = pngFrames(4);
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf(pngs),
+        frameCount: pngs.length,
+        audio: [{ src: 'audio/clip-1.wav' }, { src: 'audio/clip-2.wav', startInFrames: 2 }],
+        projectRoot: directory,
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true });
+    expect(ffprobeArgv()).toHaveLength(2);
+    const graph = encodeArgv()[encodeArgv().indexOf('-filter_complex') + 1] ?? '';
+    expect(graph).toContain(
+      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=0:all=1[a0]',
+    );
+    expect(graph).toContain(
+      '[2:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=200:all=1[a1]',
+    );
+  });
+
+  it('reports a missing ffprobe as encode.ffmpeg-not-found and writes no MP4', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    audioFixture();
+    const output = outputPath();
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf([]),
+        frameCount: 2,
+        output,
+        audio: [{ src: 'audio/clip-1.wav' }],
+        projectRoot: directory,
+      }),
+    );
+    // No channel count means no trustworthy mono conversion: the install, not the track, is wrong.
+    expect(errorsOf(outcome)[0]).toMatchObject({
+      code: 'encode.ffmpeg-not-found',
+      details: { binary: join(directory, 'ffprobe') },
+    });
+    expect(invocations()).toEqual(['version', 'encoders']);
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+  });
+
+  it('falls back to the layout conversion when the probe reports no count', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    fakeFfprobe('fail');
+    audioFixture();
+    const pngs = pngFrames(4);
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf(pngs),
+        frameCount: pngs.length,
+        audio: [{ src: 'audio/clip-1.wav' }],
+        projectRoot: directory,
+      }),
+    );
+    // A file whose stream cannot be read stays the encoder's own failure, with its stderr tail.
+    expect(outcome).toMatchObject({ ok: true });
+    expect(encodeArgv().join(' ')).toContain('aformat=sample_fmts=fltp:channel_layouts=stereo');
+  });
+
+  it('reports a track the process may not read as asset.load-failed', async () => {
+    // Root ignores the mode bits, so the check cannot be exercised there.
+    if (process.getuid?.() === 0) return;
+    const encoder = await openEncoder(fakeBinary());
+    const output = outputPath();
+    const { first } = audioFixture();
+    chmodSync(first, 0o000);
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf([]),
+        frameCount: 2,
+        output,
+        audio: [{ src: 'audio/clip-1.wav' }],
+        projectRoot: directory,
+      }),
+    );
+    // `statSync` accepts the file; opening it is what turns a mode into an input failure, before
+    // the encode child runs and before any frame is piped.
+    expect(errorsOf(outcome)[0]).toMatchObject({
+      code: 'asset.load-failed',
+      location: { file: first },
+      details: { assets: [{ kind: 'audio', source: first, phase: 'open' }] },
+    });
+    expect(invocations()).toEqual(['version', 'encoders']);
+    expect(ffprobeArgv()).toEqual([]);
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+  });
+
+  it('reports a URL-shaped src as asset.load-failed with its query redacted', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    const output = outputPath();
+    const source = 'https://cdn.example.com/voice.mp3?X-Amz-Signature=deadbeef&Expires=1';
+    const resolved = ` ${join(directory, 'https:/cdn.example.com/voice.mp3')}`;
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf([]),
+        frameCount: 2,
+        output,
+        audio: [{ src: source }],
+        projectRoot: directory,
+      }),
+    );
+    const [diagnostic] = errorsOf(outcome);
+    // The path is reported, the signed query is not: one redacting producer decides both fields.
+    expect(diagnostic).toMatchObject({
+      code: 'asset.load-failed',
+      message: `The declared audio file "${resolved.trim()} (+2 query parameters, redacted)" could not be read.`,
+      location: { file: `${resolved.trim()} (+2 query parameters, redacted)` },
+      details: {
+        assets: [
+          {
+            kind: 'audio',
+            source: `${resolved.trim()} (+2 query parameters, redacted)`,
+            phase: 'open',
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain('deadbeef');
+    expect(JSON.stringify(diagnostic)).not.toContain('X-Amz-Signature');
   });
 
   it('reports a missing audio file as asset.load-failed and spawns no encode child', async () => {

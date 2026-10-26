@@ -1,3 +1,4 @@
+import { redactAssetSource } from '../../core/assets/diagnostics.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 
 /** Why the encoder found no usable output; disjoint, in the order they become observable. */
@@ -85,13 +86,20 @@ export const encoderInvariantDiagnostic = (message: string, hint: string): Diagn
 /**
  * An audio file the Composition declared is not readable. It is an input problem, not an encoder
  * failure: the file is named in `location` and in the contract's `asset.load-failed` payload, and
- * the encode stops before any child runs (audio muxing ADR).
+ * the encode stops before any encode child runs (audio muxing ADR).
+ *
+ * `src` is a resolved path, but it can still be a URL that was resolved as one (`a URL-shaped
+ * src` becomes `<root>/https:/host/track.mp3?X-Amz-Signature=…`), so every field that reports it
+ * goes through the one redacting producer instead of copying it (CLI contract, agent ADR).
  */
-export const audioFileMissingDiagnostic = (source: string): Diagnostic => ({
-  code: 'asset.load-failed',
-  severity: 'error',
-  message: `The declared audio file "${source}" could not be read.`,
-  hint: 'Check the track src: relative audio paths resolve against the project root and must name an existing file.',
-  location: { file: source },
-  details: { assets: [{ kind: 'audio', source, phase: 'open' }] },
-});
+export const audioFileMissingDiagnostic = (source: string): Diagnostic => {
+  const reported = redactAssetSource(source);
+  return {
+    code: 'asset.load-failed',
+    severity: 'error',
+    message: `The declared audio file "${reported}" could not be read.`,
+    hint: 'Check the track src: relative audio paths resolve against the project root and must name a readable file.',
+    location: { file: reported },
+    details: { assets: [{ kind: 'audio', source: reported, phase: 'open' }] },
+  };
+};
