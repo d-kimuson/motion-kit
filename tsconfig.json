@@ -49,6 +49,7 @@
     "spikes/b-r3f",
     "spikes/c-clock",
     "spikes/d-assets",
+    "examples",
     ".agents/**/*.ts"
   ]
 }

@@ -21,6 +21,28 @@ const NODE_RESTRICTION = {
     },
   ],
 };
+// An example is a consumer of the published package, not part of it: it reaches the framework only
+// through `@kimuson/motion-kit`, never a relative path into `src/`, and it runs in the browser.
+const EXAMPLE_SRC_PATTERN = {
+  group: ['**/src/**'],
+  message:
+    'Examples import the published package (@kimuson/motion-kit), never a relative path into src/.',
+};
+const EXAMPLE_NODE_PATTERN = {
+  group: ['node:*'],
+  message: 'Examples run in the browser; Node.js is allowed only in fetch-assets.ts and tests.',
+};
+const EXAMPLE_RESTRICTION = {
+  paths: [],
+  patterns: [EXAMPLE_SRC_PATTERN, EXAMPLE_NODE_PATTERN],
+};
+// `fetch-assets.ts` is a Node.js process that is still an example: it may use Node.js, but it does
+// not reach into `src/` either (docs/design-doc/20261025-reference-examples.md carves out Node.js
+// only, not the source boundary).
+const EXAMPLE_NODE_RESTRICTION = {
+  paths: [],
+  patterns: [EXAMPLE_SRC_PATTERN],
+};
 const CORE_RESTRICTION = {
   paths: [],
   patterns: [
@@ -354,6 +376,33 @@ export default defineConfig({
       ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
+        'import/no-nodejs-modules': 'off',
+      },
+    },
+    {
+      // Reference examples (docs/design-doc/20261025-reference-examples.md, "How examples/ enters
+      // the checks"): the default rules plus the consumer boundary above. `mergeRestrictions`, so
+      // the Three.js restriction the top-level `rules` apply survives into `examples/**`.
+      files: ['examples/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          mergeRestrictions(THREE_RESTRICTION, EXAMPLE_RESTRICTION),
+        ],
+      },
+    },
+    {
+      // The setup script and an example's tests are Node.js processes, like src/render and src/cli,
+      // so they may import `node:*`; they are still examples, so the source boundary holds. The test
+      // files are listed here explicitly because the repository-wide test override below matches a
+      // glob that does not cover `*.test.ts` (the same gap the `spring-determinism.test.ts` entry
+      // above records).
+      files: ['examples/*/fetch-assets.ts', 'examples/**/*.test.ts', 'examples/**/*.test.tsx'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          mergeRestrictions(THREE_RESTRICTION, EXAMPLE_NODE_RESTRICTION),
+        ],
         'import/no-nodejs-modules': 'off',
       },
     },
