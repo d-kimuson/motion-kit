@@ -63,34 +63,39 @@ const PhotoSurface = ({ slide, source, kenBurns: move }: SurfaceProps) => {
 };
 
 /** The visible diagnostic a slide shows when its photo has not resolved: the id and the URL it is
- *  waiting on, so a missing file is attributable instead of a blank frame. A photo that fails
- *  outright does not land here — `useAsset` throws `asset.load-failed` naming the source and the
- *  render fails with that diagnostic. */
-const PendingPhoto = ({ slide, source }: { readonly slide: Slide; readonly source: string }) => (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      width: '100%',
-      height: '100%',
-      padding: '8%',
-      boxSizing: 'border-box',
-      textAlign: 'center',
-      background: '#1b1b20',
-      color: '#d7d7de',
-      fontFamily: MONO_STACK,
-      fontSize: 16,
-      lineHeight: 1.4,
-    }}
-  >
-    <div style={{ color: '#ff8a6a' }}>photo not loaded</div>
-    <div>{slide.id}</div>
-    <div style={{ opacity: 0.6, wordBreak: 'break-all' }}>{source}</div>
-  </div>
-);
+ *  waiting on, so a missing file is attributable instead of a blank frame. Its type follows the
+ *  shorter side like the caption does, so the panel reads at 540×960 and at 1080×1920 alike. A photo
+ *  that fails outright does not land here — `useAsset` throws `asset.load-failed` naming the source
+ *  and the render fails with that diagnostic. */
+const PendingPhoto = ({ slide, source }: { readonly slide: Slide; readonly source: string }) => {
+  const { width, height } = useTimeline();
+  const size = Math.max(10, Math.round(Math.min(width, height) * 0.03));
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Math.round(size * 0.5),
+        width: '100%',
+        height: '100%',
+        padding: '8%',
+        boxSizing: 'border-box',
+        textAlign: 'center',
+        background: '#1b1b20',
+        color: '#d7d7de',
+        fontFamily: MONO_STACK,
+        fontSize: size,
+        lineHeight: 1.4,
+      }}
+    >
+      <div style={{ color: '#ff8a6a' }}>photo not loaded</div>
+      <div>{slide.id}</div>
+      <div style={{ opacity: 0.6, wordBreak: 'break-all' }}>{source}</div>
+    </div>
+  );
+};
 
 type CaptionProps = Readonly<{
   readonly slide: Slide;
