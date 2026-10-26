@@ -1,0 +1,32 @@
+{
+  "title": "A shorter window: 2005 to 2024",
+  "unit": "index points",
+  "source": "Synthetic series authored for motion-kit; not a real index, a real fund or investment advice.",
+  "series": [
+    {
+      "label": "Synthetic index, 2005 = 100",
+      "points": [
+        { "year": 2005, "value": 100 },
+        { "year": 2006, "value": 112 },
+        { "year": 2007, "value": 124 },
+        { "year": 2008, "value": 79 },
+        { "year": 2009, "value": 104 },
+        { "year": 2010, "value": 119 },
+        { "year": 2011, "value": 113 },
+        { "year": 2012, "value": 131 },
+        { "year": 2013, "value": 156 },
+        { "year": 2014, "value": 170 },
+        { "year": 2015, "value": 166 },
+        { "year": 2016, "value": 181 },
+        { "year": 2017, "value": 214 },
+        { "year": 2018, "value": 197 },
+        { "year": 2019, "value": 239 },
+        { "year": 2020, "value": 283 },
+        { "year": 2021, "value": 339 },
+        { "year": 2022, "value": 279 },
+        { "year": 2023, "value": 348 },
+        { "year": 2024, "value": 421 }
+      ]
+    }
+  ]
+}
