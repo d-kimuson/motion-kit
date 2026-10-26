@@ -10,13 +10,13 @@ Nothing here is shipped in the npm package (`package.json#files` is `dist` only)
 
 ## The four targets
 
-| Composition           | Resolution | fps | Frames     | Axis                                                                                  | CI gate                                                                        |
-| --------------------- | ---------- | --- | ---------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `teaser`              | 1920×1080  | 30  | 720 (24 s) | Dense springs and easing, a stagger of small elements, determinism under heavy motion | smoke renders `teaser-ci`, determinism runs `teaser-probe`                     |
-| `explainer`           | 1920×1080  | 30  | 5400–9000  | Long duration, many `Sequence`s and `Transition`s, subtitles against audio            | smoke renders `explainer-ci`, determinism runs `explainer-probe`               |
-| `chart`               | 1920×1080  | 30  | 600 (20 s) | Schema-first props, inline SVG, animated numbers, regenerate from other data          | smoke renders `chart-ci` with a second dataset, determinism runs `chart-probe` |
-| `slideshow`           | 1080×1920  | 30  | 600–1200   | Vertical 9:16, Ken Burns, audio mixing, aspect switching                              | smoke renders `slideshow-ci`, determinism runs `slideshow-probe`               |
-| `slideshow-landscape` | 1920×1080  | 30  | 600–1200   | The same slide components at 16:9 (`useTimeline().width/height`)                      | descriptor plus one still frame in the smoke test                              |
+| Composition           | Resolution | fps | Frames       | Axis                                                                                  | CI gate                                                                        |
+| --------------------- | ---------- | --- | ------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `teaser`              | 1920×1080  | 30  | 720 (24 s)   | Dense springs and easing, a stagger of small elements, determinism under heavy motion | smoke renders `teaser-ci`, determinism runs `teaser-probe`                     |
+| `explainer`           | 1920×1080  | 30  | 6660 (222 s) | Long duration, many `Sequence`s and `Transition`s, subtitles against audio            | smoke renders `explainer-ci`, determinism runs `explainer-probe`               |
+| `chart`               | 1920×1080  | 30  | 600 (20 s)   | Schema-first props, inline SVG, animated numbers, regenerate from other data          | smoke renders `chart-ci` with a second dataset, determinism runs `chart-probe` |
+| `slideshow`           | 1080×1920  | 30  | 900 (30 s)   | Vertical 9:16, Ken Burns, audio mixing, aspect switching                              | smoke renders `slideshow-ci`, determinism runs `slideshow-probe`               |
+| `slideshow-landscape` | 1920×1080  | 30  | 900 (30 s)   | The same slide components at 16:9 (`useTimeline().width/height`)                      | descriptor plus one still frame in the smoke test                              |
 
 ## The short Compositions
 

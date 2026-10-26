@@ -12,20 +12,21 @@ the prose belong to `script.ts` and `script.schema.ts`; the layers that draw the
 
 ## Layout
 
-| File                 | What it owns                                                                     |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `script.ts`          | The script: 19 spoken lines, a slide cue on each, the disclaimer, the credits    |
-| `script.schema.ts`   | The format, `seconds = ceil(codePoints / 5)`, the frame-free timing arithmetic   |
-| `plan.ts`            | The one conversion to frames — `Storyboard`, shared by all three layers          |
-| `entry.tsx`          | `explainer` (1920×1080, 6660 frames) and `explainer-ci` (960×540, 60 frames)     |
-| `probe.tsx`          | `explainer-probe` (480×270, 30 frames) for the determinism gate                  |
-| `ExplainerScene.tsx` | The tree: slides, sprites, subtitles over one storyboard; the font `Suspense`    |
-| `slides/`            | `SlideSeries` (a `TransitionSeries`, 0.4 s crossfades) and the four slide bodies |
-| `Sprites.tsx`        | One `Sequence` per line: both characters, the speaker lit, mouth every 0.15 s    |
-| `Subtitles.tsx`      | One `Sequence` per line, no transitions: the band with the speaker's name        |
-| `look.ts`            | Palette, committed font, sprite/voice paths, the shared arithmetic               |
-| `audio.ts`           | One voice track per line, at the line's frame start and end                      |
-| `fetch-assets.ts`    | Step 1 placeholders (FFmpeg) and step 2 the fetched sprites and voice            |
+| File                   | What it owns                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `script.ts`            | The script: 19 spoken lines, a slide cue on each, the disclaimer, the credits    |
+| `script.schema.ts`     | The format, `seconds = ceil(codePoints / 5)`, the frame-free timing arithmetic   |
+| `plan.ts`              | The one conversion to frames — `Storyboard`, shared by all three layers          |
+| `entry.tsx`            | `explainer` (1920×1080, 6660 frames) and `explainer-ci` (960×540, 60 frames)     |
+| `probe.tsx`            | `explainer-probe` (480×270, 30 frames) for the determinism gate                  |
+| `ExplainerScene.tsx`   | The tree: slides, sprites, subtitles over one storyboard; the font `Suspense`    |
+| `slides/`              | `SlideSeries` (a `TransitionSeries`, 0.4 s crossfades) and the four slide bodies |
+| `Sprites.tsx`          | One `Sequence` per line: both characters, the speaker lit, mouth every 0.15 s    |
+| `Subtitles.tsx`        | One `Sequence` per line, no transitions: the band with the speaker's name        |
+| `look.ts`              | Palette, committed font, sprite/voice paths, the shared arithmetic               |
+| `audio.ts`             | One voice track per line, at the line's frame start and end                      |
+| `fetch-assets.ts`      | Step 1 placeholders (FFmpeg) and step 2 the fetched sprites and voice            |
+| `assets.manifest.json` | Every file under `assets/` and `assets.local/`, with its provenance              |
 
 ## Running it
 
@@ -104,7 +105,7 @@ every copy: `assets/fonts/NotoSansJP[wght].woff2` ships with `OFL.txt` beside it
 
 | Asset                                             | In the repository                           | Where it comes from                                                         |
 | ------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
-| Font (Noto Sans JP, variable, OFL-1.1)            | Yes — `assets/fonts/*.woff2` with `OFL.txt` | Fetched once from `google/fonts` `ofl/notosansjp`, converted, committed     |
+| Font (Noto Sans JP, variable, OFL-1.1)            | Yes — `assets/fonts/*.woff2` with `OFL.txt` | Converted once from the upstream TTF — commands below — and committed       |
 | Voice (VOICEVOX:ずんだもん / VOICEVOX:四国めたん) | No — `assets.local/voice/`                  | Synthesized from `script.ts` against a **local** VOICEVOX engine            |
 | Sprites (坂本アヒル 立ち絵)                       | No — `assets.local/sprites/`                | Fetched by the setup script into the ignored directory                      |
 | Music and backgrounds                             | No — generated                              | FFmpeg (`sine`, `anoisesrc`, `color`), so they are the project's own output |
@@ -119,3 +120,29 @@ licensing ADR's.
 Only the font is committed: `examples/explainer/` holds the script, the entries, the layers and the
 OFL font, and nothing else — the voice, the sprites, the tone bed and the music are all one
 `fetch-assets.ts` run away.
+
+`assets.manifest.json` is the design doc's provenance record for both directories
+([Assets and provenance](../../docs/design-doc/20261025-reference-examples.md#assets-and-provenance)):
+one row per file under `assets/` and `assets.local/` with `path`, `kind`, `source`, `license` and
+`credit`, committed while the files it names mostly are not. The font rows carry the OFL, the
+placeholders, the tone bed and `durations.json` are `generated`, the voice clips name the voices and
+the fetched `final/` sprite set names the illustrator. No script reads it, so it is reviewed by hand
+with this example's PR.
+
+### The committed face is reproducible
+
+`ofl/notosansjp` publishes no `.woff2`, only the variable `NotoSansJP[wght].ttf` (9,589,900 bytes), so
+the committed file is converted once from that TTF — the
+[ADR's documented command block](../../docs/decisions/20261026-example-asset-licensing.accepted.md):
+
+```sh
+curl -sS -o 'NotoSansJP[wght].ttf' 'https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf'
+curl -sS -o 'OFL.txt' 'https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/OFL.txt'
+npx --yes --package wawoff2 woff2_compress.js 'NotoSansJP[wght].ttf'   # → NotoSansJP[wght].woff2, 4,350,136 bytes
+```
+
+Copy the two results into `assets/fonts/`. The `.woff2` is 4,350,136 bytes and a `wOF2` header, which
+is the size to check when a change touches the font: the 9.6 MB `.ttf` must never be the file that
+lands. The `css2` API is not a substitute — it answers with 124 `@font-face` blocks, one per
+`unicode-range` subset, so committing it would commit 124 files whose coverage is Google's rather than
+this script's (the ADR records the reasoning).
