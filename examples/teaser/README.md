@@ -43,8 +43,11 @@ High contrast on a near-black ground (`#07080c`), one warm accent (`#ff5a3c`), o
 
 - The **word** enters letter by letter, 35 ms apart, each on a spring that overshoots by a few percent
   and settles; the whole block lifts into place behind it, and the accent rule under the word grows
-  from the centre. A crossfade lifts the outgoing word away on an easing curve while the incoming word
-  rises into the same place, so the two words are never both legible at once.
+  from the centre. A crossfade lifts the outgoing word away on a decelerating curve while the incoming
+  word rises into the same place on an accelerating one, and their opacities (`(1 - p)³` and `p³`) sum
+  to at most 1 in every frame: the handoff dims the type for a frame or two rather than double-exposing
+  two words on top of each other. The overlap is a tenth of a scene (7 frames, 0.23 s at the full
+  teaser's size), short enough that the swap reads as a snap instead of a dissolve.
 - The **backdrop** never stops: a soft accent glow drifts on springs whose targets change mid-flight
   every 1.45 s, sixteen accent bars pulse in a 35 ms stagger, three hairlines drift, the word counter
   ticks over at each crossfade, and the progress rule along the bottom edge grows every frame.
@@ -71,8 +74,10 @@ node dist/cli.js render examples/teaser/entry.tsx --composition teaser --out out
 # A still frame for visual review
 node dist/cli.js frame examples/teaser/entry.tsx --composition teaser --frame 300 --out out/teaser-300.png
 
-# A contact sheet: one frame per word, tiled
-ffmpeg -y -i out/teaser.mp4 -vf "select='eq(n\,40)+eq(n\,123)+eq(n\,206)+eq(n\,289)+eq(n\,372)+eq(n\,455)+eq(n\,538)+eq(n\,621)+eq(n\,704)+eq(n\,715)',scale=480:-1,tile=2x5" -frames:v 1 out/teaser-contact.png
+# A contact sheet: one frame per word, tiled. The words start every 72 frames (a 79-frame scene,
+# less the 7-frame overlap) and each of the first nine stills is 40 frames into its own scene; the
+# tenth is the held last frame.
+ffmpeg -y -i out/teaser.mp4 -vf "select='eq(n\,40)+eq(n\,112)+eq(n\,184)+eq(n\,256)+eq(n\,328)+eq(n\,400)+eq(n\,472)+eq(n\,544)+eq(n\,616)+eq(n\,712)',scale=480:-1,tile=2x5" -frames:v 1 out/teaser-contact.png
 ```
 
 `--composition` is always required: the entry holds two Compositions. Getting it wrong is documented

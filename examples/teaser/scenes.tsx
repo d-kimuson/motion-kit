@@ -46,8 +46,10 @@ export type WordPlan = {
 
 export const planWords = (totalFrames: number, wordCount: number): WordPlan => {
   const count = Math.max(1, wordCount);
-  // A crossfade is a fifth of a scene on average, capped so a short Composition still shows a word.
-  const overlapFrames = Math.max(2, Math.min(12, Math.round(totalFrames / (count * 5))));
+  // A crossfade is a tenth of a scene on average (7 frames, 0.23 s, at the full teaser's size):
+  // short enough that the handoff reads as a snap rather than a dissolve, long enough for the
+  // outgoing word's lift to register. At least 2 frames, so a short Composition still shows a word.
+  const overlapFrames = Math.max(2, Math.min(12, Math.round(totalFrames / (count * 10))));
   const evenFrames = Math.ceil((totalFrames + (count - 1) * overlapFrames) / count);
   const sceneFrames = Array.from({ length: count }, (_, index) =>
     index === count - 1
@@ -297,17 +299,23 @@ type CrossFadeProps = {
   readonly incomingEnterSeconds: number;
 };
 
-/** The one shared crossfade: the incoming word leaves on its easing curve while the outgoing word
- * fades and lifts on `useTransitionProgress()`. Its children mount only during the overlap. The
- * offset rides on each `WordStage`, never on the full-frame layer that holds it: a transform on the
- * layer changed how Chromium rasterised the whole frame between paints, and the determinism gate
- * caught it. */
+/** The one shared crossfade: the outgoing word lifts away on a decelerating curve while the
+ * incoming word rises into its place on an accelerating one, both read from
+ * `useTransitionProgress()`. Its children mount only during the overlap. The offset rides on each
+ * `WordStage`, never on the full-frame layer that holds it: a transform on the layer changed how
+ * Chromium rasterised the whole frame between paints, and the determinism gate caught it.
+ *
+ * The pair of opacities is what keeps the handoff from double-exposing: outgoing `(1 - p)^3` and
+ * incoming `p^3` (that is `1 - easeOutCubic(p)` and `easeInCubic(p)`) sum to at most 1 in every
+ * frame, so the crossfade can dim the type but can never stack two legible words. The obvious pair
+ * — outgoing `1 - easeInCubic(p)`, incoming `easeOutCubic(p)` — holds both words near full opacity
+ * across the middle of the overlap (their sum peaks at ~1.75), and for a third of the crossfade the
+ * two words read as one two-line block: the double exposure these curves exist to prevent. */
 const CrossFade = ({ outgoing, incoming, incomingEnterSeconds }: CrossFadeProps) => {
   const progress = useTransitionProgress();
   const { time } = useSequence();
-  const out = easeInCubic(progress);
-  const lift = easeOutCubic(progress);
-  const into = easeOutCubic(progress);
+  const leave = easeOutCubic(progress);
+  const arrive = easeInCubic(progress);
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div
@@ -317,14 +325,14 @@ const CrossFade = ({ outgoing, incoming, incomingEnterSeconds }: CrossFadeProps)
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: 1 - out,
+          opacity: 1 - leave,
         }}
       >
         <WordStage
           text={outgoing}
           time={null}
           enterSeconds={incomingEnterSeconds}
-          lift={-0.28 * lift}
+          lift={-0.28 * leave}
         />
       </div>
       <div
@@ -334,14 +342,14 @@ const CrossFade = ({ outgoing, incoming, incomingEnterSeconds }: CrossFadeProps)
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: into,
+          opacity: arrive,
         }}
       >
         <WordStage
           text={incoming}
           time={time}
           enterSeconds={incomingEnterSeconds}
-          lift={0.24 * (1 - into)}
+          lift={0.24 * (1 - arrive)}
         />
       </div>
     </div>
