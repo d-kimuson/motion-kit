@@ -41,7 +41,7 @@ const indexSlide: SlideCue = {
   kind: 'bullets',
   title: 'インデックスってなに？',
   items: [
-    '市場全体の値動きを表す指標',
+    'たくさんの銘柄の値動きをまとめた指標',
     '指数に連動するように作られた商品',
     '会社を自分で選ばなくてよい',
   ],
@@ -53,8 +53,10 @@ const diversificationSlide: SlideCue = {
   items: ['ひとつの会社に頼らない', 'たくさんの会社をまとめて持つ', 'ひとつの失敗が全体を壊さない'],
 };
 
-// `chartId` names a dataset the `chart` example already commits (`examples/chart/data/`), so this
-// slide draws the same SVG component from the same JSON rather than a second copy of the data.
+// `chartId` names a dataset the `chart` example owns: `examples/chart/data/index-30y.json` on the
+// unmerged `examples/chart` branch (TASK-207), which merges before TASK-209 renders this slide, so
+// the same JSON drives the same SVG component rather than a second copy of the data. Nothing here
+// validates `chartId`, so the two are held together by that merge order.
 const chartSlide: SlideCue = {
   kind: 'chart',
   chartId: 'index-30y',
@@ -80,7 +82,7 @@ const instalmentSlide: SlideCue = {
 const riskSlide: SlideCue = {
   kind: 'bullets',
   title: 'リスクを知る',
-  items: ['元本は保証されない', '価格は大きく下がることがある', '生活費や近い予定のお金は回さない'],
+  items: ['元本は保証されない', '価格は大きく下がることがある', '回復までに長い時間がかかる'],
 };
 
 const scopeSlide: SlideCue = {
@@ -121,7 +123,7 @@ const lines: readonly ScriptLine[] = [
   {
     id: 'index-1',
     speaker: 'metan',
-    text: 'まずインデックスというのは、市場全体の値動きをひとつの数字にまとめた指標のことです。日経平均株価も、そのひとつですね。',
+    text: 'インデックスは、たくさんの銘柄の値動きをひとつにした指標です。日経平均株価は225社の平均で、代表的な株価指数ですね。',
     expression: 'normal',
     slide: indexSlide,
     seconds: 12,
@@ -209,7 +211,7 @@ const lines: readonly ScriptLine[] = [
   {
     id: 'risk-2',
     speaker: 'zundamon',
-    text: '生活費や、近いうちに使うお金を回すのは禁物なのだ。なくなっても困らない、余裕のあるお金でやるのが基本なのだ。',
+    text: '大きく下がったまま、何年ももどらない時期もあるのだ。だから途中で売ってしまうと、損が確定してしまうのだ。',
     expression: 'serious',
     slide: riskSlide,
     seconds: 11,
@@ -259,8 +261,8 @@ const lines: readonly ScriptLine[] = [
 /**
  * The script, validated once at module load: the schema enforces `seconds`, unique ids, and that the
  * last slide is the disclaimer; `assertScript` enforces the content budget (900–1500 characters,
- * 180–300 s of dialogue, 10–20 lines, a cue every 15–25 s). A script outside either throws on import
- * rather than rendering a video of the wrong length.
+ * 180–300 s in total once the tail is added, 10–20 lines, a cue every 15–25 s). A script outside
+ * either throws on import rather than rendering a video of the wrong length.
  */
 export const script: Script = assertScript(scriptSchema.parse({ title, disclaimer, lines }));
 
@@ -280,5 +282,5 @@ export const lineStarts: readonly number[] = lineStartTimes(script.lines);
  */
 export const slideSpans = slidePlan(script.lines);
 
-/** The numbers a reviewer checks against the task: 1068 characters, 219 s of dialogue, 19 lines, 10 slides. */
+/** The numbers a reviewer checks against the task: 1066 characters, 219 s of dialogue, 19 lines, 10 slides. */
 export const stats = scriptStats(script);

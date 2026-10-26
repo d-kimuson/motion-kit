@@ -1,12 +1,14 @@
 // The script's own test: the schema, the reading rate, the content budget and the slide arithmetic.
 //
-// Every assertion here is written against a literal — 218 s of dialogue, a 3.6 s total of
-// crossfades, a 16 s disclaimer slide — so a change to the rate (`ceil(codePoints / 5)`) or to the
-// 0.4 s overlap fails here rather than after a nine-thousand-frame render.
+// Every assertion here is written against a literal — 219 s of dialogue, 222 s in total, a 3.6 s
+// total of crossfades, a 16 s disclaimer slide — so a change to the rate (`ceil(codePoints / 5)`) or
+// to the 0.4 s overlap fails here rather than after a nine-thousand-frame render.
 import { describe, expect, it } from 'vitest';
 
 import {
+  assertScript,
   codePointLength,
+  codePointsPerSecond,
   cueKey,
   disclaimerTailSeconds,
   dialogueSeconds,
@@ -17,17 +19,39 @@ import {
   scriptIssues,
   scriptLineSchema,
   scriptSchema,
+  scriptStats,
   seriesSeconds,
   slideOverlapSeconds,
   slideSceneSeconds,
   slideStartsFromSeries,
   slideStartSeconds,
   transitionOverlapSeconds,
+  type Script,
+  type ScriptLine,
 } from './script.schema.ts';
 import { lineStarts, script, slideSpans, stats, totalSeconds } from './script.ts';
 
 /** The rate, spelled out again: an independent second opinion on every line's `seconds`. */
 const secondsFor = (text: string): number => Math.ceil(Array.from(text).length / 5);
+
+/**
+ * A fixture with one generated line per slide, then the script's own disclaimer line: `text` is
+ * exactly `seconds × 5` code points, so every line passes the schema's rate check and the only
+ * budgets left to fail are the ones the test means to break.
+ */
+const scriptOfSlideSeconds = (slideSeconds: readonly number[]): Script => {
+  const disclaimerLine = script.lines.at(-1);
+  if (disclaimerLine === undefined) throw new Error('the script has no lines');
+  const lines: ScriptLine[] = slideSeconds.map((seconds, index) => ({
+    id: `probe-${index}`,
+    speaker: index % 2 === 0 ? 'metan' : 'zundamon',
+    text: 'あ'.repeat(seconds * codePointsPerSecond),
+    expression: 'normal',
+    slide: { kind: 'bullets', title: `slide ${index}`, items: [`item ${index}`] },
+    seconds,
+  }));
+  return { ...script, lines: [...lines, disclaimerLine] };
+};
 
 describe('explainer script', () => {
   it('validates against its schema, with every line carrying the duration its text earns', () => {
@@ -49,18 +73,41 @@ describe('explainer script', () => {
 
   it('stays inside the content budget TASK-170 sets', () => {
     expect(scriptIssues(script)).toEqual([]);
-    expect(stats.characters).toBe(1068);
+    expect(stats.characters).toBe(1066);
     expect(stats.characters).toBeGreaterThanOrEqual(scriptBudget.minCharacters);
     expect(stats.characters).toBeLessThanOrEqual(scriptBudget.maxCharacters);
     expect(stats.dialogueSeconds).toBe(219);
-    expect(stats.dialogueSeconds).toBeGreaterThanOrEqual(scriptBudget.minSeconds);
-    expect(stats.dialogueSeconds).toBeLessThanOrEqual(scriptBudget.maxSeconds);
+    // The bound is on the whole timeline: the dialogue plus the held tail is what renders.
+    expect(stats.totalSeconds).toBe(222);
+    expect(stats.totalSeconds).toBeGreaterThanOrEqual(scriptBudget.minTotalSeconds);
+    expect(stats.totalSeconds).toBeLessThanOrEqual(scriptBudget.maxTotalSeconds);
     expect(stats.lineCount).toBe(19);
     expect(stats.lineCount).toBeGreaterThanOrEqual(scriptBudget.minLines);
     expect(stats.lineCount).toBeLessThanOrEqual(scriptBudget.maxLines);
     expect(stats.slideCount).toBe(10);
     expect(totalSeconds).toBe(222);
     expect(totalSeconds).toBe(stats.totalSeconds);
+  });
+
+  it('bounds the whole timeline, not only the dialogue', () => {
+    // Twelve bullet slides of 23–24 s plus the script's own 13 s disclaimer line: 1481 characters,
+    // 13 lines, a cue every 16–24 s, and the total lands exactly on the window's edge.
+    const inside = scriptOfSlideSeconds([24, 24, 24, 24, 24, 24, 24, 24, 23, 23, 23, 23]);
+    expect(scriptSchema.safeParse(inside).success).toBe(true);
+    expect(scriptStats(inside).dialogueSeconds).toBe(297);
+    expect(scriptStats(inside).totalSeconds).toBe(300);
+    expect(scriptIssues(inside)).toEqual([]);
+
+    // One second past the window, while the dialogue is still inside the old 180–300 s reading: the
+    // tail is what overflows, so a dialogue-only bound let this render 9030 frames.
+    const overLong = scriptOfSlideSeconds([24, 24, 24, 24, 24, 24, 24, 24, 24, 23, 23, 23]);
+    expect(scriptSchema.safeParse(overLong).success).toBe(true);
+    expect(scriptStats(overLong).dialogueSeconds).toBe(298);
+    expect(scriptStats(overLong).totalSeconds).toBe(301);
+    expect(scriptIssues(overLong)).toEqual([
+      '301 s in total (298 s of dialogue plus the 3 s tail) is outside 180-300',
+    ]);
+    expect(() => assertScript(overLong)).toThrow(/301 s in total .* is outside 180-300/);
   });
 
   it('puts a cue on screen for 15 to 25 seconds, the disclaimer slide held for the tail', () => {

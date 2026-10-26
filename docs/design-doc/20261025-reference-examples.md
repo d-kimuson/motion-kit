@@ -201,7 +201,7 @@ type Script = {
 };
 ```
 
-- `seconds = ceil(codePoints(text) / 5)`, i.e. 5 Japanese characters per second, counted over the raw `text` including punctuation. TASK-170's own bounds (900–1500 characters, 180–300 seconds) come out of this rate, so the script and the Composition duration agree by construction.
+- `seconds = ceil(codePoints(text) / 5)`, i.e. 5 Japanese characters per second, counted over the raw `text` including punctuation. TASK-170's own bounds (900–1500 characters, and 180–300 seconds for `totalSeconds` — the dialogue plus the tail, so the bound is on the length the Composition actually renders) come out of this rate, so the script and the Composition duration agree by construction.
 - The voice track never becomes the timing authority. When VOICEVOX audio exists, `fetch-assets.ts` writes `assets.local/voice/durations.json` (line id → measured seconds) and `entry.tsx` prefers it over `seconds`; the timeline stays frame-derived, the audio is placed at those same times by TASK-171, and `durations.json` is generated, never committed.
 - Content rules are TASK-170's, and this document adds only the ones the video shell must enforce: the last slide is the `disclaimer` cue and stays on screen for the 3-second tail; no line names a fund, broker or allocation; the credit lines the [asset licensing ADR](../decisions/20261026-example-asset-licensing.accepted.md) requires appear in the tail slide and in `README.md`.
 

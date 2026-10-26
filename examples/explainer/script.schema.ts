@@ -18,15 +18,18 @@ export const slideOverlapSeconds = 0.4;
 export const disclaimerTailSeconds = 3;
 
 /**
- * The content budget the design doc and TASK-170 fix for this script. The character and second
- * bounds come out of the reading rate above (900–1500 characters is 180–300 seconds), so a script
- * inside one is inside the other; the slide bounds keep a cue on screen for 15–25 seconds.
+ * The content budget the design doc and TASK-170 fix for this script. The second bound is on
+ * `totalSeconds` — the dialogue plus the 3-second tail, which is what the Composition's
+ * `durationInFrames` comes from (5400–9000 frames at 30 fps) — not on the dialogue alone: a script
+ * with 298 s of dialogue is inside that reading but renders 301 s, one second outside the window.
+ * The character bound comes out of the reading rate above (900–1500 characters is 180–300 seconds),
+ * and the slide bounds keep a cue on screen for 15–25 seconds.
  */
 export const scriptBudget = {
   minCharacters: 900,
   maxCharacters: 1500,
-  minSeconds: 180,
-  maxSeconds: 300,
+  minTotalSeconds: 180,
+  maxTotalSeconds: 300,
   minLines: 10,
   maxLines: 20,
   minSlideSeconds: 15,
@@ -299,21 +302,29 @@ export const scriptStats = (script: Script): ScriptStats => {
 
 /**
  * The content budget as a list of problems, empty when the script is inside it. The schema cannot
- * carry these: they are bounds on the whole script (characters, seconds, lines, cue cadence) rather
- * than on one field, and a script that misses them still parses.
+ * carry these: they are bounds on the whole script (characters, the total seconds the Composition is
+ * built from, lines, cue cadence) rather than on one field, and a script that misses them still
+ * parses.
  */
 export const scriptIssues = (script: Script): readonly string[] => {
   const stats = scriptStats(script);
   const issues: string[] = [];
-  const { characters, dialogueSeconds: spoken, lineCount, slideOnScreenSeconds } = stats;
+  const {
+    characters,
+    dialogueSeconds: spoken,
+    totalSeconds: total,
+    lineCount,
+    slideOnScreenSeconds,
+  } = stats;
   if (characters < scriptBudget.minCharacters || characters > scriptBudget.maxCharacters) {
     issues.push(
       `${characters} characters is outside ${scriptBudget.minCharacters}-${scriptBudget.maxCharacters}`,
     );
   }
-  if (spoken < scriptBudget.minSeconds || spoken > scriptBudget.maxSeconds) {
+  // The whole timeline is the contract, not the dialogue: the tail is rendered too.
+  if (total < scriptBudget.minTotalSeconds || total > scriptBudget.maxTotalSeconds) {
     issues.push(
-      `${spoken} s of dialogue is outside ${scriptBudget.minSeconds}-${scriptBudget.maxSeconds}`,
+      `${total} s in total (${spoken} s of dialogue plus the ${disclaimerTailSeconds} s tail) is outside ${scriptBudget.minTotalSeconds}-${scriptBudget.maxTotalSeconds}`,
     );
   }
   if (lineCount < scriptBudget.minLines || lineCount > scriptBudget.maxLines) {
