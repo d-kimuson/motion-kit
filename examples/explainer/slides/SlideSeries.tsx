@@ -21,6 +21,8 @@ import { type ReactNode } from 'react';
 
 import { easeInCubic, easeOutCubic, framesToTime } from '../look.ts';
 import { type Storyboard } from '../plan.ts';
+import { FlatSlide } from './FlatSlide.tsx';
+import { useFlat } from './shared.ts';
 import { Slide } from './Slide.tsx';
 
 type BoardIndex = { readonly storyboard: Storyboard; readonly index: number };
@@ -28,13 +30,15 @@ type BoardIndex = { readonly storyboard: Storyboard; readonly index: number };
 /** A slide inside its own scene: the enclosing `Sequence` is already the slide's own zero. */
 const SlideScene = ({ storyboard, index }: BoardIndex) => {
   const frame = useFrame();
+  const flat = useFlat();
   const slide = storyboard.slides[index];
   if (slide === undefined) return null;
   const localFrame = frame - slide.startFrame;
   const enters = index === 0 ? 0 : storyboard.overlapFrames;
   const exits = index === storyboard.slides.length - 1 ? 0 : storyboard.overlapFrames;
   const visible = localFrame >= enters && (exits === 0 || localFrame < slide.frames - exits);
-  return visible ? <Slide slide={slide} /> : null;
+  if (!visible) return null;
+  return flat ? <FlatSlide slide={slide} /> : <Slide slide={slide} />;
 };
 
 /**
@@ -45,13 +49,20 @@ const SlideScene = ({ storyboard, index }: BoardIndex) => {
  *
  * The outgoing slide keeps animating: inside the overlay its own scene would be at `contentFrames`
  * plus the elapsed overlap, so it is handed exactly that time and its entrance does not replay.
+ *
+ * Under `flat` the handoff is a discrete switch instead: the overlay draws the incoming slide alone,
+ * fully opaque, from the overlap's first frame. A probe may not blend two layers at fractional
+ * alpha — that is paint state, and paint state is what a traversal mode changes — so the switch
+ * happens on a frame boundary and every frame is still the same bytes whatever order it is drawn in.
  */
 const SlideCrossFade = ({ storyboard, index }: BoardIndex) => {
   const progress = useTransitionProgress();
   const elapsed = useTime();
+  const flat = useFlat();
   const outgoing = storyboard.slides[index];
   const incoming = storyboard.slides[index + 1];
   if (outgoing === undefined || incoming === undefined) return null;
+  if (flat) return <FlatSlide slide={incoming} />;
   const outgoingTime = outgoing.contentFrames / storyboard.fps + elapsed;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>

@@ -34,21 +34,30 @@ const FontGate = ({ children }: { readonly children: ReactNode }) => {
   return children;
 };
 
-const Layers = ({ storyboard, assets, flat }: ExplainerSceneProps) => (
-  <FlatMode value={flat}>
+const Layers = ({
+  storyboard,
+  assets,
+}: {
+  readonly storyboard: Storyboard;
+  readonly assets: AssetsMode;
+}) => (
+  <>
     <SlideSeries storyboard={storyboard} />
-    <Sprites storyboard={storyboard} assets={assets} flat={flat} />
+    <Sprites storyboard={storyboard} assets={assets} />
     <Subtitles storyboard={storyboard} assets={assets} />
-  </FlatMode>
+  </>
 );
 
 export type ExplainerSceneProps = {
   readonly storyboard: Storyboard;
   readonly assets: AssetsMode;
   /**
-   * Replace every media step with a flat surface: no font, no sprite image. Only `probe.tsx` sets
-   * it, because an image `useAsset` inside a `Sequence` is the construct the design doc records as
-   * an intermittent determinism failure, so the gate watches the structure without the media.
+   * Replace every paint the platform rasterises its own way with a flat surface — no font, no
+   * sprite image, no fresh paint every frame: opaque integer rectangles only (`flat.tsx`). Only
+   * `probe.tsx` sets it, because the determinism gate compares PNG bytes across platforms and a
+   * glyph, a fractional alpha, an antialiased corner and an image `useAsset` inside a `Sequence`
+   * each rasterise differently there. The three layers, their `Sequence`s and the
+   * `TransitionSeries` overlap are the same tree either way.
    */
   readonly flat: boolean;
 };
@@ -65,11 +74,15 @@ export const ExplainerScene = ({ storyboard, assets, flat }: ExplainerSceneProps
     }}
   >
     {flat ? (
-      <Layers storyboard={storyboard} assets={assets} flat />
+      <FlatMode value>
+        <Layers storyboard={storyboard} assets={assets} />
+      </FlatMode>
     ) : (
       <Suspense fallback={null}>
         <FontGate>
-          <Layers storyboard={storyboard} assets={assets} flat={false} />
+          <FlatMode value={false}>
+            <Layers storyboard={storyboard} assets={assets} />
+          </FlatMode>
         </FontGate>
       </Suspense>
     )}

@@ -57,6 +57,15 @@ export const characterColor: Record<Character, string> = {
   metan: '#8b6ad6',
 };
 
+/**
+ * The 60 % speaker highlight as a solid colour: `characterColor` blended over `GROUND` here, at
+ * module load, so the probe draws the dim state as opaque paint instead of a fractional alpha.
+ */
+export const characterDimColor: Record<Character, string> = {
+  zundamon: '#93c197',
+  metan: '#b7a2e0',
+};
+
 /** Where one sprite frame lives: `<mode>/<character>/<expression>-<mouth>.png` under the root. */
 export const spriteSource = (
   assets: AssetsMode,

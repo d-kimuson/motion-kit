@@ -36,22 +36,23 @@ export const useSlideTime = (given?: number): number => {
 export type Reveal = (delaySeconds: number) => number;
 
 /**
- * Whether this tree is the probe's flat stand-in (`ExplainerScene`'s `flat`). The stand-in drops the
- * opacity ramp as well as the media: an element whose opacity settles on 1 is painted through the
- * layer it promoted while it was translucent, and the same frame painted cold uses the direct path,
- * so the two disagree by a few hundred glyph pixels. The gate met exactly that at `explainer-probe`
- * frame 29 in six of the seven traversal modes — the same class as the flattened sprite panel the
- * probe already draws — and the probe watches the layer structure and the timing, not the curve.
+ * Whether this tree is the probe's flat stand-in (`ExplainerScene`'s `flat`). The stand-in does not
+ * fade anything: `SlideSeries` swaps the reveal-only slide for `FlatSlide` and the crossfade for a
+ * discrete switch at the overlap's first frame, so a probe frame is a pure function of the frame
+ * index over opaque integer rectangles (`../flat.tsx`). The real compositions never set it, so their
+ * ramp and crossfade are untouched.
  */
 const Flat = createContext(false);
 
-/** What `useSlideReveal` reads; `ExplainerScene` provides it once for the whole tree. */
+/** What the three layers read; `ExplainerScene` provides it once for the whole tree. */
 export const FlatMode = Flat.Provider;
 
-export const useSlideReveal = (time: number): Reveal => {
-  const flat = useContext(Flat);
-  return (delaySeconds) => (flat ? 1 : clamp01((time - delaySeconds) / revealSeconds));
-};
+export const useFlat = (): boolean => useContext(Flat);
+
+export const useSlideReveal =
+  (time: number): Reveal =>
+  (delaySeconds) =>
+    clamp01((time - delaySeconds) / revealSeconds);
 
 /** The left column every slide's text lives in: clear of the sprites at the lower corners. */
 export const textColumn = (width: number) => ({

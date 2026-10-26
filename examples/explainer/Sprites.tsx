@@ -11,6 +11,7 @@ import { Suspense } from 'react';
 import {
   CHARACTERS,
   characterColor,
+  characterDimColor,
   framesToTime,
   mouthAt,
   px,
@@ -21,6 +22,7 @@ import {
   type Mouth,
 } from './look.ts';
 import { type PlannedLine, type Storyboard } from './plan.ts';
+import { useFlat } from './slides/shared.ts';
 
 /** The non-speaker is dimmed to 60%: the design doc's speaker highlight. */
 const dimOpacity = 0.6;
@@ -56,26 +58,29 @@ const SpriteFrame = ({ character, expression, mouth, assets, dim }: SpriteProps)
 };
 
 /**
- * A slot at one of the lower corners. `flat` draws a solid panel instead of the image: the probe
- * replaces the media step of this layer, because an image `useAsset` inside a `Sequence` is the
- * construct the design doc records as an intermittent determinism failure.
+ * A slot at one of the lower corners. Under `flat` it is a solid panel instead of the image: the
+ * probe replaces the media step of this layer, because an image `useAsset` inside a `Sequence` is
+ * the construct the design doc records as an intermittent determinism failure.
  *
- * The panel is an axis-aligned rectangle with square corners on purpose. A rounded corner is the one
- * antialiased edge this layer would otherwise have, and a fractionally transparent rounded corner
- * rasterises differently on the first paint after a mount than on the paints that follow: the gate
- * caught it at `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at most 9/255
- * apart), which is the first frame of the sprite layer on the way down from 29. A corner with no
- * antialiasing has no first-paint history to differ from.
+ * The panel is an axis-aligned rectangle with square corners and no alpha on purpose — the dim state
+ * is a pre-mixed opaque colour (`characterDimColor`), not `opacity: 0.6`. A rounded corner is an
+ * antialiased edge and a fractional alpha is a blend, and both rasterise differently on the first
+ * paint after a mount than on the paints that follow, and differently on Linux than on macOS: the
+ * gate met the corner at `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at
+ * most 9/255 apart) and the whole flat tree at the same frame again on the runner. A rectangle with
+ * no antialiasing and no alpha has no first-paint history to differ from.
  */
-const SpriteSlot = (props: SpriteProps & { readonly flat: boolean }) => {
-  if (props.flat)
+const SpriteSlot = (props: SpriteProps) => {
+  const flat = useFlat();
+  if (flat)
     return (
       <div
         style={{
           width: '100%',
           height: '100%',
-          background: characterColor[props.character],
-          opacity: props.dim ? dimOpacity : 0.9,
+          background: props.dim
+            ? characterDimColor[props.character]
+            : characterColor[props.character],
         }}
       />
     );
@@ -95,12 +100,11 @@ const SpriteSlot = (props: SpriteProps & { readonly flat: boolean }) => {
 type LineSpritesProps = {
   readonly line: PlannedLine;
   readonly assets: AssetsMode;
-  readonly flat: boolean;
 };
 
 /** The pair in view during one line: the speaker holds the line's expression and mouths, the other
  * one rests at `normal`. */
-const LineSprites = ({ line, assets, flat }: LineSpritesProps) => {
+const LineSprites = ({ line, assets }: LineSpritesProps) => {
   const time = useTime();
   const { width, height } = useTimeline();
   const box = {
@@ -129,7 +133,6 @@ const LineSprites = ({ line, assets, flat }: LineSpritesProps) => {
               mouth={speaking ? mouthAt(time) : 'rest'}
               assets={assets}
               dim={!speaking}
-              flat={flat}
             />
           </div>
         );
@@ -141,14 +144,13 @@ const LineSprites = ({ line, assets, flat }: LineSpritesProps) => {
 export type SpritesProps = {
   readonly storyboard: Storyboard;
   readonly assets: AssetsMode;
-  readonly flat: boolean;
 };
 
 /**
  * One `Sequence` per line, each carrying both characters. The speaker is named on the subtitle band,
  * which is why the sprite layer needs no text of its own.
  */
-export const Sprites = ({ storyboard, assets, flat }: SpritesProps) => (
+export const Sprites = ({ storyboard, assets }: SpritesProps) => (
   <>
     {storyboard.lines.map((line) => (
       <Sequence
@@ -156,7 +158,7 @@ export const Sprites = ({ storyboard, assets, flat }: SpritesProps) => (
         from={framesToTime(line.startFrame, storyboard.fps)}
         duration={framesToTime(line.frames, storyboard.fps)}
       >
-        <LineSprites line={line} assets={assets} flat={flat} />
+        <LineSprites line={line} assets={assets} />
       </Sequence>
     ))}
   </>

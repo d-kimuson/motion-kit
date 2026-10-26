@@ -50,20 +50,25 @@ fetched sprites instead of the placeholders. The full 6660-frame render is a loc
 
 ## Known limitations
 
-- **The probe draws flat sprite panels and no font.** An image `useAsset` inside a `Sequence` is the
-  construct the design doc records as an intermittent `reverse` failure, so `explainer-probe` renders
-  the same layer structure and timing without the media, and `explainer-ci` (which does load two
-  placeholder images and the committed font) stays out of the determinism gate.
-- **The flat sprite panel has square corners on purpose.** A rounded corner is a fractional-opacity,
-  antialiased edge, and the gate caught it painting differently on the first paint after a mount at
-  `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at most 9/255 apart). The
-  real sprite images are unaffected; only the probe's stand-in is constrained this way.
-- **The probe draws the reveal already settled.** For the same reason, `useSlideReveal` returns 1 under
-  `flat` instead of ramping: an element that arrives at opacity 1 was painted through the layer it
-  promoted while it was translucent, and the same frame painted without that history differs by a few
-  hundred glyph pixels. CI met exactly that at `explainer-probe` frame 29 in six of the seven traversal
-  modes (`5664` differing bytes against the sequential capture). The probe watches the layer structure
-  and the timing; the ramp belongs to the look, and only the real compositions draw it.
+- **`explainer-probe` draws opaque rectangles and nothing else.** The determinism gate compares PNG
+  bytes with no tolerance on macOS and on the Linux runner, so the probe draws only what rasterises
+  identically on both: solid, fully opaque, integer-pixel rectangles with square corners
+  (`flat.tsx`). No font, no glyph, no sprite image (`useAsset` inside a `Sequence` is the construct
+  the design doc records as an intermittent `reverse` failure), no `border-radius`, no `box-shadow`,
+  no gradient, no `opacity < 1`, no fractional size or position, and no animation of a paint
+  property. Every one of those is a construct that has painted differently between two platforms or
+  between two paints of the same frame: antialiased edges are a coverage mask, fractional alpha is a
+  blend, and a glyph is the platform's rasteriser, not ours. `explainer-ci`, which does load two
+  placeholder images and the committed font, stays out of the gate.
+- **The probe's arrival and crossfade are discrete.** `useSlideReveal` never runs under `flat`:
+  `SlideSeries` swaps the reveal-only `Slide` for `FlatSlide` and the 0.4 s crossfade for a switch at
+  the overlap's first frame, where the incoming slide is painted alone and fully opaque. Nothing is
+  half-arrived, so no frame depends on the paint that came before it. The ramp and the blend belong
+  to the look and only the real compositions draw them.
+- **The probe keeps the structure, not the picture.** What it still exercises is the axis the gate
+  exists for: the `TransitionSeries` overlap, one `Sequence` per line in the sprite and subtitle
+  layers, the cue-driven slide shape (a bullets slide's item count and item widths are the cue's own
+  data) and the speaker alternation. Correctness of the byte comparison wins over fidelity here.
 - **A placeholder sprite is an opaque rectangle, so it covers the text under it.** Step 1's panels
   fill the 324×605 slot at 90 % (speaker) and 60 % (the other), where the real 立ち絵 has
   transparency: the title's tagline and the last item of a bullets slide therefore read through a
