@@ -30,6 +30,14 @@ await waitFor(() => childGone(encoder), 10_000, 'the encoder it killed to be gon
 
 Do not assert `childGone` synchronously for a child of a run that a signal ended.
 
+The same call answers the other direction. When a test means "the run is still there, so the signal
+sent next lands on it", read it with `childGone(pid)`, not `run.child.exitCode`: the code moves when
+the exit event is delivered, which can be after the exit itself, so a guard written on it passes for
+a run that is already gone and the signal lands on nothing (that is how the teardown-window case
+reported `expected { code: 0 } to equal { code: 130 }`). Do not sleep a guessed gap to land inside a
+window either: wait for a fact the run produces and stall the teardown so the window is wider than
+the work.
+
 ## Why Not Fixed
 
 `process.kill(pid, 0)` answers for any process in the process table, and a killed but unreaped

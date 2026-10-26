@@ -162,6 +162,10 @@ const waitFor = async (ready: () => boolean, timeoutMs: number, what: string): P
  * Whether the process is gone. A process that has been killed but not reaped yet still answers,
  * and a cover cannot wait for the reap (`src/lib/exit.ts`), so a caller that checks this right
  * after a signalled run ends polls for it instead of reading it once.
+ *
+ * It is also the only answer to "is the run still there", which is what a test means when it aims
+ * a signal at a window: `child.exitCode` moves when the exit event is delivered, and that can be
+ * after the exit itself, so reading it says nothing about whether the process still answers.
  */
 const childGone = (pid: number): boolean => {
   try {
@@ -170,6 +174,11 @@ const childGone = (pid: number): boolean => {
   } catch {
     return true;
   }
+};
+
+/** Asserts the run still answers, so a signal sent next lands on it rather than on nothing. */
+const expectStillRunning = (pid: number, when: string): void => {
+  if (childGone(pid)) throw new Error(`the run was already gone when ${when}`);
 };
 
 /**
@@ -216,8 +225,9 @@ const spawnRun = (
   args: readonly string[],
   env: Record<string, string>,
   cwd: string = projectRoot,
+  nodeArgs: readonly string[] = [],
 ): SpawnedRun => {
-  const child = spawn(process.execPath, [bin, ...args], {
+  const child = spawn(process.execPath, [...nodeArgs, bin, ...args], {
     cwd,
     env: { ...process.env, ...env },
   });
@@ -464,11 +474,12 @@ describe('motion-kit CLI', () => {
         ready: (): boolean =>
           existsSync(encoderPid) && readdirSync(outputRoot).some((name) => name.includes('.part')),
         said: 'render aborted; no output was produced',
+        // A process the cancellation killed: its death is a fact a moment after the run's own
+        // `exit`, not at it, so the caller polls for it below instead of reading it there.
+        killed: (): readonly number[] => [Number(readFileSync(encoderPid, 'utf8'))],
         left: (): void => {
           expect(existsSync(video)).toBe(false);
           expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).toEqual([]);
-          // A direct child of the run: the cancellation killed it and waited for it to go.
-          expect(childGone(Number(readFileSync(encoderPid, 'utf8')))).toBe(true);
         },
       },
       {
@@ -478,6 +489,7 @@ describe('motion-kit CLI', () => {
         ready: (): boolean =>
           existsSync(frames) && readdirSync(frames).some((name) => name.endsWith('.png')),
         said: `render aborted; any PNG frames already written remain in ${frames}; no manifest.json was written`,
+        killed: (): readonly number[] => [],
         left: (): void => {
           // The line says the written frames remain, so they had better be there.
           expect(
@@ -505,6 +517,14 @@ describe('motion-kit CLI', () => {
           expect(run.stdout()).toBe('');
           expect(abortedLines(run.stderr())).toEqual([route.said]);
           route.left();
+          // A direct child the cancellation killed: poll for its death within a bound far shorter
+          // than the 30 s the stand-in would live on its own, so a run that never killed it fails.
+          for (const pid of route.killed())
+            await waitFor(
+              () => childGone(pid),
+              10_000,
+              'the process the cancellation killed to be gone',
+            );
           // Nothing the run started outlives it: the encoder, the loading service and the browser.
           await waitFor(() => owned.every(childGone), 10_000, 'every child it started to be gone');
           expect(owned.filter((pid) => !childGone(pid))).toEqual([]);
@@ -653,11 +673,15 @@ process.on('newListener', (event) => {
         );
         const owned = childrenOf(run.child.pid ?? 0);
         expect(owned.length).toBeGreaterThan(0);
+        const pid = run.child.pid;
+        if (pid === undefined) throw new Error('the run has no pid');
         run.child.kill('SIGINT');
         await new Promise((resolve) => setTimeout(resolve, gap));
-        // The first signal's cleanup is still in flight, so the covers are all that can run.
-        expect(run.child.exitCode).toBe(null);
-        expect(run.child.signalCode).toBe(null);
+        // The first signal's cleanup is still in flight, so the covers are all that can run. The
+        // run is still there as an OS fact, not as `exitCode`, which only moves once its exit is
+        // delivered: a window this test aims a signal at is checked with the same call that says a
+        // child is gone.
+        expectStillRunning(pid, 'the second signal was sent');
         expect(readdirSync(outputRoot).filter((name) => name.includes('.part'))).not.toEqual([]);
         const secondSignalAt = currentDate().getTime();
         run.child.kill('SIGINT');
@@ -772,6 +796,11 @@ process.on('newListener', (event) => {
   // tearing the renderer down (a page-dispose deadline, the service-dispose race, a browser kill),
   // which outlasts the render itself. Reporting that teardown as a cancellation denied an output
   // the directory already held, on both routes.
+  //
+  // The window is made, not hoped for: the project stalls both halves of the teardown (the realm's
+  // cleanup and the service's close) so it spans close to a second after the commit, and the second
+  // signal waits for the run's own receipt of the first instead of for a slept gap. A run that ends
+  // its teardown early still fails loudly, and at the aliveness check rather than at the exit code.
   it('does not deny a committed output when a second signal lands in the finished run’s teardown', async () => {
     const root = mkdtempSync(join(tmpdir(), 'motion-kit-teardown-window-'));
     mkdirSync(join(root, 'node_modules'));
@@ -790,13 +819,47 @@ process.on('newListener', (event) => {
       join(root, 'vite.config.ts'),
       `export default {plugins:[{name:'stall-teardown',closeBundle(){return new Promise(()=>{});}}]};`,
     );
+    // The run's own receipt for a signal: a listener that lands behind the CLI's own (the order a
+    // library hooking the signal gets, `cli.ts` `watchSignals`) and records that the first signal
+    // was dispatched. The test waits for that receipt instead of sleeping a guessed gap, so the
+    // second signal is a real second dispatch rather than a delivery that may coalesce with the
+    // first and leave the covers unrun.
+    const firstSignalDispatched = join(root, 'first-signal-dispatched');
+    const preload = join(root, 'signal-receipt.mjs');
+    writeFileSync(
+      preload,
+      `import { writeFileSync } from 'node:fs';
+let registered = false;
+process.on('newListener', (event) => {
+  if (event !== 'SIGINT' || registered) return;
+  registered = true;
+  process.nextTick(() =>
+    process.on('SIGINT', () => {
+      writeFileSync(${JSON.stringify(firstSignalDispatched)}, 'dispatched');
+    }),
+  );
+});
+`,
+    );
+    // The other half of the window: a renderer whose teardown cannot answer. The Composition's
+    // unmount runs a cleanup that does not return, so the run spends the session's 500 ms
+    // page-dispose deadline inside the teardown as well. With the service race above that is
+    // ~770 ms measured between the committed artifact and the exit — three times what the stall
+    // alone bought — while still being teardown, after the commit and before the exit.
     writeFileSync(
       join(root, 'entry.tsx'),
-      `import { z } from 'zod';
+      `import { useEffect } from 'react';
+import { z } from 'zod';
 import { defineComposition, defineCompositions } from ${JSON.stringify(
         new URL('../core/composition/registry.ts', import.meta.url).pathname,
       )};
-const Scene = () => <div style={{ width: 32, height: 32, background: '#333333' }} />;
+const Scene = () => {
+  useEffect(() => () => {
+    const until = Date.now() + 1000;
+    while (Date.now() < until) {}
+  }, []);
+  return <div style={{ width: 32, height: 32, background: '#333333' }} />;
+};
 export const compositions = defineCompositions([
   defineComposition({ id: 'stalled', schema: z.object({}), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 6 }),
 ]);`,
@@ -839,24 +902,33 @@ export const compositions = defineCompositions([
     ];
     try {
       for (const route of routes) {
+        rmSync(firstSignalDispatched, { force: true });
         const run = spawnRun(
           ['render', 'entry.tsx', '--composition', 'stalled', '--out', route.target, '--json'],
           {},
           root,
+          ['--import', preload],
         );
         try {
           await waitFor(route.ready, 120_000, route.what);
-          const owned = childrenOf(run.child.pid ?? 0);
+          const pid = run.child.pid;
+          if (pid === undefined) throw new Error('the run has no pid');
+          // The artifact is committed and the run is still in its teardown, not before the commit:
+          // both are OS/filesystem facts, so the signals below land inside the window rather than
+          // after it. `child.exitCode` would say nothing here — it moves on delivery of the exit,
+          // which is exactly the gap this case used to lose its second signal in.
+          expectStillRunning(pid, 'the first signal was sent');
+          const owned = childrenOf(pid);
           expect(owned.length).toBeGreaterThan(0);
-          // The artifact is committed and the run is in its teardown, not before the commit.
-          expect(run.child.exitCode).toBe(null);
-          expect(run.child.signalCode).toBe(null);
           run.child.kill('SIGINT');
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          // Still alive after the gap, so both signals really landed inside the teardown: without
-          // this check the case could silently turn into a signal pair sent after the exit.
-          expect(run.child.exitCode).toBe(null);
-          expect(run.child.signalCode).toBe(null);
+          // The first signal was dispatched before the second is sent, so the second one is not a
+          // delivery coalescing with an unhandled first: no slept gap, and the run is still there.
+          await waitFor(
+            () => existsSync(firstSignalDispatched),
+            10_000,
+            'the run to take the first signal',
+          );
+          expectStillRunning(pid, 'the second signal was sent');
           run.child.kill('SIGINT');
 
           const ended = await run.exit;
