@@ -47,7 +47,7 @@ High contrast on a near-black ground (`#07080c`), one warm accent (`#ff5a3c`), o
   from the centre. A crossfade lifts the outgoing word away on a decelerating curve while the incoming
   word rises into the same place on an accelerating one, and their opacities (`(1 - p)³` and `p³`) sum
   to at most 1 in every frame: the handoff dims the type for a frame or two rather than double-exposing
-  two words on top of each other. The overlap is a tenth of a scene (7 frames, 0.23 s at the full
+  two words on top of each other. The overlap is a tenth of a scene (9 frames, 0.30 s at the full
   teaser's size), short enough that the swap reads as a snap instead of a dissolve.
 - The **backdrop** has something moving in every frame, though not all of it all the time: a soft
   accent glow drifts on springs whose targets change mid-flight every 1.45 s — the last one at 15.95 s
@@ -57,7 +57,7 @@ High contrast on a near-black ground (`#07080c`), one warm accent (`#ff5a3c`), o
   frame: after ~16 s the glow, the hairlines and the bars have all settled, and the progress rule is
   the element that is still moving.
 - The **last second** holds: the final word is the product name, and nothing in the type moves once it
-  has settled (`ZEPHYR` is on screen for the last ~2.9 s, ~2.4 s of them still).
+  has settled (`ZEPHYR` is on screen for the last ~3.2 s, ~2.4 s of them still).
 
 Each word is on screen alone except during a crossfade, when two are visible at once, so the video
 never shows more than two words at a time.

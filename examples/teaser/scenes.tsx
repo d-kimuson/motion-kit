@@ -46,7 +46,7 @@ export type WordPlan = {
 
 export const planWords = (totalFrames: number, wordCount: number): WordPlan => {
   const count = Math.max(1, wordCount);
-  // A crossfade is a tenth of a scene on average (7 frames, 0.23 s, at the full teaser's size):
+  // A crossfade is a tenth of a scene on average (9 frames, 0.30 s, at the full teaser's size):
   // short enough that the handoff reads as a snap rather than a dissolve, long enough for the
   // outgoing word's lift to register. At least 2 frames, so a short Composition still shows a word.
   const overlapFrames = Math.max(2, Math.min(12, Math.round(totalFrames / (count * 10))));
