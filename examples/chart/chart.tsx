@@ -65,10 +65,30 @@ const lastPointOf = (series: readonly ChartSeries[]): ChartPoint | undefined =>
  * `useTimeline().width/height`, and the axes come from the data, so the same tree fills 1920x1080,
  * 960x540 and 480x270 the same way and draws a 1995-2024 series and a 2005-2024 series on the same
  * layout with a different shape.
+ *
+ * `frame` and `durationInFrames` are optional overrides, and the explainer's chart slide is why they
+ * exist: a slide is 22 seconds of a 222-second Composition, so the chart has to time its draw-on and
+ * its count-up to the slide it is drawn in rather than to the whole video. The chart example itself
+ * passes neither, so its three Compositions read the Composition's own frame and length as before.
  */
-export const ChartScene = ({ title, unit, source, series }: ChartProps) => {
-  const frame = useFrame();
-  const { width, height, frameRate, durationInFrames } = useTimeline();
+export type ChartSceneProps = ChartProps & {
+  readonly frame?: number;
+  readonly durationInFrames?: number;
+};
+
+export const ChartScene = ({
+  title,
+  unit,
+  source,
+  series,
+  frame: frameOverride,
+  durationInFrames: durationOverride,
+}: ChartSceneProps) => {
+  const compositionFrame = useFrame();
+  const timeline = useTimeline();
+  const { width, height, frameRate } = timeline;
+  const frame = frameOverride ?? compositionFrame;
+  const durationInFrames = durationOverride ?? timeline.durationInFrames;
   const fps = Number(frameRate.numerator) / Number(frameRate.denominator);
   const plan = planChart(durationInFrames, fps);
   const values = valueAxis(series);

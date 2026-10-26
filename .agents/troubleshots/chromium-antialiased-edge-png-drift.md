@@ -16,7 +16,25 @@ around a payload change: **8 pixels** differ, on the arc of one marker that sits
 most 8/255. Deleting the `<circle>` markers makes all seven modes pass; the rest of the scene (text,
 rects, `crispEdges` polyline) is byte-stable.
 
+The drift is not only history-dependent, it is **platform-dependent**: the same suite passes on macOS
+arm64 and fails on the Linux runner, and each attempt to keep one more "flat" construct in
+`explainer-probe` was red there again — a rounded, fractionally transparent corner at frame 23 in
+`reverse` (ten pixels of the arc, at most 9/255 apart), then the same frame in the next run with a slide
+of glyphs and a 96 %-opaque band behind them:
+
+```text
+explainer/reverse: frame 23 PNG bytes differ from the sequential 0..N capture (30399 differing bytes, 41452 vs 41448)
+```
+
 ## Workaround
+
+A frame that must be byte-identical across platforms may draw only **solid, fully opaque,
+integer-pixel rectangles with square corners**: no `border-radius`, no `box-shadow`, no gradient, no
+`opacity < 1`, no fractional size or position, no text glyph, no `useAsset` media, and no transition
+that changes a paint property — a reveal or a crossfade becomes a discrete switch at a frame boundary,
+and only whole-pixel positions may animate. `examples/explainer/flat.tsx` is the primitive the probe
+draws with; it rounds, so whole pixels are the rule rather than a caller's habit. Antialiased edges are
+a coverage mask, a fractional alpha is a blend, and a glyph is the platform's rasteriser, not ours.
 
 Do not hand a curved or fractional edge to the rasteriser in a frame that must be byte-identical.
 `examples/chart` draws with whole-pixel coordinates, whole-pixel font sizes and **axis-aligned

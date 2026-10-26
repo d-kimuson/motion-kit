@@ -9,6 +9,7 @@ import { defineDeterminismSuite, runDeterminismSuite } from './suite.ts';
 // Each row renders the example's `<name>-probe` Composition (480x270, 30 frames) at exact PNG bytes.
 const probes = [
   { name: 'teaser', compositionId: 'teaser-probe' },
+  { name: 'explainer', compositionId: 'explainer-probe' },
   { name: 'chart', compositionId: 'chart-probe' },
   { name: 'slideshow', compositionId: 'slideshow-probe' },
 ] as const;
