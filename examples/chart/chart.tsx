@@ -103,6 +103,9 @@ export const ChartScene = ({ title, unit, source, series }: ChartProps) => {
   // pixels exactly: no antialiased half-covered column is left for a second paint to disagree about.
   const axisWidth = Math.max(2, 2 * px(height * 0.001));
   const gridWidth = Math.max(2, 2 * px(height * 0.0014));
+  // The marker's outline is the same two pixels as the axis, so an open square reads as a mark
+  // rather than a blob once the square is 14 px: a wide stroke leaves no ground inside it.
+  const markerStroke = Math.max(2, 2 * px(height * 0.0011));
 
   const finalPoint = lastPointOf(series);
   const countUpSpan = Math.max(1, plan.countUpEnd - plan.countUpStart);
@@ -241,19 +244,23 @@ export const ChartScene = ({ title, unit, source, series }: ChartProps) => {
                 shapeRendering="crispEdges"
               />
               {item.points.map((point, pointIndex) => {
-                // A marker pops in as the draw reaches its year: the radius and the opacity carry
-                // the arrival, and a marker the draw has not reached is not rendered at all.
+                // A marker pops in as the draw reaches its year: the size and the opacity carry the
+                // arrival, and a marker the draw has not reached is not rendered at all. The mark is
+                // a square for the same reason the axes are rectangles: a rect whose edges land on
+                // whole pixels is painted once, with no antialiased coverage to disagree about.
                 const revealed = clamp01(head - pointIndex + 1);
                 if (revealed <= 0) return null;
+                const half = Math.max(1, px(markerRadius * (0.45 + 0.55 * easeOutCubic(revealed))));
                 return (
-                  <circle
+                  <rect
                     key={`point-${item.label}-${String(point.year)}`}
-                    cx={px(xOf(point.year))}
-                    cy={px(yOf(point.value))}
-                    r={markerRadius * (0.45 + 0.55 * easeOutCubic(revealed))}
+                    x={px(xOf(point.year)) - half}
+                    y={px(yOf(point.value)) - half}
+                    width={2 * half}
+                    height={2 * half}
                     fill={GROUND}
                     stroke={seriesColor(index)}
-                    strokeWidth={Math.max(1, lineWidth * 0.75)}
+                    strokeWidth={markerStroke}
                     opacity={clamp01(revealed * 1.6)}
                   />
                 );
