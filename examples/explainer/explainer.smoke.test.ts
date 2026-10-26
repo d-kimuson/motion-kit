@@ -284,6 +284,13 @@ describe('explainer narration fit', () => {
     const padded = join(dir, 'padded.wav');
     expect(fitClip(source, padded, 12)).toBe(0.8);
     expect(clipSeconds(padded)).toBe(12);
+    // The tempo is what puts the speech where it is, and the length alone does not hold it: `apad -t`
+    // makes a 12 s file whatever the speech did. At the 0.8 clamp the 5 s tone lasts 6.25 s, so the
+    // window just inside that mark carries signal and the window after it is the pad. Drop the
+    // `atempo` step and the tone stops at 5 s: the first window goes silent while `clipSeconds` stays
+    // 12, which is exactly the mutation this assertion exists to catch.
+    expect(rmsOf(pcmWindow(padded, ['-ss', '6.1', '-t', '0.15']))).toBeGreaterThan(0.01);
+    expect(rmsOf(pcmWindow(padded, ['-ss', '6.4', '-t', '0.2']))).toBeLessThan(0.001);
     // 5 s into a 4 s line: the clamp is 1.25, so `-t` is what lands the file on the slot.
     const cut = join(dir, 'cut.wav');
     expect(fitClip(source, cut, 4)).toBe(1.25);
