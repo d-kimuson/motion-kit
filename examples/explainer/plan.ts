@@ -49,6 +49,15 @@ export type Storyboard = {
 /** Exactly `frames` per `seconds`: both numbers come from the script, so nothing ever rounds. */
 const toFrames = (seconds: number, fps: number): number => Math.round(seconds * fps);
 
+/**
+ * Where the outgoing slide's own clock stands when the crossfade hands it to the overlay: the frames
+ * its own scene drew (`contentFrames`), plus the overlap already elapsed. At the overlap's first frame
+ * this is one frame past the last frame that scene drew, so the slide keeps animating instead of
+ * jumping — `slides/shared.ts`'s "nothing jumps at either edge of a crossfade".
+ */
+export const crossFadeTime = (slide: PlannedSlide, fps: number, elapsedSeconds: number): number =>
+  slide.contentFrames / fps + elapsedSeconds;
+
 const placeLines = (lines: readonly ScriptLine[], fps: number): readonly PlannedLine[] => {
   const starts = lineStartTimes(lines);
   return lines.map((line, index) => ({
@@ -112,12 +121,17 @@ export const shortStoryboard = (
   let slideStart = 0;
   let durationInFrames = 0;
   spec.forEach((item, index) => {
+    // The scene declares its dialogue plus its outgoing overlap, and `contentFrames` is where that
+    // dialogue stops — the same rule the full storyboard follows, so a short storyboard crossfades
+    // without a jump: the overlay hands the outgoing slide `contentFrames + elapsed`, one frame past
+    // the last frame its own scene drew. Only the last slide draws through its whole span (the tail).
+    const last = index === spec.length - 1;
     slides.push({
       index,
       cue: item.cue,
       startFrame: slideStart,
       frames: item.frames,
-      contentFrames: item.frames,
+      contentFrames: last ? item.frames : item.frames - overlapFrames,
     });
     let at = slideStart;
     for (const placed of item.lines) {

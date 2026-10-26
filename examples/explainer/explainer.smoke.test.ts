@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { compositions as explainerCompositions, storyboard } from './entry.tsx';
 import { fitClip, fitTempo, generatePlaceholders } from './fetch-assets.ts';
 import { mouthAt } from './look.ts';
-import { ciStoryboard } from './plan.ts';
+import { ciStoryboard, crossFadeTime } from './plan.ts';
 import { compositions as probeCompositions } from './probe.tsx';
 import { lineStartTimes, slidePlan } from './script.schema.ts';
 import { script, totalSeconds } from './script.ts';
@@ -165,6 +165,36 @@ describe('explainer example', () => {
       'rest',
       'rest',
     ]);
+  });
+
+  it('hands the CI crossfade a slide that keeps its own clock, instead of jumping 13 frames', () => {
+    // `contentFrames` is where the outgoing scene stops drawing, and the overlay hands the slide
+    // `contentFrames + elapsed` from then on. The `まとめ` slide is drawn by its own scene for frames
+    // 0–23, so the handoff at frame 24 must be one frame on (0.800 s, not 1.200 s): a jump there
+    // advances the bullets slide's local time by 0.43 s in a single frame and item 2's `reveal(0.87)`
+    // snaps from 0 to 1 instead of ramping, which `slides/shared.ts` rules out.
+    const ci = ciStoryboard();
+    const outgoing = ci.slides[0];
+    expect(outgoing).toBeDefined();
+    if (outgoing === undefined) return;
+    const lastDrawnFrame = outgoing.frames - ci.overlapFrames - 1;
+    expect(outgoing.contentFrames).toBe(outgoing.frames - ci.overlapFrames);
+    // The overlay's first frame (nothing elapsed yet) continues one frame past that frame.
+    expect(crossFadeTime(outgoing, ci.fps, 0) * ci.fps).toBeCloseTo(lastDrawnFrame + 1, 6);
+    // And the clock runs at 1x through the overlap, ending one frame inside the scene's own span.
+    const lastOverlapFrame = (ci.overlapFrames - 1) / ci.fps;
+    expect(crossFadeTime(outgoing, ci.fps, lastOverlapFrame) * ci.fps).toBeCloseTo(
+      outgoing.frames - 1,
+      6,
+    );
+    // The full storyboard obeys the same rule, so the two storyboards cannot drift apart: every slide
+    // that hands over stops drawing one overlap short, and only the last draws its held tail through.
+    for (const board of [storyboard, ci]) {
+      board.slides.forEach((slide, index) => {
+        const last = index === board.slides.length - 1;
+        expect(slide.contentFrames).toBe(last ? slide.frames : slide.frames - board.overlapFrames);
+      });
+    }
   });
 
   it('renders explainer-ci through the CLI as a 60-frame 960x540 MP4 that decodes clean', async () => {

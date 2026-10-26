@@ -20,7 +20,7 @@ import {
 import { type ReactNode } from 'react';
 
 import { easeInCubic, easeOutCubic, framesToTime } from '../look.ts';
-import { type Storyboard } from '../plan.ts';
+import { crossFadeTime, type Storyboard } from '../plan.ts';
 import { FlatSlide } from './FlatSlide.tsx';
 import { useFlat } from './shared.ts';
 import { Slide } from './Slide.tsx';
@@ -48,7 +48,8 @@ const SlideScene = ({ storyboard, index }: BoardIndex) => {
  * slides at full opacity — the acceptance look's requirement.
  *
  * The outgoing slide keeps animating: inside the overlay its own scene would be at `contentFrames`
- * plus the elapsed overlap, so it is handed exactly that time and its entrance does not replay.
+ * plus the elapsed overlap, so it is handed exactly that time (`crossFadeTime`) and its entrance does
+ * not replay. `contentFrames` is where the outgoing scene stopped drawing, in both storyboards.
  *
  * Under `flat` the handoff is a discrete switch instead: the overlay draws the incoming slide alone,
  * fully opaque, from the overlap's first frame. A probe may not blend two layers at fractional
@@ -63,7 +64,7 @@ const SlideCrossFade = ({ storyboard, index }: BoardIndex) => {
   const incoming = storyboard.slides[index + 1];
   if (outgoing === undefined || incoming === undefined) return null;
   if (flat) return <FlatSlide slide={incoming} />;
-  const outgoingTime = outgoing.contentFrames / storyboard.fps + elapsed;
+  const outgoingTime = crossFadeTime(outgoing, storyboard.fps, elapsed);
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', inset: 0, opacity: 1 - easeOutCubic(progress) }}>
