@@ -22,8 +22,17 @@ export default defineConfig({
         test: {
           name: 'unit',
           isolate: false,
-          include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', '.agents/**/*.test.ts'],
+          // A reference example's data is unit-tested next to it (the explainer's script and its
+          // timing helpers); only its `*.smoke.test.ts` renders, and that belongs to the `cli`
+          // project below.
+          include: [
+            'src/**/*.test.{ts,tsx}',
+            'scripts/**/*.test.ts',
+            '.agents/**/*.test.ts',
+            'examples/**/*.test.ts',
+          ],
           exclude: [
+            'examples/**/*.smoke.test.ts',
             'src/**/*.browser.test.tsx',
             'src/render/**/*.test.ts',
             'src/cli/**/*.test.ts',
