@@ -24,8 +24,6 @@ import { type PlannedLine, type Storyboard } from './plan.ts';
 
 /** The non-speaker is dimmed to 60%: the design doc's speaker highlight. */
 const dimOpacity = 0.6;
-/** One radius for every flat surface, so the probe's tree has no size-dependent rounding. */
-const flatRadius = 12;
 
 type SpriteProps = {
   readonly character: Character;
@@ -61,6 +59,13 @@ const SpriteFrame = ({ character, expression, mouth, assets, dim }: SpriteProps)
  * A slot at one of the lower corners. `flat` draws a solid panel instead of the image: the probe
  * replaces the media step of this layer, because an image `useAsset` inside a `Sequence` is the
  * construct the design doc records as an intermittent determinism failure.
+ *
+ * The panel is an axis-aligned rectangle with square corners on purpose. A rounded corner is the one
+ * antialiased edge this layer would otherwise have, and a fractionally transparent rounded corner
+ * rasterises differently on the first paint after a mount than on the paints that follow: the gate
+ * caught it at `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at most 9/255
+ * apart), which is the first frame of the sprite layer on the way down from 29. A corner with no
+ * antialiasing has no first-paint history to differ from.
  */
 const SpriteSlot = (props: SpriteProps & { readonly flat: boolean }) => {
   if (props.flat)
@@ -71,7 +76,6 @@ const SpriteSlot = (props: SpriteProps & { readonly flat: boolean }) => {
           height: '100%',
           background: characterColor[props.character],
           opacity: props.dim ? dimOpacity : 0.9,
-          borderRadius: flatRadius,
         }}
       />
     );
