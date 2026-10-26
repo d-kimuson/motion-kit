@@ -102,9 +102,11 @@ an unknown id is `cli.composition-not-found`, and `--props` other than a JSON ob
 ## Props
 
 One optional prop, shared with the explainer: `{"assets":"placeholder"}` (the default) reads
-`assets.local/`, `{"assets":"final"}` reads `assets/`. Nothing committed is under `assets/` today, so
-the `final` set is what a local QA run would place there once a CC0 photo is chosen. The switch is not
-a licence mechanism: it never moves a third-party file into the tree.
+`assets.local/`, `{"assets":"final"}` reads `assets/`. All three Compositions take it, `slideshow-ci`
+included — CI renders the default, so it never needs `assets/`, and `final` fails there with
+`asset.load-failed` rather than silently rendering the placeholders. Nothing committed is under
+`assets/` today, so the `final` set is what a local QA run would place there once a CC0 photo is
+chosen. The switch is not a licence mechanism: it never moves a third-party file into the tree.
 
 ## The two CI gates
 

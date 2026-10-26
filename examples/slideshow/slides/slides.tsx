@@ -347,5 +347,10 @@ export const SlideshowScene = ({ assetSet, slides: list, surface }: SlideshowSce
   );
 };
 
-/** The `-ci` Composition's scene: the first three slides through the same tree. */
-export const SlideshowCiScene = () => <SlideshowScene assetSet="placeholder" slides={ciSlides} />;
+/** The `-ci` Composition's scene: the first three slides through the same tree. It takes the entry's
+ *  shared `assets` prop, so the switch is not a silent no-op here either: the default `placeholder`
+ *  is what CI renders, and `final` fails through `asset.load-failed` exactly as it does on
+ *  `slideshow` while nothing is committed under `assets/`. */
+export const SlideshowCiScene = ({ assets }: Readonly<{ readonly assets: AssetSet }>) => (
+  <SlideshowScene assetSet={assets} slides={ciSlides} />
+);
