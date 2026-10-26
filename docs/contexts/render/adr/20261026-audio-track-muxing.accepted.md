@@ -32,7 +32,7 @@ type AudioTrack = {
 };
 ```
 
-Times are **frame counts**, not seconds: the Time Module converts each one to seconds exactly once, inside the encoder (`frameToTime` + `toSeconds`), so audio and frames cannot disagree about the timeline. An invalid declaration (`endInFrames <= startInFrames`, a negative or non-integer frame, a non-positive volume) is a declaration failure at `defineComposition`, reported as `render.page-error` like invalid width/height/FPS — not a silent clamp.
+Times are **frame counts**, not seconds: the Time Module converts each one to seconds exactly once, inside the encoder (`frameToTime` + `toSeconds`), so audio and frames cannot disagree about the timeline. An invalid declaration (`endInFrames <= startInFrames`, a negative or non-integer frame, a negative or non-finite volume) is a declaration failure at `defineComposition`, reported as `render.page-error` like invalid width/height/FPS — not a silent clamp. A volume of exactly `0` is valid and renders that clip silent.
 
 **Path resolution.** The encoder resolves `src` against the request's `projectRoot` (the CLI's working directory) and treats absolute paths as given. Resolution happens in Node at encode time; nothing about a path is interpreted in the page.
 
