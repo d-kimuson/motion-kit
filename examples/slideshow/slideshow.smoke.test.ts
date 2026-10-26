@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { compositions as slideshowCompositions } from './entry.tsx';
 import { generatePlaceholders } from './fetch-assets.ts';
 import { compositions as probeCompositions } from './probe.tsx';
+import { layoutFor } from './slides/plan.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -66,6 +67,10 @@ const ffprobe = (file: string, entries: string): string =>
     'default=noprint_wrappers=1',
     file,
   ]).toString();
+
+// Set by the render test below, so the luma test cannot analyse an MP4 left in `out/` by an earlier
+// run or another branch: without that render in this process it fails instead of passing vacuously.
+let renderedAt: number | undefined;
 
 describe('slideshow example', () => {
   // The smoke test is its own setup: CI has no committed media and no network, so the FFmpeg
@@ -138,6 +143,7 @@ describe('slideshow example', () => {
     });
     expect(envelope.data?.durationSeconds).toBeCloseTo(2, 5);
     expect(statSync(output).size).toBeGreaterThan(0);
+    renderedAt = statSync(output).mtimeMs;
 
     const probed = ffprobe(
       output,
@@ -166,9 +172,14 @@ describe('slideshow example', () => {
     // `slideshow-ci` render fell from 108 to 25 in one frame — and every assertion above still passed.
     // Here nothing but pictures is on screen for the whole 60 frames, so a dissolve can only move the
     // luma by a few points per frame; the bug moves it by the whole range. It reads the MP4 the test
-    // above rendered, in the same file and therefore in the same order.
+    // above rendered in this same process, and the two assertions below are what make that true rather
+    // than assumed: a stale file from an earlier run would otherwise be compared vacuously.
     const output = join(outDirectory, 'slideshow-ci.mp4');
-    expect(statSync(output).size).toBeGreaterThan(0);
+    if (renderedAt === undefined)
+      throw new Error(
+        'the render test above did not run, so the MP4 in out/ is not the one under test',
+      );
+    expect(statSync(output).mtimeMs).toBe(renderedAt);
     const stats = join(outDirectory, 'slideshow-ci-luma.txt');
     execFileSync(
       'ffmpeg',
@@ -203,10 +214,27 @@ describe('slideshow example', () => {
     expect(Math.max(...steps)).toBeLessThan((brightest - darkest) * 0.25);
   });
 
+  it('takes its geometry from the frame, so 16:9 is not the 9:16 layout in a wider box', () => {
+    // The still below proves the descriptor, this file's dimensions and the CLI's frame agree. It
+    // cannot prove `layoutFor` reads its arguments, because all of those come from the Composition.
+    // This is the layout's own contract instead: the type scale follows the shorter side, and the safe
+    // area and the lower third follow the frame the Composition declares.
+    const vertical = layoutFor(1080, 1920);
+    const landscape = layoutFor(1920, 1080);
+    expect(vertical.orientation).toBe('vertical');
+    expect(landscape.orientation).toBe('landscape');
+    expect(landscape.captionSize).toBe(vertical.captionSize);
+    expect(landscape.inset).toBeGreaterThan(vertical.inset);
+    expect(landscape.captionBottom).toBeLessThan(vertical.captionBottom);
+    expect(landscape.captionWidth).toBeGreaterThan(vertical.captionWidth);
+    expect(landscape).not.toEqual(vertical);
+  });
+
   it('renders one slideshow-landscape still at 1920x1080', async () => {
     // The landscape variant is checked by its descriptor above plus one still here, never by a full
-    // render: its job is to prove the components read `useTimeline().width/height`, and a still from
-    // the middle of a slide is enough to see the caption inside the wider safe area. Frame 400 is
+    // render. What the still adds over the descriptor is that the 16:9 tree renders to the end at that
+    // size and decodes; it does not measure the layout (the assertion above holds that end), and that
+    // the caption sits inside the wider safe area is the human look the QA Check takes. Frame 400 is
     // inside the fourth slide and outside every crossfade, so the still shows one picture at full
     // opacity.
     const output = join(outDirectory, 'slideshow-landscape-400.png');
