@@ -112,9 +112,19 @@ const DEFAULT_LOOK: PhotoLook = {
 const hexColour = (colour: string): string => `0x${colour.replace('#', '')}`;
 
 /**
+ * The one seed every random filter in this file is given. `gradients` draws its colour-stop positions,
+ * `noise` draws its grain and `anoisesrc` draws the tone bed, and all three default to `-1`, which
+ * FFmpeg reads as "seed from the clock": without a fixed seed two runs write different files, so a
+ * re-run would not reproduce the set CI renders. With this seed the whole set is byte-identical run
+ * to run, which is what makes `assets.local/` a function of this code rather than of the clock.
+ */
+const PLACEHOLDER_SEED = 0;
+
+/**
  * One FFmpeg `gradients` source: a linear ramp down the frame for the backdrop, a radial one for the
  * light, a radial white-to-grey one for the vignette. Every source is a still (`rate=1`, `duration=1`,
- * `speed=0`), so the frame that lands on disk is a pure function of the colours and the geometry.
+ * `speed=0`) with a pinned `seed`, so the frame that lands on disk is a pure function of the colours,
+ * the geometry and `PLACEHOLDER_SEED`.
  */
 const gradientSource = (
   options: Readonly<{
@@ -129,6 +139,7 @@ const gradientSource = (
     'rate=1',
     'duration=1',
     'speed=0',
+    `seed=${String(PLACEHOLDER_SEED)}`,
     `type=${options.type}`,
     `nb_colors=${String(options.colours.length)}`,
     ...options.colours.map((colour, index) => `c${String(index)}=${hexColour(colour)}`),
@@ -153,7 +164,7 @@ const PHOTO_GRAPH = [
   '[1:v]format=rgb24[light]',
   '[2:v]format=rgb24[vignette]',
   '[sky][light]blend=all_mode=softlight:all_opacity=0.5[lit]',
-  '[lit][vignette]blend=all_mode=multiply:all_opacity=0.55,noise=alls=8:allf=t+u,gblur=sigma=1.6,format=rgb24[photo]',
+  `[lit][vignette]blend=all_mode=multiply:all_opacity=0.55,noise=alls=8:allf=t+u:all_seed=${String(PLACEHOLDER_SEED)},gblur=sigma=1.6,format=rgb24[photo]`,
 ].join(';');
 
 const photoArgs = (slide: Slide, out: string): string[] => {
@@ -221,7 +232,7 @@ const musicArgs = (out: string): string[] => {
     '-f',
     'lavfi',
     '-i',
-    `anoisesrc=colour=pink:amplitude=0.03:sample_rate=48000:duration=${seconds}`,
+    `anoisesrc=colour=pink:amplitude=0.03:sample_rate=48000:duration=${seconds}:seed=${String(PLACEHOLDER_SEED)}`,
     '-filter_complex',
     `[0:a]volume=0.12[low];[1:a]lowpass=f=900,volume=0.5[air];[low][air]amix=inputs=2:duration=shortest,afade=t=in:st=0:d=1.5,afade=t=out:st=${fadeOut}:d=1.5[bed]`,
     '-map',

@@ -139,9 +139,11 @@ not reproduced since ([CI policy](../../docs/design-doc/20261025-reference-examp
 - **Every photo is an FFmpeg placeholder.** `fetch-assets.ts` writes eight abstract stills — a
   `gradients` sky-to-ground ramp, a radial light source, a vignette and film grain, one palette per
   slide — so each frame reads as a photograph the Ken Burns can move over, but no slide has a real
-  subject. Replacing them is a licensing decision
-  ([asset ADR](../../docs/decisions/20261026-example-asset-licensing.accepted.md)), not a code change:
-  the slide list already holds the file names.
+  subject. Every random filter is given the one `PLACEHOLDER_SEED`, because `gradients`, `noise` and
+  `anoisesrc` default to seeding from the clock: with the seed pinned, a re-run writes byte-identical
+  files, so the stills CI generates are the stills a clone generates. Replacing them is a licensing
+  decision ([asset ADR](../../docs/decisions/20261026-example-asset-licensing.accepted.md)), not a code
+  change: the slide list already holds the file names.
 - **No audio.** The tone bed is generated but no Composition declares audio; muxing is TASK-171. The bed
   is 30 seconds — the full `slideshow`'s length — so it will end with the last slide rather than being
   cut off.
