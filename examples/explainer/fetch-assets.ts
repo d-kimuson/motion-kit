@@ -17,7 +17,8 @@
 // Run it from the repository root: the paths below are relative to it.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   CHARACTERS,
@@ -35,7 +36,10 @@ const voiceDir = join(root, 'voice');
 const toneBed = join(root, 'music', 'tone.wav');
 const spriteSourceDir = join(root, 'sprite-source');
 
-const log = (message: string) => console.log(`fetch-assets: ${message}`);
+/** Where a step reports what it did: the CLI prints, and the smoke test collects. */
+export type Report = (message: string) => void;
+
+const log: Report = (message) => console.log(`fetch-assets: ${message}`);
 
 /** FFmpeg is a hard requirement of the render path, so a missing binary is a failure, not a skip. */
 const ffmpeg = (args: readonly string[]): void => {
@@ -77,7 +81,7 @@ const expressionShade: Record<Expression, number> = {
 /** 540x900, the aspect the sprite layer draws: the placeholders must not distort the layout. */
 const spriteSize = '540x900';
 
-const placeholderSprites = (): void => {
+const placeholderSprites = (report: Report): void => {
   const dir = spritesDir('placeholder');
   let written = 0;
   for (const character of CHARACTERS) {
@@ -100,14 +104,14 @@ const placeholderSprites = (): void => {
       }
     }
   }
-  log(`step 1: ${String(written)} placeholder sprites in ${dir}`);
+  report(`step 1: ${String(written)} placeholder sprites in ${dir}`);
 };
 
 /**
  * The tone bed. It is generated so a reader can hear the pipeline, but the explainer declares no
  * music track: the placeholder render stays silent and the narrated one is voice only.
  */
-const generateToneBed = (): void => {
+const generateToneBed = (report: Report): void => {
   mkdirSync(join(root, 'music'), { recursive: true });
   ffmpeg([
     '-f',
@@ -120,7 +124,7 @@ const generateToneBed = (): void => {
     '2',
     toneBed,
   ]);
-  log(`step 1: tone bed ${toneBed}`);
+  report(`step 1: tone bed ${toneBed}`);
 };
 
 /**
@@ -128,14 +132,14 @@ const generateToneBed = (): void => {
  * data, so they cannot switch on `--props`: a placeholder render without these files would fail at
  * `asset.load-failed`, and with them it is silent digital silence.
  */
-const placeholderVoice = (): void => {
+const placeholderVoice = (report: Report): void => {
   mkdirSync(voiceDir, { recursive: true });
   for (const line of script.lines) {
     const target = join(voiceDir, `${line.id}.wav`);
     if (existsSync(target) && !isSilentPlaceholder(target)) continue; // step 2's clip: keep it
     ffmpeg(['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', '0.4', target]);
   }
-  log(`step 1: ${String(script.lines.length)} silent voice placeholders in ${voiceDir}`);
+  report(`step 1: ${String(script.lines.length)} silent voice placeholders in ${voiceDir}`);
 };
 
 /** A placeholder is 0.4 s of silence; a real clip is longer or louder, so step 2 overwrites it. */
@@ -243,16 +247,28 @@ const fetchVoice = async (): Promise<void> => {
   );
 };
 
-const main = async (): Promise<void> => {
-  const placeholdersOnly = process.argv.includes('--placeholders');
+/**
+ * Step 1 as one call: the sprites, the tone bed and the silent voice placeholders. It needs FFmpeg
+ * and nothing else, so the smoke test runs it as its own setup — CI has no committed media, no
+ * VOICEVOX engine and no network (docs/design-doc/20261025-reference-examples.md, "Assets and
+ * provenance").
+ */
+export const generatePlaceholders = (report: Report = log): void => {
   mkdirSync(root, { recursive: true });
-  placeholderSprites();
-  generateToneBed();
-  placeholderVoice();
-  log('step 1 done');
-  if (placeholdersOnly) return;
+  placeholderSprites(report);
+  generateToneBed(report);
+  placeholderVoice(report);
+  report('step 1 done');
+};
+
+const main = async (): Promise<void> => {
+  generatePlaceholders();
+  if (process.argv.includes('--placeholders')) return;
   fetchSprites();
   await fetchVoice();
 };
 
-await main();
+// Importing this file (the smoke test does) runs nothing: only `node examples/explainer/fetch-assets.ts`
+// performs the setup.
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+  await main();
