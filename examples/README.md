@@ -49,6 +49,11 @@ pnpm exec playwright install chromium        # once; the renderer launches Chrom
 mkdir -p out                                 # gitignored, so a clean checkout has no out/
 
 node dist/cli.js render examples/teaser/entry.tsx --composition teaser --out out/teaser.mp4 --json
+
+# An example with media: generate the placeholders first, then render
+node examples/slideshow/fetch-assets.ts
+node dist/cli.js render examples/slideshow/entry.tsx --composition slideshow --out out/slideshow.mp4 --json
+node dist/cli.js render examples/slideshow/entry.tsx --composition slideshow-landscape --out out/slideshow-landscape.mp4 --json
 ```
 
 `--out` picks the format from the extension: `.mp4` encodes H.264 with the system FFmpeg 6.0+ and
@@ -57,21 +62,23 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
 
 ## What is a placeholder
 
-- **`teaser` (TASK-206) and `chart` (TASK-207) are the examples implemented so far.** `explainer` and
-  `slideshow` follow on this scaffolding; their rows above are the targets their entries must hit.
+- **`teaser` (TASK-206), `chart` (TASK-207) and `slideshow` (TASK-208) are the examples implemented
+  so far.** `explainer` follows on this scaffolding; its row above is the target its entry must hit.
 - **Motion is hand-rolled arithmetic.** `/motion` (`interpolate`, `easing`, `spring`, `Stagger`) and
   `/theme` are Phase 2 and have no public subpath yet, so every example computes its animation from
   `useTime()`/`useSequence()` with plain arithmetic and hard-coded values. The example that lands
   after Phase 2 replaces that arithmetic; the Composition ids and the acceptance look do not change.
-- **`teaser` and `chart` commit no font.** Both draw with the system sans stack, so their frames are
-  fixed on one machine rather than across machines: the determinism evidence is fixed-environment, as
-  the
+- **`teaser`, `chart` and `slideshow` commit no font.** They draw with the system sans stack, so their
+  frames are fixed on one machine rather than across machines: the determinism evidence is
+  fixed-environment, as the
   [Phase 1 determinism record](../docs/contexts/render/knowledge/20261024-phase1-determinism.md)
   states. The design doc allows an OFL font with its `OFL.txt`; that is a later refinement.
 - **`explainer` and `slideshow` media are generated locally.** The voices, sprites, photos and music
   never enter the tree: `fetch-assets.ts` writes them into the gitignored `assets.local/`, and CI
   renders flat/generated placeholders (see the
-  [asset licensing ADR](../docs/decisions/20261026-example-asset-licensing.accepted.md)).
+  [asset licensing ADR](../docs/decisions/20261026-example-asset-licensing.accepted.md)). The
+  slideshow's own `fetch-assets.ts` runs in the smoke test as its setup, so CI needs no committed
+  bytes and no network.
 - **`chart`'s committed datasets are synthetic**, shaped like an index so the example never waits on
   a data-source decision.
 - **Every full-length render is a local QA Check**, not a CI step. CI renders each `-ci` Composition
