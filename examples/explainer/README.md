@@ -1,13 +1,60 @@
 # `explainer`
 
-The explainer's script as validated data: the spoken lines, the slide cue each line sits under, and
-the timing the video is built from. `script.ts` is the script; `script.schema.ts` owns the format, the
-reading rate and the timing arithmetic; `script.test.ts` holds the numbers to their literals.
+The explainer: 222 seconds on what an index fund is, in 19 spoken lines over 10 slides, drawn by
+three layers that share one storyboard. `script.ts` is the script; `script.schema.ts` owns the format,
+the reading rate and the timing arithmetic; `script.test.ts` holds the numbers to their literals;
+`plan.ts` converts seconds to frames once for every layer.
 [The reference-examples design doc](../../docs/design-doc/20261025-reference-examples.md#explainer--long-duration-many-sequences-and-transitions-subtitles-against-audio)
 owns the target.
 
-This README covers **provenance and credit** only. The render entry, the asset setup script and the
-run instructions arrive with TASK-209, which grows this file; nothing below changes with them.
+This README covers **how to run the example, what is committed and what is credited**. The timing and
+the prose belong to `script.ts` and `script.schema.ts`; the layers that draw them are listed below.
+
+## Layout
+
+| File                 | What it owns                                                                     |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `script.ts`          | The script: 19 spoken lines, a slide cue on each, the disclaimer, the credits    |
+| `script.schema.ts`   | The format, `seconds = ceil(codePoints / 5)`, the frame-free timing arithmetic   |
+| `plan.ts`            | The one conversion to frames — `Storyboard`, shared by all three layers          |
+| `entry.tsx`          | `explainer` (1920×1080, 6660 frames) and `explainer-ci` (960×540, 60 frames)     |
+| `probe.tsx`          | `explainer-probe` (480×270, 30 frames) for the determinism gate                  |
+| `ExplainerScene.tsx` | The tree: slides, sprites, subtitles over one storyboard; the font `Suspense`    |
+| `slides/`            | `SlideSeries` (a `TransitionSeries`, 0.4 s crossfades) and the four slide bodies |
+| `Sprites.tsx`        | One `Sequence` per line: both characters, the speaker lit, mouth every 0.15 s    |
+| `Subtitles.tsx`      | One `Sequence` per line, no transitions: the band with the speaker's name        |
+| `look.ts`            | Palette, committed font, sprite/voice paths, the shared arithmetic               |
+| `audio.ts`           | One voice track per line, at the line's frame start and end                      |
+| `fetch-assets.ts`    | Step 1 placeholders (FFmpeg) and step 2 the fetched sprites and voice            |
+
+## Running it
+
+Every command runs from the repository root (`pnpm test` builds `dist/` first):
+
+```bash
+pnpm build
+node examples/explainer/fetch-assets.ts --placeholders   # sprites, tone bed, silent voice
+node dist/cli.js render examples/explainer/entry.tsx --composition explainer-ci --out out/explainer-ci.mp4 --json
+node dist/cli.js frame examples/explainer/entry.tsx --composition explainer --frame 2200 --out out/still.png
+```
+
+`--placeholders` is step 1 and the only step CI needs; a bare `node examples/explainer/fetch-assets.ts`
+also copies `assets.local/sprite-source/` into `assets.local/sprites/final/` and synthesizes the voice
+(VOICEVOX on `VOICEVOX_ENGINE_URL`, or macOS `say -v Kyoko`), skipping with an instruction when neither
+is available. `--props '{"assets":"final"}'` renders the fetched sprites instead of the placeholders.
+The full 6660-frame render is a local QA Check: `--out out/explainer.mp4` takes minutes and is never a
+CI step.
+
+## Known limitations
+
+- **The probe draws flat sprite panels and no font.** An image `useAsset` inside a `Sequence` is the
+  construct the design doc records as an intermittent `reverse` failure, so `explainer-probe` renders
+  the same layer structure and timing without the media, and `explainer-ci` (which does load two
+  placeholder images and the committed font) stays out of the determinism gate.
+- **The flat sprite panel has square corners on purpose.** A rounded corner is a fractional-opacity,
+  antialiased edge, and the gate caught it painting differently on the first paint after a mount at
+  `explainer-probe` frame 23 in `reverse` (ten pixels of the top-right arc, at most 9/255 apart). The
+  real sprite images are unaffected; only the probe's stand-in is constrained this way.
 
 ## Credit lines
 
@@ -44,5 +91,6 @@ generation and fetch scripts are committed, and a render started before setup fa
 asset-readiness diagnostic rather than falling back silently. The rule and its reasoning are the asset
 licensing ADR's.
 
-Only the font is committed, and it lands with the render entry (TASK-209): this branch holds the
-script alone under `examples/explainer/`.
+Only the font is committed: `examples/explainer/` holds the script, the entries, the layers and the
+OFL font, and nothing else — the voice, the sprites, the tone bed and the music are all one
+`fetch-assets.ts` run away.
