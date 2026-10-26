@@ -48,9 +48,13 @@ High contrast on a near-black ground (`#07080c`), one warm accent (`#ff5a3c`), o
   to at most 1 in every frame: the handoff dims the type for a frame or two rather than double-exposing
   two words on top of each other. The overlap is a tenth of a scene (7 frames, 0.23 s at the full
   teaser's size), short enough that the swap reads as a snap instead of a dissolve.
-- The **backdrop** never stops: a soft accent glow drifts on springs whose targets change mid-flight
-  every 1.45 s, sixteen accent bars pulse in a 35 ms stagger, three hairlines drift, the word counter
-  ticks over at each crossfade, and the progress rule along the bottom edge grows every frame.
+- The **backdrop** has something moving in every frame, though not all of it all the time: a soft
+  accent glow drifts on springs whose targets change mid-flight every 1.45 s — the last one at 15.95 s
+  — three hairlines drift with it, sixteen accent bars pulse in a 35 ms stagger with their last target
+  at ~11 s, and the word counter ticks over at each crossfade. The progress rule along the bottom edge
+  follows `timeline.progress`, so it grows through the whole clip and the video never has a still
+  frame: after ~16 s the glow, the hairlines and the bars have all settled, and the progress rule is
+  the element that is still moving.
 - The **last second** holds: the final word is the product name, and nothing in the type moves once it
   has settled (`ZEPHYR` is on screen for the last ~2.4 s, ~1.9 s of them still).
 
