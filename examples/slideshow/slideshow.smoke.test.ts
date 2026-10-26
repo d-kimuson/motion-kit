@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -158,6 +158,50 @@ describe('slideshow example', () => {
     });
     expect(decoded).toBe('');
   }, 180_000);
+
+  it('cross-dissolves between its slides instead of fading from black', () => {
+    // The regression this guards is invisible in an envelope: a slide carried its ink ground on the
+    // *root* of its frame, so the upper of a crossfade's two stacked frames painted an opaque
+    // rectangle over the picture below it. Every fade then went dark-then-light — the mean luma of the
+    // `slideshow-ci` render fell from 108 to 25 in one frame — and every assertion above still passed.
+    // Here nothing but pictures is on screen for the whole 60 frames, so a dissolve can only move the
+    // luma by a few points per frame; the bug moves it by the whole range. It reads the MP4 the test
+    // above rendered, in the same file and therefore in the same order.
+    const output = join(outDirectory, 'slideshow-ci.mp4');
+    expect(statSync(output).size).toBeGreaterThan(0);
+    const stats = join(outDirectory, 'slideshow-ci-luma.txt');
+    execFileSync(
+      'ffmpeg',
+      [
+        '-v',
+        'error',
+        '-y',
+        '-i',
+        output,
+        '-vf',
+        `signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${stats}`,
+        '-f',
+        'null',
+        '-',
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    const lines = readFileSync(stats, 'utf8').split('\n');
+    const luma: number[] = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!(lines[index] ?? '').startsWith('frame:')) continue;
+      const match = /YAVG=([0-9.]+)/.exec(lines[index + 1] ?? '');
+      const value = match?.[1];
+      if (value !== undefined) luma.push(Number(value));
+    }
+    expect(luma).toHaveLength(60);
+    const brightest = Math.max(...luma);
+    const darkest = Math.min(...luma);
+    // The three placeholder photos really are different pictures, so this is not comparing blanks.
+    expect(brightest - darkest).toBeGreaterThan(20);
+    const steps = luma.slice(1).map((value, index) => Math.abs(value - (luma[index] ?? value)));
+    expect(Math.max(...steps)).toBeLessThan((brightest - darkest) * 0.25);
+  });
 
   it('renders one slideshow-landscape still at 1920x1080', async () => {
     // The landscape variant is checked by its descriptor above plus one still here, never by a full

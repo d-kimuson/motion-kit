@@ -187,12 +187,16 @@ const SlideFrame = ({
   const layout = layoutFor(width, height);
   const position = progress ?? (duration > 0 ? time / duration : 1);
   const move = kenBurns(position, directionOf(index));
+  // The ink ground sits *inside* the fading layer, never on the root: a crossfade stacks two
+  // `SlideFrame`s, and an opaque ground on the upper one paints over the picture below it, which is
+  // what turned a dissolve into a fade from black. Here the ground fades with its own picture.
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: INK }}>
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <div
         style={{
           position: 'absolute',
           inset: 0,
+          background: INK,
           opacity: layerOpacity,
           transform: `translate(${move.offsetX * 100}%, ${move.offsetY * 100}%) scale(${move.scale})`,
         }}
@@ -225,10 +229,14 @@ type CrossFadeProps = Readonly<{
 }>;
 
 /**
- * The one shared crossfade: the pictures dissolve linearly (`1 - p`, `p`), so their opacities sum to
- * exactly 1 in every frame and the fade never dips, while the captions swap on the faster `p³` pair,
- * so two legible captions never sit on top of each other at half opacity. Each side's Ken Burns
- * progress continues from where its own scene had reached, so the move does not restart at the cut.
+ * The one shared crossfade: the outgoing picture is the opaque base and the incoming one dissolves in
+ * over it at `p`, so a frame is exactly `(1 - p)·outgoing + p·incoming` — full brightness throughout,
+ * never a dip towards the ink ground — while the captions swap on the faster `p³` pair, with the
+ * incoming one held back to the midpoint, so two legible captions never sit on top of each other and
+ * the white type never reads as one garbled line over the bright picture. Each side's Ken Burns
+ * progress continues from where its own scene had reached, so the move does not restart at the cut: at
+ * `p = 0` the outgoing is at the progress its scene had reached when the fade began, at `p = 1` the
+ * incoming is at the progress its scene reaches when the fade ends.
  */
 const CrossFade = ({ outgoing, incoming, total, crossfadeSeconds, surface }: CrossFadeProps) => {
   const progress = useTransitionProgress();
@@ -241,7 +249,6 @@ const CrossFade = ({ outgoing, incoming, total, crossfadeSeconds, surface }: Cro
         total={total}
         surface={surface}
         progress={crossfadeProgress(progress, 'outgoing', crossfadeSeconds, outgoing.seconds)}
-        layerOpacity={1 - progress}
         captionOpacity={1 - easeOutCubic(progress)}
       />
       <SlideFrame
@@ -252,7 +259,9 @@ const CrossFade = ({ outgoing, incoming, total, crossfadeSeconds, surface }: Cro
         surface={surface}
         progress={crossfadeProgress(progress, 'incoming', crossfadeSeconds, incoming.seconds)}
         layerOpacity={progress}
-        captionOpacity={easeInCubic(progress)}
+        // Held to the second half: by the midpoint the outgoing caption is already at `(1 - p)³ ≈ 0.13`
+        // and fading, so the two never overlap as one unreadable line over a bright picture.
+        captionOpacity={easeInCubic(2 * progress - 1)}
       />
     </div>
   );
