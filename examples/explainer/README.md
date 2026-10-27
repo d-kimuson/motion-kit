@@ -23,7 +23,8 @@ the prose belong to `script.ts` and `script.schema.ts`; the layers that draw the
 | `slides/`              | `SlideSeries` (a `TransitionSeries`, 0.4 s crossfades) and the four slide bodies |
 | `Sprites.tsx`          | One `Sequence` per line: both characters, the speaker lit, mouth every 0.15 s    |
 | `Subtitles.tsx`        | One `Sequence` per line, no transitions: the band with the speaker's name        |
-| `look.ts`              | Palette, committed font, sprite/voice paths, the shared arithmetic               |
+| `look.ts`              | Palette, committed font, sprite/voice paths, the shared arithmetic, safe areas   |
+| `layout.ts`            | What each slide stacks in the body box, and how a long line fits the plate       |
 | `audio.ts`             | One voice track per line, at the line's frame start and end                      |
 | `fetch-assets.ts`      | Step 1 placeholders (FFmpeg) and step 2 the fetched sprites and voice            |
 | `assets.manifest.json` | Every file under `assets/` and `assets.local/`, with its provenance              |
@@ -34,7 +35,7 @@ Every command runs from the repository root (`pnpm test` builds `dist/` first):
 
 ```bash
 pnpm build
-node examples/explainer/fetch-assets.ts --placeholders   # sprites, tone bed, silent voice
+node examples/explainer/fetch-assets.ts --placeholders   # tone bed and silent voice clips
 node dist/cli.js render examples/explainer/entry.tsx --composition explainer-ci --out out/explainer-ci.mp4 --json
 node dist/cli.js frame examples/explainer/entry.tsx --composition explainer --frame 2200 --out out/still.png
 ```
@@ -46,7 +47,7 @@ is available. The voice is fitted to the script rather than the other way round:
 trimmed, its pace moved by FFmpeg `atempo` inside ±25 %, and the result padded or cut to the line's own
 `seconds`, so narration starts on the line's frame and stops where the subtitle and the sprite do
 (`assets.local/voice/durations.json` records the result). `--props '{"assets":"final"}'` renders the
-fetched sprites instead of the placeholders. The full 6660-frame render is a local QA Check:
+fetched 立ち絵 instead of the drawn placeholder characters. The full 6660-frame render is a local QA Check:
 `--out out/explainer.mp4` takes minutes and is never a CI step.
 
 ## Known limitations
@@ -59,8 +60,8 @@ fetched sprites instead of the placeholders. The full 6660-frame render is a loc
   no gradient, no `opacity < 1`, no fractional size or position, and no animation of a paint
   property. Every one of those is a construct that has painted differently between two platforms or
   between two paints of the same frame: antialiased edges are a coverage mask, fractional alpha is a
-  blend, and a glyph is the platform's rasteriser, not ours. `explainer-ci`, which does load two
-  placeholder images and the committed font, stays out of the gate.
+  blend, and a glyph is the platform's rasteriser, not ours. `explainer-ci`, which does load the committed
+  font and draws the placeholder characters, stays out of the gate.
 - **The probe's arrival and crossfade are discrete.** `useSlideReveal` never runs under `flat`:
   `SlideSeries` swaps the reveal-only `Slide` for `FlatSlide` and the 0.4 s crossfade for a switch at
   the overlap's first frame, where the incoming slide is painted alone and fully opaque. Nothing is
@@ -70,17 +71,37 @@ fetched sprites instead of the placeholders. The full 6660-frame render is a loc
   exists for: the `TransitionSeries` overlap, one `Sequence` per line in the sprite and subtitle
   layers, the cue-driven slide shape (a bullets slide's item count and item widths are the cue's own
   data) and the speaker alternation. Correctness of the byte comparison wins over fidelity here.
-- **A placeholder sprite is an opaque rectangle, so it covers the text under it.** Step 1's panels
-  fill the 324×605 slot at 90 % (speaker) and 60 % (the other), where the real 立ち絵 has
-  transparency: the title's tagline and the last item of a bullets slide therefore read through a
-  panel rather than beside a character, until step 2 copies the downloaded sets into
-  `assets.local/sprites/final/` and `--props '{"assets":"final"}'` draws them. This is what the
-  full-length render in a fresh clone looks like.
-- **The chart slide's year axis sits behind the subtitle band.** The slide reuses the `chart`
-  example's full-frame layout (its plot runs from 0.235 to 0.815 of the height, with the year labels
-  below the plot), and a three-line subtitle band starts around 0.62. The caption, the series and its
-  valleys read; the year labels and the source line do not. Moving the plot means a box override on
-  `ChartScene`, which is the `chart` example's own interface to change.
+- **The placeholder sprites are drawn, not a generated image.** `assets: 'placeholder'` is a DOM
+  character in the sprite layer — a head with eyes, a mouth on the same 0.15 s rhythm, a body and a
+  name plate — so a fresh clone needs no sprite file at all and step 1 generates none. The figure is
+  a stand-in for the 立ち絵, not a likeness; `--props '{"assets":"final"}'` draws the fetched set
+  through `useAsset` as before.
+- **The chart slide draws the `chart` example's component at about half scale.** `ChartScene` fills
+  its frame (its plot runs to 0.96 of the height), which is under the subtitle plate, so the slide
+  scales the whole chart into the body box and clips only the empty margins it draws in. The axis,
+  the year labels and the source line are all visible; the type is the size `chart-ci` renders it at.
+  Giving the chart example a box prop is its own task, not this one's.
+
+## Safe areas
+
+`look.ts` fixes the frame's proportions once and `safeArea` resolves them for one render, so the three
+layers cannot disagree about where they may paint:
+
+| Area  | Rows                                            | Who draws there                                  |
+| ----- | ----------------------------------------------- | ------------------------------------------------ |
+| body  | `SAFE_TOP` (0.06 H) .. `SLIDE_BOTTOM` (0.56 H)  | every slide, stacked from the top by `layout.ts` |
+| band  | `BAND_TOP` (0.60 H) .. H − `BAND_BOTTOM` (0.03) | the subtitle plate: name line, then body lines   |
+| lanes | the two side strips, 0.5 H tall                 | the characters, feet tucked behind the plate     |
+
+The text column is everything between the two lanes (`textLeft`, `textWidth`), which is what keeps a
+character from standing on a bullet. `BAND_GAP` (0.04 H) is the air between the body and the plate:
+no slide paints in it, so nothing can be covered at any slide or crossfade.
+
+The plate is a fixed height — a name line plus three body lines at 72 px, the design doc's target —
+and a line too long for three lines at 72 px is drawn smaller instead: `bodyFontSize` steps the size
+down (never below 0.052 H) until the line fits, so the plate never grows over the slide and no line is
+ever clipped. Only the longest lines of the script move: the two 14-second lines are drawn at 68 px,
+the rest at 72. `layout.test.ts` holds both rules at 1920×1080, 960×540 and 480×270.
 
 ## Credit lines
 
@@ -103,12 +124,12 @@ every copy: `assets/fonts/NotoSansJP[wght].woff2` ships with `OFL.txt` beside it
 
 ## What is committed, and what never is
 
-| Asset                                             | In the repository                           | Where it comes from                                                         |
-| ------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
-| Font (Noto Sans JP, variable, OFL-1.1)            | Yes — `assets/fonts/*.woff2` with `OFL.txt` | Converted once from the upstream TTF — commands below — and committed       |
-| Voice (VOICEVOX:ずんだもん / VOICEVOX:四国めたん) | No — `assets.local/voice/`                  | Synthesized from `script.ts` against a **local** VOICEVOX engine            |
-| Sprites (坂本アヒル 立ち絵)                       | No — `assets.local/sprites/`                | Fetched by the setup script into the ignored directory                      |
-| Music and backgrounds                             | No — generated                              | FFmpeg (`sine`, `anoisesrc`, `color`), so they are the project's own output |
+| Asset                                             | In the repository                           | Where it comes from                                                   |
+| ------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
+| Font (Noto Sans JP, variable, OFL-1.1)            | Yes — `assets/fonts/*.woff2` with `OFL.txt` | Converted once from the upstream TTF — commands below — and committed |
+| Voice (VOICEVOX:ずんだもん / VOICEVOX:四国めたん) | No — `assets.local/voice/`                  | Synthesized from `script.ts` against a **local** VOICEVOX engine      |
+| Sprites (坂本アヒル 立ち絵)                       | No — `assets.local/sprites/`                | Fetched by the setup script into the ignored directory                |
+| Music and backgrounds                             | No — generated                              | FFmpeg (`sine`, `anoisesrc`), so they are the project's own output    |
 
 Sprites, voice and music are **generated or fetched into `assets.local/` and never committed**: the
 voice libraries and the 立ち絵 sets are licensed for use but not for re-sublicensing, and a committed

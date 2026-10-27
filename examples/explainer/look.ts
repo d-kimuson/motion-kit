@@ -51,7 +51,7 @@ export const characterName: Record<Character, string> = {
   metan: '四国めたん',
 };
 
-/** The flat colour a placeholder sprite or a probe surface is drawn in. */
+/** The colour a placeholder character or a probe surface is drawn in. */
 export const characterColor: Record<Character, string> = {
   zundamon: '#4f9d5d',
   metan: '#8b6ad6',
@@ -66,13 +66,13 @@ export const characterDimColor: Record<Character, string> = {
   metan: '#b7a2e0',
 };
 
-/** Where one sprite frame lives: `<mode>/<character>/<expression>-<mouth>.png` under the root. */
-export const spriteSource = (
-  assets: AssetsMode,
-  character: Character,
-  expression: Expression,
-  mouth: Mouth,
-): string => `${SPRITE_ROOT}/${assets}/${character}/${expression}-${mouth}.png`;
+/**
+ * Where one fetched sprite frame lives: `<root>/final/<character>/<expression>-<mouth>.png`. Only
+ * the fetched set is an image: `assets: 'placeholder'` draws its character in the sprite layer
+ * instead (`Sprites.tsx`), so there is no generated placeholder image to address.
+ */
+export const spriteSource = (character: Character, expression: Expression, mouth: Mouth): string =>
+  `${SPRITE_ROOT}/final/${character}/${expression}-${mouth}.png`;
 
 /** The voice clip a line's audio track points at, and step 1 / step 2 write. */
 export const voiceSource = (lineId: string): string => `${VOICE_ROOT}/${lineId}.wav`;
@@ -110,6 +110,8 @@ export const BAND_TOP = 0.6;
 export const BAND_BOTTOM = 0.03;
 /** The plate's air under the body: no slide paints in these rows. */
 export const BAND_GAP = 0.04;
+/** The last row a slide may paint: `BAND_TOP` less the plate's air. */
+export const SLIDE_BOTTOM = BAND_TOP - BAND_GAP;
 /** Frame side to the plate, and the plate's own padding. */
 export const BAND_INSET = 0.045;
 export const BAND_PADDING_X = 0.022;
@@ -170,7 +172,7 @@ export const safeArea = (width: number, height: number): SafeArea => {
     width,
     height,
     bodyTop,
-    bodyBottom: bandTop - px(height * BAND_GAP),
+    bodyBottom: px(height * SLIDE_BOTTOM),
     textLeft: lane,
     textWidth: width - 2 * lane,
     bandTop,
