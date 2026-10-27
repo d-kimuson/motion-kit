@@ -146,8 +146,17 @@ describe('explainer safe area', () => {
         script.lines.filter((line) => bodyFontSize(line.text, area, target) === target).length,
       ).toBeGreaterThan(script.lines.length / 2);
     }
-    // The two 14-second lines are the ones the band's 72 px cannot hold in three lines.
-    expect(shrink.filter((entry) => entry.endsWith(':72'))).toEqual([]);
+    // The two 14-second lines are the ones the band's 72 px cannot hold in three lines, and the fit
+    // gives them the same sizes at every render scale (rounding included), so pin the whole result:
+    // a fit rule that stopped shrinking, or shrank further, fails here instead of in a frame.
+    expect(shrink).toEqual([
+      'instalment-1@1080:69',
+      'scope-1@1080:70',
+      'instalment-1@540:34',
+      'scope-1@540:35',
+      'instalment-1@270:17',
+      'scope-1@270:17',
+    ]);
   });
 
   it('fits the chart into the body instead of letting it run under the plate', () => {

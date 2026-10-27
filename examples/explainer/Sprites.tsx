@@ -155,7 +155,9 @@ const PlaceholderCharacter = ({
           left: px((slot - torsoWidth) / 2),
           top: px(headTop + head * 0.84),
           width: torsoWidth,
-          height,
+          // Only the room left between the shoulders and the slot's foot, so the bell stops where the
+          // plate starts instead of running past the slot and showing through the plate.
+          height: px(height - (headTop + head * 0.84)),
           clipPath: 'polygon(0% 0%, 100% 0%, 82% 100%, 18% 100%)',
           background: color,
         }}

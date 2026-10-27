@@ -100,8 +100,8 @@ no slide paints in it, so nothing can be covered at any slide or crossfade.
 The plate is a fixed height — a name line plus three body lines at 72 px, the design doc's target —
 and a line too long for three lines at 72 px is drawn smaller instead: `bodyFontSize` steps the size
 down (never below 0.052 H) until the line fits, so the plate never grows over the slide and no line is
-ever clipped. Only the longest lines of the script move: the two 14-second lines are drawn at 68 px,
-the rest at 72. `layout.test.ts` holds both rules at 1920×1080, 960×540 and 480×270.
+ever clipped. Only the longest lines of the script move: the two 14-second lines are drawn at 69 px
+and 70 px, the rest at 72. `layout.test.ts` holds both rules at 1920×1080, 960×540 and 480×270.
 
 ## Credit lines
 
