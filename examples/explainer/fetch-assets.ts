@@ -3,9 +3,11 @@
 // "Assets and provenance"). Everything it writes lands in the gitignored `assets.local/`; nothing
 // under `assets/` is ever touched, and no fetched or synthesized file is committed.
 //
-//   step 1  placeholders: FFmpeg `color` sprites, a `sine` tone bed, and silent voice placeholders.
-//           Needs only the FFmpeg the render path already requires — no network, no engine — so CI
-//           runs it before the smoke render.
+//   step 1  placeholders: a `sine` tone bed and silent voice placeholders. The placeholder sprites
+//           need no file at all — `assets: 'placeholder'` draws its character in the sprite layer
+//           instead of loading an image (design doc, "Assets and provenance", amended
+//           2026-10-27) — so step 1 is FFmpeg and nothing else, and CI runs it before the smoke
+//           render.
 //   step 2  the real thing, locally only: the 立ち絵 sprites from a manual download, and the voice
 //           from a local VOICEVOX engine, or macOS `say -v Kyoko` where no engine is installed.
 //           Every part skips with an instruction when its input is missing, so step 1 alone always
@@ -21,18 +23,11 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  CHARACTERS,
-  EXPRESSIONS,
-  MOUTHS,
-  characterColor,
-  type Character,
-  type Expression,
-} from './look.ts';
+import { CHARACTERS, EXPRESSIONS, MOUTHS, type Character } from './look.ts';
 import { script } from './script.ts';
 
 const root = 'examples/explainer/assets.local';
-const spritesDir = (mode: 'placeholder' | 'final') => join(root, 'sprites', mode);
+const spritesDir = (mode: 'final') => join(root, 'sprites', mode);
 const voiceDir = join(root, 'voice');
 const toneBed = join(root, 'music', 'tone.wav');
 const spriteSourceDir = join(root, 'sprite-source');
@@ -56,56 +51,6 @@ const ffprobeSeconds = (file: string): number => {
     { encoding: 'utf8' },
   );
   return Number.parseFloat(out.trim());
-};
-
-/** A placeholder sprite's colour: the character's own, shifted per expression and per mouth. */
-const shade = (hex: string, factor: number): string => {
-  const value = Number.parseInt(hex.slice(1), 16);
-  const channel = (shift: number): string => {
-    const part = (value >> shift) & 0xff;
-    return Math.max(0, Math.min(255, Math.round(part * factor)))
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${channel(16)}${channel(8)}${channel(0)}`;
-};
-
-const expressionShade: Record<Expression, number> = {
-  normal: 1,
-  happy: 1.16,
-  surprised: 1.3,
-  thinking: 0.8,
-  wink: 1.08,
-  serious: 0.66,
-};
-
-/** 540x900, the aspect the sprite layer draws: the placeholders must not distort the layout. */
-const spriteSize = '540x900';
-
-const placeholderSprites = (report: Report): void => {
-  const dir = spritesDir('placeholder');
-  let written = 0;
-  for (const character of CHARACTERS) {
-    for (const expression of EXPRESSIONS) {
-      for (const mouth of MOUTHS) {
-        const target = join(dir, character, `${expression}-${mouth}.png`);
-        mkdirSync(join(dir, character), { recursive: true });
-        const factor = expressionShade[expression] * (mouth === 'open' ? 0.86 : 1);
-        const colour = shade(characterColor[character], factor);
-        ffmpeg([
-          '-f',
-          'lavfi',
-          '-i',
-          `color=c=${colour}:s=${spriteSize}`,
-          '-frames:v',
-          '1',
-          target,
-        ]);
-        written += 1;
-      }
-    }
-  }
-  report(`step 1: ${String(written)} placeholder sprites in ${dir}`);
 };
 
 /**
@@ -332,14 +277,14 @@ const fetchVoice = async (): Promise<void> => {
 };
 
 /**
- * Step 1 as one call: the sprites, the tone bed and the silent voice placeholders. It needs FFmpeg
- * and nothing else, so the smoke test runs it as its own setup — CI has no committed media, no
- * VOICEVOX engine and no network (docs/design-doc/20261025-reference-examples.md, "Assets and
- * provenance").
+ * Step 1 as one call: the tone bed and the silent voice placeholders. It needs FFmpeg and nothing
+ * else, so the smoke test runs it as its own setup — CI has no committed media, no VOICEVOX engine
+ * and no network (docs/design-doc/20261025-reference-examples.md, "Assets and provenance"). The
+ * placeholder sprites used to be FFmpeg `color` fills; they are drawn in the sprite layer now, so
+ * there is no image to generate for them.
  */
 export const generatePlaceholders = (report: Report = log): void => {
   mkdirSync(root, { recursive: true });
-  placeholderSprites(report);
   generateToneBed(report);
   placeholderVoice(report);
   report('step 1 done');

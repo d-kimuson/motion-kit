@@ -156,7 +156,7 @@ export const shortStoryboard = (
 /**
  * `explainer-ci`: 60 frames at 30 fps. One dialogue line on the `まとめ` bullets slide, a 0.4 s
  * crossfade, and the disclaimer slide with its tail — the three layers, a `Transition` overlap, two
- * placeholder images and Japanese text through the committed face, in two seconds.
+ * placeholder characters and Japanese text through the committed face, in two seconds.
  */
 export const ciStoryboard = (): Storyboard => {
   const fps = 30;

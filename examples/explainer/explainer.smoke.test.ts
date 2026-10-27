@@ -87,10 +87,11 @@ const pcmTail = (file: string, seconds: number): Buffer =>
   pcmWindow(file, ['-sseof', `-${String(seconds)}`]);
 
 describe('explainer example', () => {
-  // The smoke test is its own setup: CI has no committed media and no network, so the FFmpeg
-  // placeholders and the silent voice clips are generated here, before the render that needs them
-  // (docs/design-doc/20261025-reference-examples.md, "Assets and provenance"). Without them the
-  // render fails at `asset.load-failed` rather than drawing a blank frame.
+  // The smoke test is its own setup: CI has no committed media and no network, so step 1's tone bed
+  // and silent voice clips are generated here (docs/design-doc/20261025-reference-examples.md,
+  // "Assets and provenance"). `explainer-ci` itself needs neither — it declares no audio and draws
+  // its characters — but the step this example ships has to keep working, and a clone's first
+  // full-length render is what needs the voice files.
   beforeAll(() => {
     mkdirSync(outDirectory, { recursive: true });
     generatePlaceholders((message) => console.info(message));
@@ -215,8 +216,8 @@ describe('explainer example', () => {
     );
     const parsed: unknown = JSON.parse(stdout);
     const envelope = renderEnvelopeSchema.parse(parsed);
-    // A missing sprite or font fails the render with `asset.load-failed` rather than encoding a
-    // blank frame, so `ok` here is also the assertion that the generated placeholders loaded.
+    // A missing font fails the render with `asset.load-failed` rather than encoding a blank frame,
+    // so `ok` here is also the assertion that the committed face loaded.
     expect(envelope).toMatchObject({ schemaVersion: 1, command: 'render', ok: true });
     expect(envelope.diagnostics).toEqual([]);
     expect(envelope.data).toMatchObject({

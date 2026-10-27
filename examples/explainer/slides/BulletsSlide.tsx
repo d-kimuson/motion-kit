@@ -1,9 +1,14 @@
 // A bullet slide: the cue's title, an accent rule, and one line per item arriving under the
 // narration that reaches it. Each item is opacity only.
+//
+// The rows come from `bulletsLayout`: the stack starts at the body's top and every item's height is
+// its own line count, so the third item — and the rule that closes the list, when there is room —
+// end above `bodyBottom`, clear of the subtitle plate and left of the character lanes.
 import { useTimeline } from '@kimuson/motion-kit';
 
-import { ACCENT, INK, MUTED, RULE, px } from '../look.ts';
-import { textColumn, useSlideReveal, useSlideTime, type SlideProps } from './shared.ts';
+import { bulletsLayout } from '../layout.ts';
+import { ACCENT, INK, MUTED, RULE, safeArea } from '../look.ts';
+import { useSlideReveal, useSlideTime, type SlideProps } from './shared.ts';
 
 /** One item every 0.55 s: the narration reaches the second and third over the first few seconds. */
 const itemDelaySeconds = 0.55;
@@ -13,20 +18,19 @@ export const BulletsSlide = ({ slide, time: given }: SlideProps) => {
   const reveal = useSlideReveal(time);
   const { width, height } = useTimeline();
   if (slide.cue.kind !== 'bullets') return null;
-  const column = textColumn(width);
-  const itemSize = px(height * 0.044);
-  const itemGap = px(height * 0.098);
-  const firstTop = px(height * 0.315);
+  const area = safeArea(width, height);
+  const box = bulletsLayout(area, slide.cue, String(slide.index + 1).padStart(2, '0'));
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div
         style={{
           position: 'absolute',
-          ...column,
-          top: px(height * 0.115),
-          fontSize: px(height * 0.062),
+          left: area.textLeft,
+          top: box.title.top,
+          width: area.textWidth,
+          fontSize: box.title.size,
           fontWeight: 700,
-          lineHeight: 1.3,
+          lineHeight: box.title.lineHeight,
           color: INK,
           opacity: reveal(0),
         }}
@@ -36,58 +40,78 @@ export const BulletsSlide = ({ slide, time: given }: SlideProps) => {
       <div
         style={{
           position: 'absolute',
-          left: column.left,
-          top: px(height * 0.225),
-          width: px(width * 0.085 * reveal(0.2)),
-          height: Math.max(2, px(height * 0.0042)),
+          left: area.textLeft,
+          top: box.rule,
+          width: Math.max(1, Math.round(area.width * 0.085 * reveal(0.2))),
+          height: Math.max(2, Math.round(height * 0.0042)),
           background: ACCENT,
         }}
       />
-      {slide.cue.items.map((item, index) => (
+      {slide.cue.items.map((item, index) => {
+        const row = box.items[index];
+        if (row === undefined) return null;
+        return (
+          <div
+            key={item}
+            style={{
+              position: 'absolute',
+              left: area.textLeft,
+              top: row.top,
+              width: area.textWidth,
+              height: row.height,
+              display: 'flex',
+              alignItems: 'center',
+              gap: box.bulletGap,
+              opacity: reveal(0.32 + index * itemDelaySeconds),
+            }}
+          >
+            <div
+              style={{
+                width: box.bullet,
+                height: box.bullet,
+                flex: '0 0 auto',
+                background: ACCENT,
+              }}
+            />
+            <div
+              style={{
+                width: box.itemWidth,
+                fontSize: row.size,
+                lineHeight: row.lineHeight,
+                color: INK,
+              }}
+            >
+              {item}
+            </div>
+          </div>
+        );
+      })}
+      {box.trailing === null ? null : (
         <div
-          key={item}
           style={{
             position: 'absolute',
-            left: column.left,
-            top: firstTop + index * itemGap,
-            display: 'flex',
-            alignItems: 'center',
-            gap: px(width * 0.016),
-            opacity: reveal(0.32 + index * itemDelaySeconds),
+            left: area.textLeft,
+            top: box.trailing,
+            width: area.textWidth,
+            height: Math.max(1, Math.round(height * 0.0016)),
+            background: RULE,
+            opacity: reveal(0.5),
           }}
-        >
-          <div
-            style={{
-              width: px(height * 0.016),
-              height: px(height * 0.016),
-              background: ACCENT,
-            }}
-          />
-          <div style={{ fontSize: itemSize, lineHeight: 1.35, color: INK }}>{item}</div>
-        </div>
-      ))}
+        />
+      )}
       <div
         style={{
           position: 'absolute',
-          ...column,
-          top: firstTop + slide.cue.items.length * itemGap + px(height * 0.02),
-          height: Math.max(1, px(height * 0.0016)),
-          background: RULE,
-          opacity: reveal(0.5),
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: column.left,
-          top: px(height * 0.06),
-          fontSize: px(height * 0.022),
+          left: area.textLeft,
+          top: box.eyebrow.top,
+          fontSize: box.eyebrow.size,
+          lineHeight: box.eyebrow.lineHeight,
           letterSpacing: '0.2em',
           color: MUTED,
           opacity: reveal(0),
         }}
       >
-        {`0${slide.index + 1}`}
+        {String(slide.index + 1).padStart(2, '0')}
       </div>
     </div>
   );

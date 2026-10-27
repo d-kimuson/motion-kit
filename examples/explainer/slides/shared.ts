@@ -53,9 +53,3 @@ export const useSlideReveal =
   (time: number): Reveal =>
   (delaySeconds) =>
     clamp01((time - delaySeconds) / revealSeconds);
-
-/** The left column every slide's text lives in: clear of the sprites at the lower corners. */
-export const textColumn = (width: number) => ({
-  left: Math.round(width * 0.075),
-  width: Math.round(width * 0.72),
-});
