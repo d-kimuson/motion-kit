@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectNoticeEntries, renderNotice, type PackageSource } from './third-party-licenses.ts';
+import {
+  assertNoticeCurrent,
+  collectNoticeEntries,
+  renderNotice,
+  type PackageSource,
+} from './third-party-licenses.ts';
 
 type FixturePackage = {
   readonly packageJson: unknown;
@@ -91,22 +96,90 @@ describe('collectNoticeEntries', () => {
         version: '1.0.0',
         license: 'MIT AND Apache-2.0',
         licenseText: 'alpha license',
+        attributions: [],
       },
       {
         name: 'zeta',
         version: '2.0.0',
         license: '(MIT OR GPL-3.0-only)',
         licenseText: 'zeta license',
+        attributions: [],
       },
     ]);
+  });
+
+  it('appends a NOTICE next to the license and sorts attribution files by name', () => {
+    const source = fixtureSource({
+      apache: {
+        packageJson: { name: 'apache', version: '1.0.0', license: 'Apache-2.0' },
+        files: {
+          'ThirdPartyNotices.txt': 'bundled notices',
+          LICENSE: 'Apache License\nVersion 2.0',
+          NOTICE: 'Puppeteer attribution',
+        },
+      },
+    });
+    expect(collectNoticeEntries({ apache: '1.0.0' }, source)).toEqual([
+      {
+        name: 'apache',
+        version: '1.0.0',
+        license: 'Apache-2.0',
+        licenseText: 'Apache License\nVersion 2.0',
+        attributions: [
+          { file: 'NOTICE', text: 'Puppeteer attribution' },
+          { file: 'ThirdPartyNotices.txt', text: 'bundled notices' },
+        ],
+      },
+    ]);
+  });
+
+  it('matches attribution files regardless of case or separators, deterministically', () => {
+    const packageJson = { name: 'apache', version: '1.0.0', license: 'Apache-2.0' };
+    const files = {
+      'third-party-notices.md': 'dash variant',
+      'Notice.md': 'title case variant',
+      LICENSE: 'Apache License',
+    };
+    const forward = fixtureSource({ apache: { packageJson, files } });
+    const reversed = fixtureSource({
+      apache: { packageJson, files: Object.fromEntries(Object.entries(files).reverse()) },
+    });
+    const entryOf = (source: PackageSource) => collectNoticeEntries({ apache: '1.0.0' }, source);
+    expect(entryOf(forward)[0]?.attributions).toEqual([
+      { file: 'Notice.md', text: 'title case variant' },
+      { file: 'third-party-notices.md', text: 'dash variant' },
+    ]);
+    expect(entryOf(reversed)).toEqual(entryOf(forward));
+  });
+
+  it('treats a missing attribution file as normal', () => {
+    const source = fixtureSource({
+      mit: {
+        packageJson: { name: 'mit', version: '1.0.0', license: 'MIT' },
+        files: { LICENSE: 'MIT license' },
+      },
+    });
+    expect(collectNoticeEntries({ mit: '1.0.0' }, source)[0]?.attributions).toEqual([]);
   });
 });
 
 describe('renderNotice', () => {
   it('sorts packages, keeps a stable format and ends with one newline', () => {
     const entries = [
-      { name: 'zeta', version: '2.0.0', license: 'MIT', licenseText: 'zeta license' },
-      { name: 'alpha', version: '1.0.0', license: 'ISC', licenseText: 'alpha license\n' },
+      {
+        name: 'zeta',
+        version: '2.0.0',
+        license: 'MIT',
+        licenseText: 'zeta license',
+        attributions: [],
+      },
+      {
+        name: 'alpha',
+        version: '1.0.0',
+        license: 'ISC',
+        licenseText: 'alpha license\n',
+        attributions: [],
+      },
     ];
     const notice = renderNotice(entries);
     expect(notice).toBe(renderNotice([...entries].reverse()));
@@ -117,6 +190,31 @@ describe('renderNotice', () => {
     expect(notice.endsWith('\n\n')).toBe(false);
   });
 
+  it('renders the license first and each attribution under its own heading', () => {
+    const notice = renderNotice([
+      {
+        name: 'playwright',
+        version: '1.64.1',
+        license: 'Apache-2.0',
+        licenseText: 'Apache License',
+        attributions: [
+          { file: 'NOTICE', text: 'Puppeteer attribution' },
+          { file: 'ThirdPartyNotices.txt', text: 'bundled notices' },
+        ],
+      },
+    ]);
+    expect(notice).toContain(
+      [
+        '## playwright - 1.64.1 (Apache-2.0)',
+        '```text\nApache License\n```',
+        '### NOTICE',
+        '```text\nPuppeteer attribution\n```',
+        '### ThirdPartyNotices.txt',
+        '```text\nbundled notices\n```',
+      ].join('\n\n'),
+    );
+  });
+
   it('uses a fence longer than any backtick run in the license text', () => {
     const notice = renderNotice([
       {
@@ -124,8 +222,32 @@ describe('renderNotice', () => {
         version: '1.0.0',
         license: 'MIT',
         licenseText: 'line with ``` inside',
+        attributions: [],
       },
     ]);
     expect(notice).toContain('````text\nline with ``` inside\n````');
+  });
+});
+
+describe('assertNoticeCurrent', () => {
+  const action = 'run `pnpm build`, then commit `THIRD_PARTY_LICENSES.md`';
+
+  it('accepts a committed notice that matches the generated text', () => {
+    expect(() => assertNoticeCurrent('notice\n', () => 'notice\n')).not.toThrow();
+  });
+
+  it('rejects a stale commit and says how to fix it', () => {
+    expect(() => assertNoticeCurrent('new notice\n', () => 'old notice\n')).toThrow(
+      `THIRD_PARTY_LICENSES.md is stale: ${action}`,
+    );
+  });
+
+  it('rejects a missing blob in HEAD and says how to fix it', () => {
+    const readCommitted = () => {
+      throw new Error("fatal: path 'THIRD_PARTY_LICENSES.md' does not exist in 'HEAD'");
+    };
+    expect(() => assertNoticeCurrent('notice\n', readCommitted)).toThrow(
+      `THIRD_PARTY_LICENSES.md is missing from HEAD: ${action}`,
+    );
   });
 });
