@@ -86,8 +86,8 @@ const pcmTail = (file: string, seconds: number): Buffer =>
   pcmWindow(file, ['-sseof', `-${String(seconds)}`]);
 
 describe('explainer example', () => {
-  // The smoke test is its own setup: CI has no committed media and no network, so step 1's tone bed
-  // and silent voice clips are generated here (docs/design-doc/20261025-reference-examples.md,
+  // The smoke test is its own setup: CI has no committed media and no network, so step 1's music bed,
+  // whoosh and silent voice clips are generated here (docs/design-doc/20261025-reference-examples.md,
   // "Assets and provenance"). `explainer-ci` itself needs neither — it declares no audio and draws
   // its characters — but the step this example ships has to keep working, and a clone's first
   // full-length render is what needs the voice files.

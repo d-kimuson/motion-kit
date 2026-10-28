@@ -12,7 +12,7 @@ import { defineComposition, defineCompositions } from '@kimuson/motion-kit';
 import { z } from 'zod';
 
 import { ExplainerScene } from './ExplainerScene.tsx';
-import { probeStoryboard } from './plan.ts';
+import { FPS, probeStoryboard } from './plan.ts';
 
 const board = probeStoryboard();
 
@@ -21,7 +21,7 @@ export const compositions = defineCompositions([
     id: 'explainer-probe',
     width: 480,
     height: 270,
-    fps: { numerator: 30, denominator: 1 },
+    fps: { numerator: FPS, denominator: 1 },
     durationInFrames: board.durationInFrames,
     schema: z.object({}),
     component: () => <ExplainerScene storyboard={board} assets="placeholder" flat />,

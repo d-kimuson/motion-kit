@@ -1,4 +1,4 @@
-# A long local render fails midway with render.frame-timeout or render.page-error
+# A long local render fails midway with render.frame-timeout, render.page-error or encode.ffmpeg-failed
 
 ## Symptom
 
@@ -10,6 +10,7 @@ node dist/cli.js render examples/explainer/entry.tsx --composition explainer --p
 
 - `render.frame-timeout` ("Frame settlement or capture exceeded the frame deadline.") at frame 224 after 18 minutes, with the process at about 5% CPU. The run was not under `caffeinate`, the low CPU fits a machine that idled or slept, and the same command under `caffeinate -i` has not hit it since — the sleep is inferred from that, not observed.
 - `render.page-error` ("The frame transport or page failed.") at frame 431 after 115 seconds, under `caffeinate -i`. The diagnostic carries no cause.
+- `encode.ffmpeg-failed` (exit 244, "Error submitting a packet to the muxer: Cannot allocate memory") after all 6660 frames, 48 minutes in, under `caffeinate -i`, while tests and a review agent ran beside it. The 36 GB machine had memory free right after, and earlier renders of the same Composition encoded fine.
 
 A `frame` command at the failing frame succeeds in about 2 seconds, and re-running the identical `render` command succeeded (28m47s).
 
@@ -17,7 +18,8 @@ A `frame` command at the failing frame succeeds in about 2 seconds, and re-runni
 
 1. Run a long render under `caffeinate -i` so the machine does not sleep: `caffeinate -i node dist/cli.js render ...`.
 2. On `render.frame-timeout` or `render.page-error` at a frame that `frame --frame <n>` renders fine, re-run the same command unchanged. Do not change the Composition to chase it.
-3. If it fails repeatedly at the same frame, then it is a real defect: check `frame` at and around that frame, and do not retry blindly.
+3. On `encode.ffmpeg-failed` with `Cannot allocate memory`, re-run the same command with nothing else heavy running; the diagnostic's hint ("re-running without a change fails the same way") does not hold for this one.
+4. If it fails repeatedly at the same frame, then it is a real defect: check `frame` at and around that frame, and do not retry blindly.
 
 ## Why Not Fixed
 

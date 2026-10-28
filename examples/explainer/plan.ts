@@ -1,4 +1,4 @@
-// The storyboard: the script's data turned into whole frames, once, for all three layers.
+// The storyboard: the script's data turned into whole frames, once, for every layer.
 //
 // `script.schema.ts` owns the timing arithmetic in seconds; this file is the only place that
 // converts to the Composition's frame grid, so the slide layer, the subtitle layer and the speaker
@@ -23,6 +23,9 @@ import { script } from './script.ts';
  * read this one constant and cannot drift apart.
  */
 export const FPS = 30;
+
+/** The crossfade between two slides, in seconds: every storyboard overlaps its slides by this. */
+const CROSSFADE_SECONDS = 0.4;
 
 /**
  * One sentence of a line, on the frame grid: the subtitle shows one sentence at a time, and a scene
@@ -181,7 +184,7 @@ export const phraseTime = (
  */
 export const explainerStoryboard = (fps: number): Storyboard => {
   const spans = slidePlan(script.lines);
-  const overlapFrames = toFrames(0.4, fps);
+  const overlapFrames = toFrames(CROSSFADE_SECONDS, fps);
   const lines = placeLines(script.lines, fps);
   const slides = spans.map((span, index) => {
     const last = index === spans.length - 1;
@@ -266,12 +269,12 @@ const cueOf = (id: string): SlideCue => {
 
 /**
  * `explainer-ci`: 60 frames at 30 fps. One dialogue line on the `まとめ` checklist slide, a 0.4 s
- * crossfade, and the disclaimer slide with its tail — the three layers, a `Transition` overlap, two
+ * crossfade, and the disclaimer slide with its tail — every layer, a `Transition` overlap, two
  * placeholder characters and Japanese text through the committed face, in two seconds.
  */
 export const ciStoryboard = (): Storyboard => {
-  const fps = 30;
-  const overlap = 12;
+  const fps = FPS;
+  const overlap = toFrames(CROSSFADE_SECONDS, fps);
   return shortStoryboard(
     fps,
     [
@@ -292,8 +295,8 @@ export const ciStoryboard = (): Storyboard => {
 
 /** `explainer-probe`: the same shape at 480x270 for 30 frames, with flat surfaces instead of media. */
 export const probeStoryboard = (): Storyboard => {
-  const fps = 30;
-  const overlap = 12;
+  const fps = FPS;
+  const overlap = toFrames(CROSSFADE_SECONDS, fps);
   return shortStoryboard(
     fps,
     [
