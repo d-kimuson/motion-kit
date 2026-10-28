@@ -293,6 +293,76 @@ describe('host frame lease', () => {
     expect(sources[0]).toBe(reported[0]);
     expect(sources[1]).toBe(reported[1]);
   });
+  it('surfaces the caught exception in the page-error diagnostic without its stack', async () => {
+    const { job, driver } = make();
+    const failure = new Error(
+      'page.screenshot: Target page, context or browser has been closed\n    at frame (/tmp/mk-frame-8442/shot.js:7:13)',
+    );
+    failure.name = 'TimeoutError';
+    driver.capture = vi.fn<FrameTransport['capture']>().mockRejectedValue(failure);
+    const result = await job.run(driver);
+    expect(result).toMatchObject({
+      ok: false,
+      error: [
+        {
+          code: 'render.page-error',
+          severity: 'error',
+          message: 'The frame transport or page failed.',
+          hint: 'Fix the Composition or browser connection and create a new renderer.',
+          location: { compositionId: 'test', frame: 2 },
+          details: {
+            cause: {
+              name: 'TimeoutError',
+              message: 'page.screenshot: Target page, context or browser has been closed',
+            },
+          },
+        },
+      ],
+    });
+    const reported = JSON.stringify(result);
+    expect(reported).not.toMatch(/\s+at\s+\S+:\d+:\d+/u);
+    expect(reported).not.toContain('/tmp/');
+  });
+  it('redacts URLs and absolute paths in the caught exception', async () => {
+    const { job, driver } = make();
+    const failure = Object.assign(
+      new Error(
+        'net::ERR_FAILED at https://user:s3cret@cdn.example/path/frame.js?token=abc and open /var/folders/tp/mk-frame-12/out.png',
+      ),
+      { code: 'ECONNRESET' },
+    );
+    driver.settle = vi.fn<FrameTransport['settle']>().mockRejectedValue(failure);
+    const result = await job.run(driver);
+    expect(result).toMatchObject({
+      ok: false,
+      error: [
+        {
+          code: 'render.page-error',
+          details: {
+            cause: {
+              name: 'Error',
+              code: 'ECONNRESET',
+              message:
+                'net::ERR_FAILED at https://cdn.example/path/frame.js (+1 query parameter, redacted) and open [path]/out.png',
+            },
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('s3cret');
+  });
+  it('adds no details when the failure carries no exception', async () => {
+    const { job, driver } = make();
+    driver.complete = vi.fn<FrameTransport['complete']>().mockRejectedValue(undefined);
+    const result = await job.run(driver);
+    expect(result).toMatchObject({
+      ok: false,
+      error: [{ code: 'render.page-error', message: 'The frame transport or page failed.' }],
+    });
+    const settled = result;
+    if (settled.ok || !('error' in settled)) throw new Error('expected diagnostics');
+    expect(settled.error[0]?.details).toBeUndefined();
+  });
   it('does not invent an asset inventory for an unresponsive RPC', async () => {
     vi.useFakeTimers();
     const { job, driver } = make();
