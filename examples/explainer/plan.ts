@@ -67,8 +67,17 @@ export type Storyboard = {
   readonly lines: readonly PlannedLine[];
 };
 
-/** Exactly `frames` per `seconds`: both numbers come from the script, so nothing ever rounds. */
-const toFrames = (seconds: number, fps: number): number => Math.round(seconds * fps);
+/**
+ * Exactly `frames` per `seconds`. The script's seconds sit on whole frames at the rates the example
+ * plans at, so the round only removes floating-point noise; a time between two frames is a script
+ * error, and it throws rather than move a boundary.
+ */
+const toFrames = (seconds: number, fps: number): number => {
+  const frames = Math.round(seconds * fps);
+  if (Math.abs(frames - seconds * fps) > 1e-6)
+    throw new Error(`${String(seconds)} s is not a whole frame at ${String(fps)} fps`);
+  return frames;
+};
 
 /**
  * Where the outgoing slide's own clock stands when the crossfade hands it to the overlay: the frames
@@ -141,7 +150,7 @@ const sentencesIn = (
  *
  * `undefined` when the slide does not say it: a short storyboard narrates only part of a slide, and
  * the scene treats an unsaid phrase as already said (`scenes/kit.tsx`). On the full storyboard every
- * phrase a scene asks for must resolve, which `scenes/scenes.test.tsx` checks.
+ * phrase a scene asks for must resolve, which `scenes/scenes.test.ts` checks.
  */
 export const phraseTime = (
   slide: PlannedSlide,

@@ -26,8 +26,10 @@ import {
 
 /**
  * A text run's width in em, from the code points: a Japanese glyph advances 1 em, a Latin one about
- * 0.55, and the subtitle's tracking adds 0.04 em. The estimate is the widest a run can be, so a line
- * the layout measured never overflows in the browser.
+ * 0.55, and the subtitle's tracking adds 0.04 em. That covers what the script sets — kana, kanji,
+ * punctuation and digits — so a line the layout measured does not overflow in the browser. It is an
+ * estimate, not a bound: a wide Latin capital (`W`, `M`) runs past 0.55 em, and a script that uses
+ * them needs a wider figure here.
  */
 const TRACKING = 1.04;
 const FULL_EM = 1;

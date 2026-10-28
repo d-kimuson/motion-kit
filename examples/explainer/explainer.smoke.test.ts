@@ -281,10 +281,20 @@ describe('explainer narration fit', () => {
     // 12, which is exactly the mutation this assertion exists to catch.
     expect(rmsOf(pcmWindow(padded, ['-ss', '6.1', '-t', '0.15']))).toBeGreaterThan(0.01);
     expect(rmsOf(pcmWindow(padded, ['-ss', '6.4', '-t', '0.2']))).toBeLessThan(0.001);
-    // 5 s into a 4 s line: the clamp is 1.25, so `-t` is what lands the file on the slot.
+    // 5 s into a 4 s line: the clamp is 1.25, so `-t` is what lands the file on the slot. The speech
+    // takes the whole slot, its pause included, and nothing is cut, so nothing is reported.
     const cut = join(dir, 'cut.wav');
-    expect(fitClip(source, cut, 4)).toBe(1.25);
+    const quiet: string[] = [];
+    expect(fitClip(source, cut, 4, (message) => quiet.push(message))).toBe(1.25);
     expect(clipSeconds(cut)).toBe(4);
+    expect(quiet).toEqual([]);
+    // 5 s into 3.5 s: even at 1.25 the speech runs 4 s, so `-t` cuts its end — which the fit says
+    // out loud rather than leaving for a listener to notice.
+    const overrun = join(dir, 'overrun.wav');
+    const reported: string[] = [];
+    expect(fitClip(source, overrun, 3.5, (message) => reported.push(message))).toBe(1.25);
+    expect(clipSeconds(overrun)).toBe(3.5);
+    expect(reported).toEqual([expect.stringContaining('cut by 0.50 s')]);
   }, 60_000);
 
   it('starts the speech on the clip’s first sample, so nobody speaks a frame late', () => {

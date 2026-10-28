@@ -3,7 +3,7 @@
 //
 // This file is data. `script.schema.ts` validates it and owns the timing arithmetic; the entry
 // (TASK-209) turns the numbers here into a `TransitionSeries` of slides, one subtitle `Sequence` per
-// line and one sprite `Sequence` per speaker, and never recomputes a duration of its own.
+// sentence and the speaker layer's highlight, and never recomputes a duration of its own.
 //
 // Content rules the text keeps (design doc, "explainer"; TASK-170): it explains the concept — an
 // index, diversification, cost, long-term holding and instalments, and the risks — it recommends no
@@ -314,7 +314,7 @@ export const script: Script = assertScript(scriptSchema.parse({ title, disclaime
  */
 export const totalSeconds: number = computeTotalSeconds(script.lines);
 
-/** Where each line starts, as the `from` of its subtitle and sprite `Sequence`s. */
+/** Where each line starts, in seconds: the same arithmetic `plan.ts` places its subtitles and speaker highlight from. */
 export const lineStarts: readonly number[] = lineStartTimes(script.lines);
 
 /**

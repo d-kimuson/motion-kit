@@ -46,6 +46,7 @@ describe('explainer scenes', () => {
   // over: the checklist draws its finished state, which is what a 2-second twin should show.
   it('draws the slides of the CI storyboard', () => {
     const ci = ciStoryboard();
-    expect(ci.slides.map((slide) => drawAcross(slide, ci.fps).length)).toHaveLength(2);
+    expect(ci.slides).toHaveLength(2);
+    for (const slide of ci.slides) drawAcross(slide, ci.fps);
   });
 });

@@ -124,7 +124,7 @@ const sayAvailable = (): boolean =>
 /**
  * The band the fit may time-stretch within: at most 25 % faster and 25 % slower than the engine
  * spoke. Inside it a tempo change is the same voice at a slightly different pace; outside it, the
- * clip keeps its own pace and the rest of the slot is the silence every clip is padded with.
+ * clip keeps the clamped pace: a short one is padded with silence, a long one is cut and reported.
  */
 const maxTempo = 1.25;
 
@@ -159,8 +159,16 @@ export const fitTempo = (raw: number, speech: number): number =>
  *
  * Two passes, because the length to measure is the trimmed one: a lead-in left in the measurement
  * would be read as speech and the tempo would come out slow by its share.
+ *
+ * A clip too long even at the fastest tempo is cut at the slot's end, and `report` names it: the
+ * fix is a shorter sentence or a longer slot in the script, not a faster voice.
  */
-export const fitClip = (input: string, target: string, seconds: number): number => {
+export const fitClip = (
+  input: string,
+  target: string,
+  seconds: number,
+  report: Report = log,
+): number => {
   const trimmed = tempPath(`trim-${basename(target)}`);
   ffmpeg([
     '-i',
@@ -173,7 +181,13 @@ export const fitClip = (input: string, target: string, seconds: number): number 
     '1',
     trimmed,
   ]);
-  const tempo = fitTempo(ffprobeSeconds(trimmed), speechSeconds(seconds));
+  const speech = ffprobeSeconds(trimmed);
+  const tempo = fitTempo(speech, speechSeconds(seconds));
+  const overrun = speech / tempo - seconds;
+  if (overrun > 0.01)
+    report(
+      `warning: ${basename(target)} is cut by ${overrun.toFixed(2)} s at atempo ${tempo.toFixed(2)}; shorten the sentence or lengthen its slot`,
+    );
   ffmpeg([
     '-i',
     trimmed,

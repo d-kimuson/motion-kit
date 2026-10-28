@@ -38,8 +38,9 @@ export const durationInFrames = Number(
  * The one switch every media example carries: `placeholder` (the default, and what CI and every
  * commit-time render use) draws a badge for each character and the committed font; `final` draws
  * the portraits the local VOICEVOX engine ships. The voices are declared on the Composition either way, because audio is
- * descriptor data rather than a prop — `fetch-assets.ts` writes silent placeholders for step 1 and
- * replaces them in step 2, so a placeholder render is silent rather than a link error.
+ * descriptor data rather than a prop — `fetch-assets.ts` writes silent voice placeholders for step 1
+ * and replaces them in step 2, so a placeholder render carries the music bed and the whoosh with no
+ * voice rather than failing on a missing file.
  */
 export const assetsProps = z.object({
   assets: z.enum(['placeholder', 'final']).default('placeholder'),

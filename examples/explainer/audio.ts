@@ -4,9 +4,10 @@
 // Audio is a descriptor field, not a prop: `defineComposition` freezes it at declaration, so it
 // cannot switch on `--props`. Every file named here is written by `fetch-assets.ts`:
 //
-//   step 1  silent placeholders (`anullsrc`) at every path, so a placeholder render is silent rather
-//           than a link error;
-//   step 2  the narration from VOICEVOX (or `say -v Kyoko`), the bed and the whoosh synthesised.
+//   step 1  the music bed and the whoosh (synthesised by `synth.ts`), and a silent placeholder
+//           (`anullsrc`) at every voice path, so a placeholder render has its music and no voice
+//           rather than a link error;
+//   step 2  the narration from VOICEVOX (or `say -v Kyoko`) over those placeholders.
 //
 // Each narration clip is fitted sentence by sentence to its line's slot (`fetch-assets.ts`), so the
 // voice starts each sentence on the frame its subtitle does. `endInFrames` is a guard, not a cut:
