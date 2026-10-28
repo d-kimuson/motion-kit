@@ -125,5 +125,3 @@ For a cheaper loop, render a short Composition of the same structure — the exa
 - [Authoring](authoring.md) — the hooks a deterministic Composition derives from.
 - [Examples](examples.md) — how each reference video's determinism gate is set up and why its probe
   draws flat surfaces.
-- [The Phase 1 determinism record](../contexts/render/knowledge/20261024-phase1-determinism.md) — the
-  modes, the mutation matrix and the measured runtimes.

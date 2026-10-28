@@ -9,13 +9,13 @@ named `@kimuson/motion-kit`.
 ## Status
 
 **0.0.1 is the first public release.** It ships the renderer, the CLI, H.264 MP4 encoding, AAC audio
-muxing, and the determinism suite that keeps frame bytes independent of capture order. The
-[changelog](CHANGELOG.md) lists what is in it and what is known to be limited.
+muxing, and the determinism suite that keeps frame bytes independent of capture order. `CHANGELOG.md`
+in the repository lists what is in it and what is known to be limited.
 
 Not in 0.0.1: the preview UI, in-browser preview audio, audio-reactive visuals, video assets, the
 `/motion`, `/theme`, `/presets` and `/three` subpaths, and the `inspect`/`validate` commands. The
-[package surface](#package-surface) says what is exported today; the
-[context map](docs/CONTEXT-MAP.md) says what each later context will hold.
+[package surface](#package-surface) says what is exported today; each later context gets its own
+subpath when it lands.
 
 ## Install
 
@@ -136,8 +136,13 @@ including props overrides and where paths resolve, is [getting started](docs/gui
 
 ## Documentation
 
+The guides ship inside the package as well as in the repository, so an installed copy reads them
+without a network: start at `node_modules/@kimuson/motion-kit/docs/index.md`, and the guides it links
+are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
+
 | Document                                         | What it covers                                                                           |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                 |
 | [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.              |
 | [CLI](docs/guide/cli.md)                         | Both commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
 | [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.       |
@@ -148,9 +153,8 @@ including props overrides and where paths resolve, is [getting started](docs/gui
 ## CLI
 
 The `motion-kit` bin renders Compositions from a registry entry file. Both commands accept `--json`,
-which writes exactly one
-[versioned envelope](docs/contexts/agent/adr/20261024-cli-output-contract.accepted.md) to stdout;
-without it, the same data is printed as a short human summary.
+which writes exactly one versioned envelope (`schemaVersion: 1`) to stdout; without it, the same data
+is printed as a short human summary.
 
 ```bash
 # Capture one frame as a PNG.
@@ -175,10 +179,9 @@ encode is lossy anyway; the directory route writes PNG.
 
 Encoding needs an FFmpeg 6.0+ with `libx264` on `PATH` — and, for a Composition that declares audio,
 its companion `ffprobe`, which the same install provides: motion-kit ships and downloads no binary, so
-this is a prerequisite you install yourself
-([encoding decision](docs/contexts/render/adr/20261025-system-ffmpeg-encoder.accepted.md)). A missing
-or unsupported FFmpeg is `encode.ffmpeg-not-found` or `encode.ffmpeg-unsupported` before the first
-frame; `frame` and an `--out` directory need no FFmpeg at all.
+this is a prerequisite you install yourself. A missing or unsupported FFmpeg is
+`encode.ffmpeg-not-found` or `encode.ffmpeg-unsupported` before the first frame; `frame` and an `--out`
+directory need no FFmpeg at all.
 
 Audio has no flag either: the `.mp4` route muxes whatever the Composition declares in `audio`,
 resolving each `src` against the directory the command runs in. `volume: 1` is the file's own level,
@@ -207,8 +210,8 @@ today:
 - `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool` and their types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
 
-`/browser`, `/motion`, `/theme`, `/presets` and `/three` are planned and do not exist yet; [the
-context map](docs/CONTEXT-MAP.md) says what each will hold.
+`/browser`, `/motion`, `/theme`, `/presets` and `/three` are planned and do not exist yet; each gets
+its own subpath when it lands.
 
 ## Determinism
 
@@ -222,7 +225,7 @@ or trees broken by wall clocks, randomness, CSS animation or antialiased edges �
 
 ## Examples
 
-Four complete videos live under [`examples/`](examples/README.md): a 24-second teaser (dense motion), a
+Four complete videos live under `examples/` in the repository: a 24-second teaser (dense motion), a
 222-second explainer (long duration, subtitles against audio), a 20-second chart (schema-first props)
 and a 30-second vertical slideshow (assets and aspect switching). They are consumers of the published
 package and ship in the repository, not in the npm tarball; [the examples

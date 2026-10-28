@@ -25,8 +25,8 @@ motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
 `motion-kit` is the bin the package installs (`bin.motion-kit` → `dist/cli.js`), so with pnpm a
 command is `pnpm exec motion-kit …`, with npm `npx motion-kit …`, and with yarn `yarn motion-kit …`.
 Both that form and `node dist/cli.js …` appear below: the second is the same CLI run out of a
-checkout of this repository, after `pnpm build`, which is how the
-[`examples/`](../../examples/README.md) commands are written.
+checkout of this repository, after `pnpm build`, which is how the commands in the `examples/`
+directory of the repository are written.
 
 ## `render`
 
@@ -249,5 +249,6 @@ the process immediately with the same guarantees.
 - [Getting started](getting-started.md) — install, a first entry, a first render.
 - [Authoring](authoring.md) — what an entry exports and how the timeline works.
 - [Troubleshooting](troubleshooting.md) — what to do for each `code` above.
-- [The CLI output contract](../contexts/agent/adr/20261024-cli-output-contract.accepted.md) — the
-  normative envelope, Diagnostic and exit-code decisions.
+
+The envelope, the Diagnostic shape and the exit codes above are a contract, not a convenience:
+`schemaVersion` is `1` and changes only for a breaking change to them.

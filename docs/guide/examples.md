@@ -5,8 +5,8 @@ imports `@kimuson/motion-kit` by name and never a relative path into `src/` — 
 output quality bar for one axis of the framework. They are the best answer to "what does a real
 Composition look like?".
 
-The examples ship in the repository, not in the npm package (`package.json#files` is `dist` only).
-Every command below therefore runs from a checkout:
+The examples ship in the repository, not in the npm package, which contains `dist/` and the
+documentation you are reading. Every command below therefore runs from a checkout:
 
 ```bash
 pnpm install
@@ -147,9 +147,7 @@ The rule the examples follow is that a committed file must be redistributable by
   by `examples/explainer/fetch-assets.ts` against a local engine (`VOICEVOX_ENGINE_URL`, default
   `http://127.0.0.1:50021`).
 - **Credited**: the explainer carries the voice, illustrator, character-project and font credit lines
-  in its README and on the video's credit slide, as the
-  [asset licensing decision](../decisions/20261026-example-asset-licensing.accepted.md#credit-lines)
-  requires.
+  in its README and on the video's credit slide, as the repository's asset licensing rules require.
 
 Each example also commits an `assets.manifest.json` listing every file under `assets/` and
 `assets.local/` with its source and licence. No script reads it; it is reviewed with the example's PR.
@@ -171,16 +169,19 @@ because the fetched voice and music are local-only and never committed.
 
 ## Read one example end to end
 
-- [`examples/teaser/README.md`](../../examples/teaser/README.md) — dense motion, and the two rendering
-  choices that are load-bearing for its gate.
-- [`examples/explainer/README.md`](../../examples/explainer/README.md) — five layers over one
-  storyboard, the regions, the credit lines and what is committed.
-- [`examples/chart/README.md`](../../examples/chart/README.md) — schema-first props, the SVG, the
-  `composition.props-invalid` path, and the antialiasing findings.
-- [`examples/slideshow/README.md`](../../examples/slideshow/README.md) — Ken Burns, aspect switching,
-  the dissolve arithmetic and the generated placeholders.
-- [The reference-examples design](../design-doc/20261025-reference-examples.md) — the layout, the CI
-  budget and the acceptance look each example is measured against.
+Each example has a README of its own beside its entry file, in a checkout of the repository:
+
+- `examples/teaser/README.md` — dense motion, and the two rendering choices that are load-bearing for
+  its gate.
+- `examples/explainer/README.md` — five layers over one storyboard, the regions, the credit lines and
+  what is committed.
+- `examples/chart/README.md` — schema-first props, the SVG, the `composition.props-invalid` path, and
+  the antialiasing findings.
+- `examples/slideshow/README.md` — Ken Burns, aspect switching, the dissolve arithmetic and the
+  generated placeholders.
+
+The layout, the CI budget and the acceptance look each example is measured against are recorded in
+the repository's design notes beside the examples guide.
 
 ## Related
 
