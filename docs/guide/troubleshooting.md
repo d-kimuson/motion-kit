@@ -143,12 +143,12 @@ never decodes — the pending list in `asset.not-ready` names each one with its 
 A font, image or declared audio file could not be loaded. `location.file` (and `details.assets[].source`)
 name the source as it was written, redacted:
 
-| Symptom                                              | Cause and fix                                                                                                                                               |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A font or image that exists in the project fails     | `source` must be a **root-relative URL** (`/assets/logo.png`), not a filesystem path and not a JavaScript import.                                           |
-| Nothing found under `examples/<name>/assets.local`   | The example's placeholders were never generated: run `node examples/slideshow/fetch-assets.ts` or `node examples/explainer/fetch-assets.ts --placeholders`. |
-| An audio clip fails before the first frame           | `audio[].src` is resolved against the directory you run the CLI in; a missing, non-file or unreadable path is reported with no output written.              |
-| `--props '{"assets":"final"}'` fails on the examples | `final` reads `assets/`, which holds only what is licensed for that example; the default `placeholder` value is what a clone renders.                       |
+| Symptom                                              | Cause and fix                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A font or image that exists in the project fails     | `source` must be a **root-relative URL** (`/assets/logo.png`), not a filesystem path and not a JavaScript import.                                                                                                                                                                 |
+| Nothing found under `examples/<name>/assets.local`   | The example's placeholders were never generated: run `node examples/slideshow/fetch-assets.ts` or `node examples/explainer/fetch-assets.ts --placeholders`.                                                                                                                       |
+| An audio clip fails before the first frame           | `audio[].src` is resolved against the directory you run the CLI in; a missing, non-file or unreadable path is reported with no output written.                                                                                                                                    |
+| `--props '{"assets":"final"}'` fails on the examples | `final` reads media a clone does not have: `slideshow` reads `assets/` (nothing is committed there yet) and `explainer` reads `assets.local/portraits/` and `assets.local/voice/`, which only step 2 of its `fetch-assets.ts` writes. Render the default (`placeholder`) instead. |
 
 ## `render.page-error`
 
