@@ -1,4 +1,4 @@
-# Many render tests fail at once while the machine is under heavy load
+# Many tests fail at once under heavy machine load
 
 ## Symptom
 
@@ -13,4 +13,4 @@ One full `pnpm test` run reported 43 failures while a 30-minute full video rende
 
 ## Why Not Fixed
 
-The cause is not known: one observation, no kept output. The `encoding`, `frame-transport`, `loading`, and `cli` projects spawn the system FFmpeg or Chromium and set their own `testTimeout` (60_000) and `hookTimeout` (20_000 or 60_000) in `vitest.config.ts`; the likeliest explanation is timeouts or process starvation under heavy concurrent load (inferred, not observed). Fixing it needs the failure output from a reproduction. Delete this troubleshot when the cause is found and fixed, or when it has not recurred for a long time.
+The cause is not known: one observation, no kept output. The `encoding`, `frame-transport`, `loading`, and `cli` projects spawn the system FFmpeg or Chromium and set their own `testTimeout` (60_000) and `hookTimeout` (20_000 or 60_000) in `vitest.config.ts`. The `composition-dom` project runs headless Chromium through the Playwright provider and keeps the Vitest default timeouts. This list is not exhaustive. The likeliest explanation is timeouts or process starvation under heavy concurrent load (inferred, not observed). Fixing it needs the failure output from a reproduction. Delete this troubleshot when the cause is found and fixed, or when it has not recurred for a long time.
