@@ -27,7 +27,9 @@
     "motion-kit": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs/index.md",
+    "docs/guide"
   ],
   "type": "module",
   "sideEffects": false,
@@ -46,8 +48,7 @@
     }
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": false
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",
