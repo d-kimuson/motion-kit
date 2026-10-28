@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { advanceEm } from '../layout.ts';
+import { framesToSeconds } from '../look.ts';
 import { ciStoryboard, explainerStoryboard, FPS, type PlannedSlide } from '../plan.ts';
 import { SceneFor } from './Scene.tsx';
 import { AGENDA_SIZE, AGENDA_TEXT_WIDTH } from './TitleScene.tsx';
@@ -17,7 +18,7 @@ import { AGENDA_SIZE, AGENDA_TEXT_WIDTH } from './TitleScene.tsx';
 /** Draw `slide` at a spread of its own times, and return the phrases it asked for and did not find. */
 const drawAcross = (slide: PlannedSlide, fps: number): readonly string[] => {
   const missing: string[] = [];
-  const seconds = slide.frames / fps;
+  const seconds = framesToSeconds(slide.frames, fps);
   for (const time of [0, 0.5, seconds / 3, seconds / 2, seconds - 0.1]) {
     const markup = renderToStaticMarkup(createElement(SceneFor, { slide, time, fps, missing }));
     expect(markup.length).toBeGreaterThan(0);

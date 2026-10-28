@@ -8,6 +8,8 @@
 //
 // Phase 2 replaces the values here with /theme tokens and /motion curves; the tree that reads them
 // does not change (docs/design-doc/20261025-reference-examples.md, "explainer").
+import { createTimelineTime, toSeconds } from '@kimuson/motion-kit';
+
 import { type Expression } from './script.schema.ts';
 
 export type { Expression };
@@ -199,3 +201,11 @@ export const framesToTime = (frames: number, fps: number) => ({
   numerator: frames,
   denominator: fps,
 });
+
+/** A whole frame count in seconds, converted by the Time Module rather than by hand. */
+export const framesToSeconds = (frames: number, fps: number): number => {
+  const time = createTimelineTime(framesToTime(frames, fps));
+  if (!time.ok)
+    throw new Error(`${String(frames)} frames at ${String(fps)} fps: ${time.error.message}`);
+  return toSeconds(time.value);
+};

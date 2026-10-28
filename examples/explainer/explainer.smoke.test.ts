@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { compositions as explainerCompositions, storyboard } from './entry.tsx';
 import { fitClip, fitTempo, generatePlaceholders } from './fetch-assets.ts';
+import { framesToSeconds } from './look.ts';
 import { ciStoryboard, crossFadeTime } from './plan.ts';
 import { compositions as probeCompositions } from './probe.tsx';
 import { lineStartTimes, slidePlan } from './script.schema.ts';
@@ -172,7 +173,7 @@ describe('explainer example', () => {
     // The overlay's first frame (nothing elapsed yet) continues one frame past that frame.
     expect(crossFadeTime(outgoing, ci.fps, 0) * ci.fps).toBeCloseTo(lastDrawnFrame + 1, 6);
     // And the clock runs at 1x through the overlap, ending one frame inside the scene's own span.
-    const lastOverlapFrame = (ci.overlapFrames - 1) / ci.fps;
+    const lastOverlapFrame = framesToSeconds(ci.overlapFrames - 1, ci.fps);
     expect(crossFadeTime(outgoing, ci.fps, lastOverlapFrame) * ci.fps).toBeCloseTo(
       outgoing.frames - 1,
       6,

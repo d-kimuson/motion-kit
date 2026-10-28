@@ -4,7 +4,7 @@
 // converts to the Composition's frame grid, so the slide layer, the subtitle layer and the speaker
 // layer cannot disagree: each takes the same `Storyboard`. Every frame count is an integer because
 // every line's seconds are.
-import { type Character } from './look.ts';
+import { framesToSeconds, type Character } from './look.ts';
 import {
   codePointLength,
   lineStartTimes,
@@ -94,7 +94,7 @@ const toFrames = (seconds: number, fps: number): number => {
  * jumping at either edge of the crossfade.
  */
 export const crossFadeTime = (slide: PlannedSlide, fps: number, elapsedSeconds: number): number =>
-  slide.contentFrames / fps + elapsedSeconds;
+  framesToSeconds(slide.contentFrames, fps) + elapsedSeconds;
 
 /**
  * A line's sentences on its own frames: boundary `k` sits at the share of the line's code points
@@ -170,7 +170,10 @@ export const phraseTime = (
     if (at < 0) continue;
     const before = codePointLength(sentence.text.slice(0, at));
     const share = before / codePointLength(sentence.text);
-    return (sentence.startFrame - slide.startFrame + share * sentence.frames) / fps;
+    return (
+      framesToSeconds(sentence.startFrame - slide.startFrame, fps) +
+      share * framesToSeconds(sentence.frames, fps)
+    );
   }
   return undefined;
 };
