@@ -1,12 +1,24 @@
 // The explainer's motion vocabulary, as plain arithmetic on a scene's local seconds. /motion has no
-// public subpath yet, so the spring comes from the teaser's closed form and the arrivals every scene
+// public subpath yet, so the spring is a closed form written here, and the arrivals every scene
 // uses are named here once: a scene says `rise(t, at)` and gets the same curve as every other one.
 import { type CSSProperties } from 'react';
 
-import { springStep } from '../teaser/motion.ts';
 import { clamp01, easeInCubic, easeOutCubic } from './look.ts';
 
-export { springStep };
+/**
+ * Step response of an underdamped spring released from rest toward 1 at t = 0: it overshoots by a
+ * few percent before settling. The same closed form as the teaser's, kept here rather than imported
+ * so one example does not depend on another's file; both go once `/motion` has a public spring.
+ */
+export const springStep = (seconds: number, damping = 0.72, omega = 12): number => {
+  if (!(seconds > 0)) return 0;
+  const damped = omega * Math.sqrt(1 - damping * damping);
+  const decay = Math.exp(-damping * omega * seconds);
+  return (
+    1 -
+    decay * (Math.cos(damped * seconds) + ((damping * omega) / damped) * Math.sin(damped * seconds))
+  );
+};
 
 /** 0 before `at`, 1 after `at + duration`, linear between. */
 export const progress = (t: number, at: number, duration: number): number =>

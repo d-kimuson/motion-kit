@@ -73,7 +73,7 @@ export const slideCueSchema = z.discriminatedUnion('kind', [
     kind: z.literal('title'),
     text: z.string().min(1),
     kicker: z.string().min(1),
-    agenda: z.array(z.string().min(1)).min(2).max(6),
+    agenda: z.array(z.string().min(1)).min(2).max(8),
   }),
   /** Many companies fold into one index line, and a fund follows that line. */
   z.object({

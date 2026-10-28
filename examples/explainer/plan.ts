@@ -18,6 +18,13 @@ import {
 import { script } from './script.ts';
 
 /**
+ * The full video's rate: 30 fps, the design doc's rate for every example. `entry.tsx` declares the
+ * Composition at it and `fetch-assets.ts` fits the voice to the storyboard planned at it, so the two
+ * read this one constant and cannot drift apart.
+ */
+export const FPS = 30;
+
+/**
  * One sentence of a line, on the frame grid: the subtitle shows one sentence at a time, and a scene
  * times its beats to the words a sentence says (`phraseTime`). A line's frames are shared between
  * its sentences in proportion to their code points, the same five-per-second rule the line's own

@@ -152,6 +152,15 @@ describe('explainer script', () => {
     expect(() => scriptLineSchema.parse({ ...base, seconds: 3 })).toThrow(/is 2 s, not 3 s/);
   });
 
+  it('promises on the title slide the chapters the top bar then counts, in order', () => {
+    const [opening, ...rest] = slideSpans.map((span) => span.cue);
+    if (opening?.kind !== 'title') throw new Error('the first slide is not the title');
+    const chapters = rest.flatMap((cue) =>
+      cue.kind === 'title' || cue.kind === 'disclaimer' ? [] : [cue.title],
+    );
+    expect(opening.agenda).toEqual(chapters);
+  });
+
   it('groups consecutive lines into slides and starts each one at its first line', () => {
     const groups = groupSlides(script.lines);
     expect(groups).toHaveLength(10);

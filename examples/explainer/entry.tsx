@@ -17,7 +17,7 @@ import { z } from 'zod';
 
 import { soundtrack } from './audio.ts';
 import { ExplainerScene } from './ExplainerScene.tsx';
-import { ciStoryboard, explainerStoryboard } from './plan.ts';
+import { ciStoryboard, explainerStoryboard, FPS } from './plan.ts';
 import { totalSeconds } from './script.ts';
 
 const unwrap = <T,>(result: Result<T>): T => {
@@ -25,8 +25,9 @@ const unwrap = <T,>(result: Result<T>): T => {
   return result.value;
 };
 
-/** 30 fps: the design doc's rate for every example. */
-export const fps = unwrap(createFrameRate({ numerator: 30, denominator: 1 }));
+/** `FPS` (`plan.ts`) as the Time Module's rate, and as the Compositions declare it. */
+const rate = { numerator: FPS, denominator: 1 } as const;
+export const fps = unwrap(createFrameRate(rate));
 const fpsValue = Number(fps.numerator) / Number(fps.denominator);
 
 /** The script's 222 s as 6660 frames: the video's whole length, derived at module load. */
@@ -70,7 +71,7 @@ export const compositions = defineCompositions([
     id: 'explainer',
     width: 1920,
     height: 1080,
-    fps: { numerator: 30, denominator: 1 },
+    fps: rate,
     durationInFrames,
     schema: assetsProps,
     component: Explainer,
@@ -80,7 +81,7 @@ export const compositions = defineCompositions([
     id: 'explainer-ci',
     width: 960,
     height: 540,
-    fps: { numerator: 30, denominator: 1 },
+    fps: rate,
     durationInFrames: ci.durationInFrames,
     schema: assetsProps,
     component: ExplainerCi,

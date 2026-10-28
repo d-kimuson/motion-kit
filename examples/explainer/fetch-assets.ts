@@ -23,16 +23,13 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CHARACTERS, LOCAL_PATH, musicSource, whooshSource, type Character } from './look.ts';
-import { explainerStoryboard, type PlannedLine } from './plan.ts';
+import { explainerStoryboard, FPS, type PlannedLine } from './plan.ts';
 import { script, totalSeconds } from './script.ts';
 import { encodeWav, musicBed, whoosh } from './synth.ts';
 
 const root = LOCAL_PATH;
 const voiceDir = join(root, 'voice');
 const portraitDir = join(root, 'portraits');
-
-/** The rate the storyboard is planned at; the sentence slots the voice is fitted to come from it. */
-const FPS = 30;
 
 /** Where a step reports what it did: the CLI prints, and the smoke test collects. */
 export type Report = (message: string) => void;
