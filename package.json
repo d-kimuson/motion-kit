@@ -29,7 +29,8 @@
   "files": [
     "dist",
     "docs/index.md",
-    "docs/guide"
+    "docs/guide",
+    "THIRD_PARTY_LICENSES.md"
   ],
   "type": "module",
   "sideEffects": false,
@@ -51,7 +52,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && pnpm third-party:licenses",
     "prelint": "pnpm build",
     "pretypecheck": "pnpm build",
     "pretest": "pnpm build",
@@ -61,6 +62,7 @@
     "lint:attw": "attw --pack --profile esm-only",
     "lint:oxfmt": "pnpm fix:oxfmt --check",
     "lint:licenses": "node scripts/check-licenses.ts",
+    "third-party:licenses": "node scripts/third-party-licenses.ts",
     "lint:tsconfig": "node scripts/check-tsconfig-coverage.ts",
     "lint:lean-spec": "node scripts/lean-spec.ts check src/core",
     "fix": "run-p fix:*",
