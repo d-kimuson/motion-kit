@@ -7,9 +7,10 @@ import { clamp01, easeInCubic, easeOutCubic } from './look.ts';
 
 /**
  * Step response of an underdamped spring released from rest toward 1 at t = 0: it overshoots by a
- * few percent before settling. The same closed form as the teaser's, kept here rather than imported
- * so retuning the teaser's spring cannot move the explainer's motion (the chart JSON is shared
- * on purpose, `scenes/datasets.ts`, because both must draw the same data); both go once `/motion` has a public spring.
+ * few percent before settling. The same closed form as the teaser's, kept here rather than
+ * imported so retuning the teaser's spring cannot move the explainer's motion. (The chart JSON is
+ * shared on purpose, in `scenes/datasets.ts`, because both must draw the same data.) Both copies
+ * go once `/motion` has a public spring.
  */
 export const springStep = (seconds: number, damping = 0.72, omega = 12): number => {
   if (!(seconds > 0)) return 0;

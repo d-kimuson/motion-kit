@@ -4,8 +4,7 @@
 import { useTime } from '@kimuson/motion-kit';
 
 import { DesignRect } from './flat.tsx';
-import { DESIGN, STAGE, palette } from './look.ts';
-import { hash01 } from './scenes/kit.tsx';
+import { DESIGN, STAGE, hash01, palette } from './look.ts';
 import { useFlat } from './slides/shared.ts';
 
 const GRID = 64;

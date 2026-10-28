@@ -143,7 +143,9 @@ export const RiskScene = ({ cue, clock, chapter }: SceneProps<'risk'>) => {
         }}
       >
         <Tag color={palette.gold} size={26}>
-          {`もとに戻るまで ${String(recovered - valley.peakYear)}年`}
+          {valley.recoveryYear === null
+            ? 'まだもとに戻っていない'
+            : `もとに戻るまで ${String(recovered - valley.peakYear)}年`}
         </Tag>
       </div>
       <div

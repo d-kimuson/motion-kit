@@ -182,6 +182,12 @@ export const SUBTITLE_PLATE_OFFSET = 22;
  */
 export const px = (value: number): number => Math.round(value);
 
+/** A cheap deterministic hash of an integer onto 0..1, for per-tile variation that never changes. */
+export const hash01 = (value: number): number => {
+  const x = Math.sin(value * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
 export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 export const easeOutCubic = (progress: number): number => 1 - (1 - clamp01(progress)) ** 3;

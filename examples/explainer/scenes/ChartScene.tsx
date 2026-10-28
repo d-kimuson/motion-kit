@@ -39,7 +39,9 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
   const slowAt = clock.at('ゆっくり上がる年');
   const max = Math.max(...points.map((point) => point.value));
   const x = linear([first.year, last.year], [AXIS + 10, WIDTH - 40]);
-  const y = linear([0, Math.ceil(max / 200) * 200], [CHART_HEIGHT - 28, 12]);
+  const ceiling = Math.ceil(max / 200) * 200;
+  const y = linear([0, ceiling], [CHART_HEIGHT - 28, 12]);
+  const grid = Array.from({ length: ceiling / 200 }, (_, index) => index * 200);
   const line = points.map((point) => [x(point.year), y(point.value)] as const);
   const drawn = enter(t, lineAt + 0.2, 3);
   const area = `${pathThrough(line)} L${String(x(last.year))} ${String(y(0))} L${String(x(first.year))} ${String(y(0))} Z`;
@@ -55,6 +57,8 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
         ? enter(t, slowAt, 0.4)
         : 0;
   const deepest = changes.reduce((low, item) => (item.change < low.change ? item : low));
+  // "A short period" is framed around the worst single year, one year either side.
+  const short = { from: deepest.year - 1, to: deepest.year + 1 };
   const valleyIn = (index: number): number => valleyAt + 0.2 + index * 0.4;
   // A valley's depth sits on the axis row under its trough, so the year it would cover fades out.
   const yearOpacity = (year: number): number =>
@@ -95,7 +99,7 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
             <stop offset="1" stopColor={palette.sky} stopOpacity={0} />
           </linearGradient>
         </defs>
-        {[0, 200, 400, 600].map((value) => (
+        {grid.map((value) => (
           <g key={`grid-${String(value)}`} opacity={enter(t, 0.3, 0.5)}>
             <line
               x1={AXIS}
@@ -168,9 +172,9 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
           opacity={enter(t, trendAt + 0.4, 0.4)}
         />
         <rect
-          x={x(2007) - 14}
+          x={x(short.from) - 14}
           y={8}
-          width={x(2009) - x(2007) + 28}
+          width={x(short.to) - x(short.from) + 28}
           height={CHART_HEIGHT - 32}
           rx={14}
           fill="none"
@@ -212,7 +216,7 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
       </div>
       <div
         style={{
-          ...at(SCENE_BODY.left + x(2009) + 24, SCENE_BODY.top + 186, 260, 44),
+          ...at(SCENE_BODY.left + x(short.to) + 24, SCENE_BODY.top + 186, 260, 44),
           ...slideIn(t, shortAt + 0.2, 20),
         }}
       >

@@ -1,14 +1,13 @@
 // Chapter 1: what an index is. Many stocks' tiles flicker on the left, one line sums them on the
 // right and the constituent count runs up as Metan names it; then the tiles give way to two lines
 // that move together — the index and the fund built to follow it — and the takeaway stamps in.
-import { SCENE_BODY, palette } from '../look.ts';
+import { SCENE_BODY, hash01, palette } from '../look.ts';
 import { countUp, enter, leave, popIn, rise, slideIn } from '../motion.ts';
 import {
   at,
   cardStyle,
   Check,
   drawOn,
-  hash01,
   Heading,
   pathThrough,
   SceneRoot,

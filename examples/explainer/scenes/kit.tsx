@@ -223,9 +223,3 @@ export const Footnote = ({
     {children}
   </div>
 );
-
-/** A cheap deterministic hash of an integer onto 0..1, for per-tile variation that never changes. */
-export const hash01 = (value: number): number => {
-  const x = Math.sin(value * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
-};
