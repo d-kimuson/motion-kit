@@ -22,6 +22,7 @@ const CHART_HEIGHT = 262;
 const STRIP_TOP = 300;
 const STRIP_HEIGHT = SCENE_BODY.height - STRIP_TOP;
 const AXIS = 64;
+const VALLEY_LABEL_WIDTH = 140;
 
 export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
   const { t } = clock;
@@ -54,6 +55,16 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
         ? enter(t, slowAt, 0.4)
         : 0;
   const deepest = changes.reduce((low, item) => (item.change < low.change ? item : low));
+  const valleyIn = (index: number): number => valleyAt + 0.2 + index * 0.4;
+  // A valley's depth sits on the axis row under its trough, so the year it would cover fades out.
+  const yearOpacity = (year: number): number =>
+    valleys.reduce(
+      (opacity, valley, index) =>
+        Math.abs(x(year) - x(valley.troughYear)) < VALLEY_LABEL_WIDTH / 2 + 30
+          ? opacity * (1 - enter(t, valleyIn(index), 0.3))
+          : opacity,
+      enter(t, 0.4, 0.5),
+    );
   return (
     <SceneRoot>
       <Heading
@@ -115,7 +126,7 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
               fill={palette.muted}
               fontSize={20}
               textAnchor="middle"
-              opacity={enter(t, 0.4, 0.5)}
+              opacity={yearOpacity(point.year)}
             >
               {point.year}
             </text>
@@ -174,14 +185,14 @@ export const ChartScene = ({ cue, clock, chapter }: SceneProps<'chart'>) => {
           key={`valley-${String(valley.peakYear)}`}
           style={{
             ...at(
-              SCENE_BODY.left + x(valley.troughYear) - 70,
-              SCENE_BODY.top + y(valley.troughValue) + 18,
-              140,
+              SCENE_BODY.left + x(valley.troughYear) - VALLEY_LABEL_WIDTH / 2,
+              SCENE_BODY.top + CHART_HEIGHT - 30,
+              VALLEY_LABEL_WIDTH,
               50,
             ),
             display: 'flex',
             justifyContent: 'center',
-            ...popIn(t, valleyAt + 0.2 + index * 0.4, 0.4),
+            ...popIn(t, valleyIn(index), 0.4),
           }}
         >
           <Tag color={palette.coral} size={26}>

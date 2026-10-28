@@ -15,6 +15,21 @@ const climb = Array.from({ length: 24 }, (_, index) => {
   return [x, trend + wobble] as const;
 });
 
+/** The agenda grid: two columns, so the longest chapter title sits on one line in its card. */
+const AGENDA_WIDTH = STAGE.width - 160;
+const AGENDA_COLUMNS = 2;
+const AGENDA_GAP = 22;
+const CARD_PADDING = 26;
+const NUMBER_WIDTH = 52;
+const NUMBER_GAP = 18;
+export const AGENDA_SIZE = 29;
+/** What a card leaves for its chapter title, in design pixels; `scenes.test.ts` fits every title in it. */
+export const AGENDA_TEXT_WIDTH =
+  (AGENDA_WIDTH - AGENDA_GAP * (AGENDA_COLUMNS - 1)) / AGENDA_COLUMNS -
+  2 * CARD_PADDING -
+  NUMBER_WIDTH -
+  NUMBER_GAP;
+
 export const TitleScene = ({ cue, clock }: SceneProps<'title'>) => {
   const { t } = clock;
   const agendaAt = clock.at('投資ってなんだか');
@@ -88,10 +103,10 @@ export const TitleScene = ({ cue, clock }: SceneProps<'title'>) => {
       </div>
       <div
         style={{
-          ...at(80, 250, STAGE.width - 160, 330),
+          ...at(80, 250, AGENDA_WIDTH, 330),
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 22,
+          gridTemplateColumns: `repeat(${String(AGENDA_COLUMNS)}, 1fr)`,
+          gap: AGENDA_GAP,
         }}
       >
         {cue.agenda.map((item, index) => (
@@ -102,16 +117,27 @@ export const TitleScene = ({ cue, clock }: SceneProps<'title'>) => {
               borderRadius: 22,
               background: 'rgba(255,255,255,0.06)',
               border: '2px solid rgba(255,255,255,0.1)',
-              padding: '22px 26px',
+              padding: `0 ${String(CARD_PADDING)}px`,
               display: 'flex',
               alignItems: 'center',
-              gap: 18,
+              gap: NUMBER_GAP,
             }}
           >
-            <div style={{ fontSize: 38, fontWeight: 900, color: palette.gold, minWidth: 52 }}>
+            <div
+              style={{ fontSize: 38, fontWeight: 900, color: palette.gold, minWidth: NUMBER_WIDTH }}
+            >
               {String(index + 1).padStart(2, '0')}
             </div>
-            <div style={{ fontSize: 29, fontWeight: 700, lineHeight: 1.3 }}>{item}</div>
+            <div
+              style={{
+                fontSize: AGENDA_SIZE,
+                fontWeight: 700,
+                lineHeight: 1.3,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {item}
+            </div>
           </div>
         ))}
       </div>

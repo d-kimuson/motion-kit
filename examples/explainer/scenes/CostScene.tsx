@@ -224,12 +224,8 @@ export const CostScene = ({ cue, clock, chapter }: SceneProps<'cost'>) => {
       </div>
       <div
         style={{
-          ...at(
-            CHART_LEFT + x(cue.years) - 260,
-            SCENE_BODY.top + (y(lowEnd) + y(highEnd)) / 2 - 34,
-            260,
-            68,
-          ),
+          // Above and left of the cheaper line's end, the empty corner the curves bend away from.
+          ...at(CHART_LEFT + x(cue.years) - 310, SCENE_BODY.top + y(lowEnd) - 84, 260, 68),
           display: 'flex',
           justifyContent: 'flex-end',
           ...popIn(t, gapAt + 0.4, 0.5),
