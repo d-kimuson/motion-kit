@@ -18,7 +18,7 @@ export type EncodeProgress = {
 export type EncodeRequest = {
   readonly frames: FrameStream;
   /** The encoding every frame of `frames` arrives in; PNG when omitted. A frame in another
-   * encoding is a contract violation (`internal.invariant-violated`).
+   * encoding is a contract violation (`internal.unexpected`).
    */
   readonly imageFormat?: CaptureFormat['type'];
   /** The Composition's rational rate; never a rounded float. */

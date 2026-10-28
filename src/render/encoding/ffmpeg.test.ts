@@ -399,7 +399,7 @@ describe('FfmpegEncoder.encode', () => {
     expect(probed).toContain('nb_frames=10');
   }, 60_000);
 
-  it('encodes JPEG frames through the mjpeg input codec', async () => {
+  it('encodes JPEG frames through the mjpeg input codec, in the limited range a PNG input gets', async () => {
     const jpegs = pngFrames(5, 'jpg');
     const encoder = await openEncoder('ffmpeg');
     const output = outputPath();
@@ -418,13 +418,16 @@ describe('FfmpegEncoder.encode', () => {
       '-select_streams',
       'v:0',
       '-show_entries',
-      'stream=codec_name,nb_frames',
+      'stream=codec_name,nb_frames,pix_fmt,color_range',
       '-of',
       'default=noprint_wrappers=1',
       output,
     ]).toString();
     expect(probed).toContain('codec_name=h264');
     expect(probed).toContain('nb_frames=5');
+    // mjpeg decodes to full-range yuvj420p; the MP4 must not inherit it.
+    expect(probed).toContain('pix_fmt=yuv420p\n');
+    expect(probed).toContain('color_range=tv');
   }, 60_000);
 
   it('treats a frame in another format than the request names as internal.unexpected', async () => {

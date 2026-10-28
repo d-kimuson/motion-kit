@@ -281,6 +281,14 @@ type PumpResult = {
 /** FFmpeg's decoder for each capture encoding piped through `image2pipe`. */
 const inputCodec: Readonly<Record<CaptureFormat['type'], string>> = { png: 'png', jpeg: 'mjpeg' };
 
+/** mjpeg decodes to full-range `yuvj420p`, which `-pix_fmt` alone carries into the MP4 as
+ * full range; scaling to the limited range gives the same output format a PNG input gets.
+ */
+const inputFilter: Readonly<Record<CaptureFormat['type'], readonly string[]>> = {
+  png: [],
+  jpeg: ['-vf', `scale=out_range=tv,format=${PIXEL_FORMAT}`],
+};
+
 /** Hands the image stream to the child and stops at the first failed frame, abort, or over-long stream. */
 const pump = async (options: {
   readonly child: ChildProcess;
@@ -460,6 +468,7 @@ const encodeWithFfmpeg = async (
     ...audioInputArguments(tracks),
     '-c:v',
     REQUIRED_VIDEO_ENCODER,
+    ...inputFilter[request.imageFormat ?? 'png'],
     '-pix_fmt',
     PIXEL_FORMAT,
     '-r',

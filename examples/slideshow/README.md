@@ -129,7 +129,7 @@ a second full render.
 
 The determinism gate runs `defineDeterminismSuite` over `probe.tsx` — reached as a module path string,
 never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all eight traversal modes
-(sequential, random, reverse, repeated, fresh realm, held session, fresh renderer). The probe renders
+(sequential, random, reverse, repeated, fresh realm, held session, fresh renderer, concurrent). The probe renders
 the same `TransitionSeries` and the same `layoutFor(width, height)` at 480×270 with flat surfaces
 instead of the `useAsset` photos, because an image inside a `Sequence` failed `reverse` twice and has
 not reproduced since ([CI policy](../../docs/design-doc/20261025-reference-examples.md#ci-policy)).

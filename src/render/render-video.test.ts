@@ -78,7 +78,7 @@ const probe = (path: string): Record<string, unknown> => {
     '-select_streams',
     'v:0',
     '-show_entries',
-    'stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_frames,duration,format_name',
+    'stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_frames,duration,format_name,pix_fmt,color_range',
     '-of',
     'json',
     path,
@@ -275,6 +275,9 @@ describe('renderVideo', () => {
       height: 120,
       r_frame_rate: '20/1',
       nb_frames: '40',
+      // The JPEG capture still yields the limited-range 4:2:0 a PNG capture did.
+      pix_fmt: 'yuv420p',
+      color_range: 'tv',
     });
     expect(Number(stream['duration'])).toBeCloseTo(2, 1);
 
