@@ -12,10 +12,13 @@ The first version of a new package can only be published by hand, because npm of
    git switch main && git pull
    pnpm install --frozen-lockfile
    pnpm build && pnpm exec clean-pkg-json
+   npm pack --dry-run --ignore-scripts     # dist/, docs/index.md, docs/guide, README, LICENSE, package.json
    npm login                                  # an account with publish rights to @kimuson
    npm publish --access public --tag latest    # 2FA prompt
    git restore package.json
    ```
+
+   This one publish carries no provenance attestation: npm generates it from the OIDC exchange, and a laptop has no OIDC identity. Every later release published by `release.yml` is attested.
 
    Do not push a `v0.0.1` tag for this publish. The tag triggers the workflow, which would try to publish a version npm already has and fail. The first tagged release is the next version.
 
@@ -85,7 +88,16 @@ npm dist-tag ls @kimuson/motion-kit
 npm view @kimuson/motion-kit@$VERSION dependencies devDependencies engines repository
 ```
 
-The dist-tag list must show the new version under `latest` (or under `beta` for a prerelease), and the published `package.json` must carry no `devDependencies` and no `scripts`. The package has no `dist.attestations`: provenance cannot be generated from a private repository, so its absence is expected, not a failure.
+The dist-tag list must show the new version under `latest` (or under `beta` for a prerelease), and the published `package.json` must carry no `devDependencies` and no `scripts`. The tarball is `dist/`, the user documentation (`docs/index.md` and `docs/guide`), `README.md`, `LICENSE` and `package.json` — the same list a local `npm pack --dry-run --ignore-scripts` prints.
+
+A version published by the workflow is attested. The package and the repository are both public, so npm generates the provenance statement from the OIDC identity the publish already presents:
+
+```bash
+npm view "@kimuson/motion-kit@$VERSION" dist.attestations dist.tarball
+npm audit signatures
+```
+
+`dist.attestations` present and `npm audit signatures` reporting the version are the success condition. The manual `0.0.1` publish has no attestation, and its absence is expected there, not a failure.
 
 ## GitHub Release
 
@@ -110,4 +122,4 @@ gh release edit "$TAG" --notes-file "$NOTES_FILE" --draft=false
 | `ENEEDAUTH` or `Unable to authenticate`           | The workflow filename, repository or `repository.url` does not match the trusted publisher form on npmjs.com.                        |
 | `403`, or the publish is not authenticated at all | The configuration expired (no OIDC publish within 2 days) or `id-token: write` is missing. Recreate the configuration, then publish. |
 | `EPUBLISHCONFLICT` / `cannot publish over …`      | The version is already on npm. Never reuse the number; release the next version.                                                     |
-| No provenance badge                               | Expected: npm does not generate provenance from a private repository.                                                                |
+| No `dist.attestations` on a tagged release        | The publish did not go through OIDC (see `ENEEDAUTH`). A CI publish is attested; only the manual `0.0.1` has none.                   |
