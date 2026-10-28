@@ -7,7 +7,9 @@
 //   whoosh  0.6 s of noise swept up through a resonant band-pass, swelling and falling away.
 //
 // Every voice is a pure function of the sample index plus one seeded noise source, so the same
-// call writes byte-identical files on every machine.
+// call writes the same file on every run. Across machines `Math.sin` and friends are not
+// guaranteed bit-identical, which does not matter here: the WAVs are generated locally and never
+// committed or compared.
 
 export const SAMPLE_RATE = 48_000;
 

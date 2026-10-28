@@ -9,6 +9,7 @@
 // Phase 2 replaces the values here with /theme tokens and /motion curves; the tree that reads them
 // does not change (docs/design-doc/20261025-reference-examples.md, "explainer").
 import {
+  compareTime,
   createFrameRate,
   createTimelineTime,
   frameToTime,
@@ -216,16 +217,15 @@ const frameRateOf = (fps: number): FrameRate => {
 };
 
 /**
- * Seconds as the nearest whole frame, by the Time Module. The script's seconds are sums of decimal
- * seconds, so they carry float noise; a time farther than that noise from a frame is a script
- * error, and it throws rather than move a boundary.
+ * Seconds as a whole frame, by the Time Module. The script's seconds sit on whole frames, so a time
+ * between two frames is a script error, and it throws rather than move a boundary.
  */
 export const secondsToFrames = (seconds: number, fps: number): number => {
   const rate = frameRateOf(fps);
   const time = createTimelineTime(seconds);
   if (!time.ok) throw new Error(`${String(seconds)} s: ${time.error.message}`);
   const frames = timeToFrameNearest(time.value, rate);
-  if (Math.abs(toSeconds(frameToTime(frames, rate)) - seconds) * fps > 1e-6)
+  if (compareTime(frameToTime(frames, rate), time.value) !== 0)
     throw new Error(`${String(seconds)} s is not a whole frame at ${String(fps)} fps`);
   return Number(frames);
 };
