@@ -315,6 +315,13 @@ const isSpeakerList = (value: unknown): value is readonly SpeakerEntry[] =>
       Array.isArray(entry.styles),
   );
 
+/** A VOICEVOX GET answered as JSON; a non-2xx status throws rather than parsing an error page. */
+const fetchJson = async (url: string): Promise<unknown> => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`VOICEVOX ${url} answered ${String(response.status)}`);
+  return response.json();
+};
+
 /**
  * Step 2's portraits: the character art the VOICEVOX engine ships for each speaker (`/speaker_info`,
  * 坂本アヒル's 立ち絵), written as `<root>/portraits/<character>.png`. They come with the engine the
@@ -326,7 +333,7 @@ const fetchPortraits = async (useVoicevox: boolean): Promise<void> => {
     return;
   }
   const url = engineUrl();
-  const speakers: unknown = await (await fetch(`${url}/speakers`)).json();
+  const speakers: unknown = await fetchJson(`${url}/speakers`);
   if (!isSpeakerList(speakers)) throw new Error('VOICEVOX /speakers answered an unexpected shape');
   mkdirSync(portraitDir, { recursive: true });
   for (const character of CHARACTERS) {
@@ -335,9 +342,7 @@ const fetchPortraits = async (useVoicevox: boolean): Promise<void> => {
     );
     if (entry === undefined)
       throw new Error(`VOICEVOX has no speaker with style ${String(voicevoxSpeaker[character])}`);
-    const info: unknown = await (
-      await fetch(`${url}/speaker_info?speaker_uuid=${entry.speaker_uuid}`)
-    ).json();
+    const info: unknown = await fetchJson(`${url}/speaker_info?speaker_uuid=${entry.speaker_uuid}`);
     if (
       typeof info !== 'object' ||
       info === null ||

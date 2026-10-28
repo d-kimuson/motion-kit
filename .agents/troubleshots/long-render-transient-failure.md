@@ -8,7 +8,7 @@ A full-length `render` of a long Composition (observed: `examples/explainer`, 66
 node dist/cli.js render examples/explainer/entry.tsx --composition explainer --props '{"assets":"final"}' --out out/explainer.mp4 --json
 ```
 
-- `render.frame-timeout` ("Frame settlement or capture exceeded the frame deadline.") at frame 224 after 18 minutes, with the process at about 5% CPU. The run was not under `caffeinate`; the Mac idled or slept.
+- `render.frame-timeout` ("Frame settlement or capture exceeded the frame deadline.") at frame 224 after 18 minutes, with the process at about 5% CPU. The run was not under `caffeinate`, the low CPU fits a machine that idled or slept, and the same command under `caffeinate -i` has not hit it since — the sleep is inferred from that, not observed.
 - `render.page-error` ("The frame transport or page failed.") at frame 431 after 115 seconds, under `caffeinate -i`. The diagnostic carries no cause.
 
 A `frame` command at the failing frame succeeds in about 2 seconds, and re-running the identical `render` command succeeded (28m47s).
@@ -21,4 +21,4 @@ A `frame` command at the failing frame succeeds in about 2 seconds, and re-runni
 
 ## Why Not Fixed
 
-The `render.frame-timeout` case is the host sleeping; a monotonic deadline running across sleep is not something the renderer can distinguish from a hung frame. The `render.page-error` cause is unknown because the bare `catch {` in `src/render/capture/frame.ts` drops the underlying exception, so the diagnostic cannot say whether the page, the transport, or Chromium failed (filed on the Backlog). Delete this troubleshot once the cause is surfaced and the failure is either fixed or documented in the diagnostic's hint.
+The `render.frame-timeout` case is most likely the host sleeping (inferred, see Symptom); a deadline that runs across sleep is not something the renderer can tell from a hung frame. The `render.page-error` cause is unknown because the bare `catch {` in `src/render/capture/frame.ts` drops the underlying exception, so the diagnostic cannot say whether the page, the transport, or Chromium failed (TASK-219 surfaces it). Delete this troubleshot once the cause is surfaced and the failure is either fixed or documented in the diagnostic's hint.
