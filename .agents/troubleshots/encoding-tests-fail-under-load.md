@@ -2,11 +2,11 @@
 
 ## Symptom
 
-One full `pnpm test` run reported 43 failures while a 30-minute full video render and other agents' work ran on the same machine. Two immediate re-runs with nothing changed passed (669 tests in the full `pnpm test` run). The failure output was not kept, so the failing projects, files, and assertions or timeouts are unknown. The tests that spawn FFmpeg or Chromium (projects `encoding`, `frame-transport`, `loading`, `cli`) are the candidates.
+One full `pnpm test` run reported 43 failures while a 30-minute full video render and other agents' work ran on the same machine. Two immediate re-runs with nothing changed passed (669 tests in the full `pnpm test` run). The failure output was not kept, so the failing projects, files, and assertions or timeouts are unknown.
 
 ## Workaround
 
-1. When a mass failure appears, save the output of that run before re-running anything (run `pnpm test 2>&1 | tee <file>`, or copy the terminal output into a file), so the cause can be told apart (a `testTimeout`/`hookTimeout` expiry, a `waitFor` expiry, or FFmpeg being killed or out of memory).
+1. Run `pnpm test 2>&1 | tee <file>` so the output is kept from the start. If a run already failed without it, copy the terminal output into a file before running anything else. The saved output tells the causes apart (a `testTimeout`/`hookTimeout` expiry, a `waitFor` expiry, or FFmpeg being killed or out of memory).
 2. Re-run the failed files, or the full `pnpm test`, when the machine is idle: `pnpm test <failed file> 2>&1 | tee <file>`. Do not re-run only one project unless every failure belongs to it.
 3. If it passes, treat the first run as load-induced and go on.
 4. If it fails again on an idle machine, it is a real failure: investigate it, and do not retry blindly.

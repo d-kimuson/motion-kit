@@ -30,7 +30,7 @@ ln -s <other checkout>/.lake .lake   # link while the inputs are identical
 rm .lake                             # before `lake build` in the worktree, once any input differs
 ```
 
-`.gitignore` ignores `.lake` as a symlink as well as a directory. `pnpm test --project cli` (and any project without `*.oracle.test.ts`) does not need it.
+`pnpm test --project cli` (and any project without `*.oracle.test.ts`) does not need the oracle build. `.gitignore` ignores `.lake` as a symlink as well as a directory, so the link is never committed.
 
 ## Why Not Fixed
 
