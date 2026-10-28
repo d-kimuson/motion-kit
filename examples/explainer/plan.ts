@@ -4,7 +4,7 @@
 // converts to the Composition's frame grid, so the slide layer, the subtitle layer and the speaker
 // layer cannot disagree: each takes the same `Storyboard`. Every frame count is an integer because
 // every line's seconds are.
-import { framesToSeconds, type Character } from './look.ts';
+import { framesToSeconds, secondsToFrames, type Character } from './look.ts';
 import {
   codePointLength,
   lineStartTimes,
@@ -76,18 +76,6 @@ export type Storyboard = {
 };
 
 /**
- * Exactly `frames` per `seconds`. The script's seconds sit on whole frames at the rates the example
- * plans at, so the round only removes floating-point noise; a time between two frames is a script
- * error, and it throws rather than move a boundary.
- */
-const toFrames = (seconds: number, fps: number): number => {
-  const frames = Math.round(seconds * fps);
-  if (Math.abs(frames - seconds * fps) > 1e-6)
-    throw new Error(`${String(seconds)} s is not a whole frame at ${String(fps)} fps`);
-  return frames;
-};
-
-/**
  * Where the outgoing slide's own clock stands when the crossfade hands it to the overlay: the frames
  * its own scene drew (`contentFrames`), plus the overlap already elapsed. At the overlap's first frame
  * this is one frame past the last frame that scene drew, so the slide keeps animating instead of
@@ -136,7 +124,7 @@ const planLine = (line: ScriptLine, startFrame: number, frames: number): Planned
 const placeLines = (lines: readonly ScriptLine[], fps: number): readonly PlannedLine[] => {
   const starts = lineStartTimes(lines);
   return lines.map((line, index) =>
-    planLine(line, toFrames(starts[index] ?? 0, fps), toFrames(line.seconds, fps)),
+    planLine(line, secondsToFrames(starts[index] ?? 0, fps), secondsToFrames(line.seconds, fps)),
   );
 };
 
@@ -185,17 +173,17 @@ export const phraseTime = (
  */
 export const explainerStoryboard = (fps: number): Storyboard => {
   const spans = slidePlan(script.lines);
-  const overlapFrames = toFrames(slideOverlapSeconds, fps);
+  const overlapFrames = secondsToFrames(slideOverlapSeconds, fps);
   const lines = placeLines(script.lines, fps);
   const slides = spans.map((span, index) => {
     const last = index === spans.length - 1;
-    const startFrame = toFrames(span.startSeconds, fps);
-    const contentFrames = toFrames(span.onScreenSeconds, fps);
+    const startFrame = secondsToFrames(span.startSeconds, fps);
+    const contentFrames = secondsToFrames(span.onScreenSeconds, fps);
     return {
       index,
       cue: span.cue,
       startFrame,
-      frames: toFrames(last ? span.onScreenSeconds : span.sceneSeconds, fps),
+      frames: secondsToFrames(last ? span.onScreenSeconds : span.sceneSeconds, fps),
       contentFrames,
       sentences: sentencesIn(lines, startFrame, startFrame + contentFrames),
     };
@@ -203,7 +191,7 @@ export const explainerStoryboard = (fps: number): Storyboard => {
   return {
     fps,
     overlapFrames,
-    durationInFrames: toFrames(totalSecondsOf(script.lines), fps),
+    durationInFrames: secondsToFrames(totalSecondsOf(script.lines), fps),
     slides,
     lines,
   };
@@ -275,7 +263,7 @@ const cueOf = (id: string): SlideCue => {
  */
 export const ciStoryboard = (): Storyboard => {
   const fps = FPS;
-  const overlap = toFrames(slideOverlapSeconds, fps);
+  const overlap = secondsToFrames(slideOverlapSeconds, fps);
   return shortStoryboard(
     fps,
     [
@@ -297,7 +285,7 @@ export const ciStoryboard = (): Storyboard => {
 /** `explainer-probe`: the same shape at 480x270 for 30 frames, with flat surfaces instead of media. */
 export const probeStoryboard = (): Storyboard => {
   const fps = FPS;
-  const overlap = toFrames(slideOverlapSeconds, fps);
+  const overlap = secondsToFrames(slideOverlapSeconds, fps);
   return shortStoryboard(
     fps,
     [

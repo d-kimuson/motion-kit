@@ -13,15 +13,7 @@
 //
 // The layer reads the frame instead of opening a `Sequence` per line: how lit a character is depends
 // on their previous line as much as their current one (the dim fades in after they stop).
-import {
-  frameToTime,
-  toSeconds,
-  useAsset,
-  useFrame,
-  useTime,
-  useTimeline,
-  type FrameRate,
-} from '@kimuson/motion-kit';
+import { useAsset, useFrame, useTime } from '@kimuson/motion-kit';
 import { Suspense, type ReactNode } from 'react';
 
 import { DesignRect } from './flat.tsx';
@@ -42,6 +34,7 @@ import {
   portraitSource,
   type AssetsMode,
   type Character,
+  framesToSeconds,
   type Expression,
 } from './look.ts';
 import { enter, leave, popIn, sway } from './motion.ts';
@@ -59,13 +52,9 @@ type Presence = {
   readonly local: number;
 };
 
-const presenceOf = (
-  storyboard: Storyboard,
-  character: Character,
-  frame: number,
-  rate: FrameRate,
-): Presence => {
-  const seconds = (frames: number) => toSeconds(frameToTime(BigInt(frames), rate));
+const presenceOf = (storyboard: Storyboard, character: Character, frame: number): Presence => {
+  // The storyboard's frames are on its own grid, so its own rate converts them.
+  const seconds = (frames: number) => framesToSeconds(frames, storyboard.fps);
   const last = storyboard.lines.findLast(
     (line) => line.speaker === character && line.startFrame <= frame,
   );
@@ -341,7 +330,6 @@ export const Speakers = ({
   readonly assets: AssetsMode;
 }) => {
   const frame = useFrame();
-  const { frameRate } = useTimeline();
   const t = useTime();
   const flat = useFlat();
   if (flat)
@@ -349,7 +337,7 @@ export const Speakers = ({
       <>
         {CHARACTERS.map((character) => {
           const box = portraitBox(character);
-          const speaking = presenceOf(storyboard, character, frame, frameRate).line !== undefined;
+          const speaking = presenceOf(storyboard, character, frame).line !== undefined;
           return (
             <DesignRect
               key={character}
@@ -369,7 +357,7 @@ export const Speakers = ({
         <Speaker
           key={character}
           character={character}
-          presence={presenceOf(storyboard, character, frame, frameRate)}
+          presence={presenceOf(storyboard, character, frame)}
           t={t}
           assets={assets}
         />

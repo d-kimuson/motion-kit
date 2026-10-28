@@ -8,7 +8,14 @@
 //
 // Phase 2 replaces the values here with /theme tokens and /motion curves; the tree that reads them
 // does not change (docs/design-doc/20261025-reference-examples.md, "explainer").
-import { createTimelineTime, toSeconds } from '@kimuson/motion-kit';
+import {
+  createFrameRate,
+  createTimelineTime,
+  frameToTime,
+  timeToFrameNearest,
+  toSeconds,
+  type FrameRate,
+} from '@kimuson/motion-kit';
 
 import { type Expression } from './script.schema.ts';
 
@@ -201,6 +208,27 @@ export const framesToTime = (frames: number, fps: number) => ({
   numerator: frames,
   denominator: fps,
 });
+
+const frameRateOf = (fps: number): FrameRate => {
+  const rate = createFrameRate({ numerator: fps, denominator: 1 });
+  if (!rate.ok) throw new Error(`${String(fps)} fps: ${rate.error.message}`);
+  return rate.value;
+};
+
+/**
+ * Seconds as the nearest whole frame, by the Time Module. The script's seconds are sums of decimal
+ * seconds, so they carry float noise; a time farther than that noise from a frame is a script
+ * error, and it throws rather than move a boundary.
+ */
+export const secondsToFrames = (seconds: number, fps: number): number => {
+  const rate = frameRateOf(fps);
+  const time = createTimelineTime(seconds);
+  if (!time.ok) throw new Error(`${String(seconds)} s: ${time.error.message}`);
+  const frames = timeToFrameNearest(time.value, rate);
+  if (Math.abs(toSeconds(frameToTime(frames, rate)) - seconds) * fps > 1e-6)
+    throw new Error(`${String(seconds)} s is not a whole frame at ${String(fps)} fps`);
+  return Number(frames);
+};
 
 /** A whole frame count in seconds, converted by the Time Module rather than by hand. */
 export const framesToSeconds = (frames: number, fps: number): number => {

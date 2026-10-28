@@ -28,7 +28,6 @@ const unwrap = <T,>(result: Result<T>): T => {
 /** `FPS` (`plan.ts`) as the Time Module's rate, and as the Compositions declare it. */
 const rate = { numerator: FPS, denominator: 1 } as const;
 export const fps = unwrap(createFrameRate(rate));
-const fpsValue = Number(fps.numerator) / Number(fps.denominator);
 
 /** The script's 222 s as 6660 frames: the video's whole length, derived at module load. */
 export const durationInFrames = Number(
@@ -50,7 +49,7 @@ export const assetsProps = z.object({
 type ExplainerProps = z.infer<typeof assetsProps>;
 
 /** Both Compositions read one storyboard each, built once at module load. */
-export const storyboard = explainerStoryboard(fpsValue);
+export const storyboard = explainerStoryboard(FPS);
 export const ci = ciStoryboard();
 
 const Explainer = ({ assets }: ExplainerProps) => (

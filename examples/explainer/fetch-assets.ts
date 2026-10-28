@@ -22,7 +22,14 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { CHARACTERS, LOCAL_PATH, musicSource, whooshSource, type Character } from './look.ts';
+import {
+  CHARACTERS,
+  framesToSeconds,
+  LOCAL_PATH,
+  musicSource,
+  whooshSource,
+  type Character,
+} from './look.ts';
 import { explainerStoryboard, FPS, type PlannedLine } from './plan.ts';
 import { script, totalSeconds } from './script.ts';
 import { encodeWav, musicBed, whoosh } from './synth.ts';
@@ -243,7 +250,7 @@ const lineClip = async (
     const raw = tempPath(`${line.id}-${String(index)}.${engine.kind === 'say' ? 'aiff' : 'wav'}`);
     const part = tempPath(`${line.id}-${String(index)}-fitted.wav`);
     await speak(engine, line.speaker, sentence.text, raw);
-    tempos.push(fitClip(raw, part, sentence.frames / FPS));
+    tempos.push(fitClip(raw, part, framesToSeconds(sentence.frames, FPS)));
     rmSync(raw, { force: true });
     parts.push(part);
   }
@@ -254,7 +261,7 @@ const lineClip = async (
     '-map',
     '[out]',
     '-t',
-    String(line.frames / FPS),
+    String(framesToSeconds(line.frames, FPS)),
     '-ar',
     '48000',
     '-ac',
