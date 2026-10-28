@@ -2,7 +2,7 @@
 
 ## Symptom
 
-A full-length `render` of a long Composition (observed: `examples/explainer`, 6660 frames at 1920x1080, about 29 minutes) stops partway with no change to the inputs:
+A full-length `render` of a long Composition (observed: `examples/explainer`, 6660 frames at 1920x1080, 29 minutes alone and up to 48 with other heavy work beside it) stops partway with no change to the inputs:
 
 ```sh
 node dist/cli.js render examples/explainer/entry.tsx --composition explainer --props '{"assets":"final"}' --out out/explainer.mp4 --json
@@ -23,4 +23,4 @@ A `frame` command at the failing frame succeeds in about 2 seconds, and re-runni
 
 ## Why Not Fixed
 
-The `render.frame-timeout` case is most likely the host sleeping (inferred, see Symptom); a deadline that runs across sleep is not something the renderer can tell from a hung frame. The `render.page-error` cause is unknown because the bare `catch {` in `src/render/capture/frame.ts` drops the underlying exception, so the diagnostic cannot say whether the page, the transport, or Chromium failed (TASK-219 surfaces it). The `encode.ffmpeg-failed` case is the host running short of memory during the mux, which the renderer cannot prevent, but its hint wrongly says a re-run fails the same way (TASK-221 corrects it). Delete each case once its task lands — the page-error cause surfaced, the ffmpeg hint corrected — and this troubleshot once none is left.
+The `render.frame-timeout` case is most likely the host sleeping (inferred, see Symptom); a deadline that runs across sleep is not something the renderer can tell from a hung frame. The `render.page-error` cause is unknown because the bare `catch {` in `src/render/capture/frame.ts` drops the underlying exception, so the diagnostic cannot say whether the page, the transport, or Chromium failed (TASK-219 surfaces it). The `encode.ffmpeg-failed` case is most likely a transient memory shortage during the mux while other heavy work ran (inferred: FFmpeg reported ENOMEM, but memory was free by the time it was checked), which the renderer cannot prevent, but its hint wrongly says a re-run fails the same way (TASK-221 corrects it). Delete each case once its task lands — the page-error cause surfaced, the ffmpeg hint corrected — and this troubleshot once none is left.

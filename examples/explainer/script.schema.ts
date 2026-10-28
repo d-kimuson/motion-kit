@@ -147,7 +147,7 @@ export const slideCueSchema = z.discriminatedUnion('kind', [
 export type SlideCue = z.infer<typeof slideCueSchema>;
 
 /**
- * One spoken line. `id` is the stable key: it keys the subtitle `Sequence`s, the narration track
+ * One spoken line. `id` is the stable key: it keys its sentences' subtitle `Sequence`s, the narration track
  * and, once VOICEVOX audio exists, the entry in the generated `assets.local/voice/durations.json`.
  * `text` carries no speaker prefix, because the speaker is a separate field.
  */

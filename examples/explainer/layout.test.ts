@@ -29,9 +29,9 @@ import {
   portraitInk,
   type Box,
 } from './look.ts';
-import { ciStoryboard, explainerStoryboard } from './plan.ts';
+import { ciStoryboard, explainerStoryboard, FPS } from './plan.ts';
 
-const sentences = [explainerStoryboard(30), ciStoryboard()].flatMap((board) =>
+const sentences = [explainerStoryboard(FPS), ciStoryboard()].flatMap((board) =>
   board.lines.flatMap((line) => line.sentences),
 );
 
@@ -97,7 +97,7 @@ describe('explainer subtitles', () => {
 
   it('keeps every narrated sentence on screen for at least a second and a half', () => {
     // The full storyboard only: `explainer-ci` squeezes one line into 24 frames on purpose.
-    const brief = explainerStoryboard(30)
+    const brief = explainerStoryboard(FPS)
       .lines.flatMap((line) => line.sentences)
       .filter((sentence) => sentence.frames < 45);
     expect(brief.map((sentence) => sentence.text)).toEqual([]);

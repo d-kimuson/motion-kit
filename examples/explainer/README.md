@@ -19,6 +19,7 @@ the prose belong to `script.ts` and `script.schema.ts`; the layers that draw the
 | `plan.ts`              | The one conversion to frames — `Storyboard`, sentences included — shared by the layers |
 | `entry.tsx`            | `explainer` (1920×1080, 6660 frames) and `explainer-ci` (960×540, 60 frames)           |
 | `probe.tsx`            | `explainer-probe` (480×270, 30 frames) for the determinism gate                        |
+| `flat.tsx`             | The probe's drawing language: opaque, axis-aligned rectangles on whole pixels          |
 | `ExplainerScene.tsx`   | The tree: five layers in one 1920×1080 design space, scaled once; the font `Suspense`  |
 | `Background.tsx`       | The ground, a drifting grid and lights, the stage panel                                |
 | `slides/`              | `SlideSeries` (a `TransitionSeries`, 0.4 s handoffs) and the probe's `FlatSlide`       |
