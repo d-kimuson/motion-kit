@@ -3,6 +3,7 @@ import { createFrameRate, frameToTime, toSeconds } from '../../core/timeline/tim
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type Ownership } from '../../lib/frame-protocol.ts';
 import { type MountReceipt } from '../../lib/loading-protocol.ts';
+import { pageErrorDiagnostic } from './page-error.ts';
 import { type FrameTransport } from './transport.ts';
 
 /** How a captured frame's pixels are encoded. PNG is lossless and is the identity the determinism
@@ -237,20 +238,8 @@ export const createFrameJob = (options: {
             });
             return;
           }
-        } catch {
-          if (!expired())
-            finish({
-              ok: false,
-              error: [
-                {
-                  code: 'render.page-error',
-                  severity: 'error',
-                  location,
-                  message: 'The frame transport or page failed.',
-                  hint: 'Fix the Composition or browser connection and create a new renderer.',
-                },
-              ],
-            });
+        } catch (error) {
+          if (!expired()) finish({ ok: false, error: [pageErrorDiagnostic({ error, location })] });
         }
       })();
       return result.promise;
