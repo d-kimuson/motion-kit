@@ -71,6 +71,7 @@ Always read every reference relevant to the task before making changes.
 | Verifying a change by running it (QA Check), deciding what kind of tests to write, reproducing a failing test | `docs/guidelines/quality-assurance/index.md`                           |
 | Writing or changing a Lean spec, writing a differential test                                                  | `docs/guidelines/quality-assurance/lean-spec.md`                       |
 | Adding tools or dependencies                                                                                  | `docs/guidelines/local-dev.md`                                         |
+| Releasing a version to npm, or setting up the trusted publisher                                               | `docs/guidelines/release.md`                                           |
 | Checking, filing, or updating tasks                                                                           | `docs/guidelines/backlog.md`                                           |
 | Asking the user or the team a question, or reporting to them                                                  | `docs/guidelines/team-channel.md`                                      |
 | Leading the progress of the project (when started as auto-pilot)                                              | `docs/guidelines/auto-pilot.md`                                        |

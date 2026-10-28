@@ -1,14 +1,35 @@
 {
   "name": "@kimuson/motion-kit",
   "version": "0.0.0",
-  "private": true,
   "description": "An agent-first framework for programmatic video.",
+  "keywords": [
+    "agent",
+    "animation",
+    "cli",
+    "ffmpeg",
+    "playwright",
+    "programmatic-video",
+    "react",
+    "typescript",
+    "video",
+    "video-rendering"
+  ],
+  "homepage": "https://github.com/d-kimuson/motion-kit#readme",
+  "bugs": {
+    "url": "https://github.com/d-kimuson/motion-kit/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/d-kimuson/motion-kit.git"
+  },
   "bin": {
     "motion-kit": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs/index.md",
+    "docs/guide"
   ],
   "type": "module",
   "sideEffects": false,
@@ -25,6 +46,9 @@
       "types": "./dist/agent.d.ts",
       "import": "./dist/agent.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",
@@ -43,6 +67,7 @@
     "fix:oxlint": "pnpm lint:oxlint --fix",
     "fix:oxfmt": "oxfmt --ignore-path .gitignore --no-error-on-unmatched-pattern",
     "typecheck": "tsc -p . --noEmit",
+    "preversion": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "test": "vitest run",
     "spike:motion": "vitest run --config spikes/a-motion/vitest.config.ts --reporter=verbose --silent=false",
     "spike:three": "vitest run --config spikes/b-r3f/vitest.config.ts --reporter=verbose --silent=false",
@@ -70,6 +95,7 @@
     "@types/three": "0.186.0",
     "@vitest/browser-playwright": "5.0.5",
     "ajv": "8.20.0",
+    "clean-pkg-json": "2.0.0",
     "fast-check": "4.10.2",
     "lefthook": "2.2.2",
     "motion": "14.6.0",
@@ -88,6 +114,9 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22.14.0"
   },
   "packageManager": "pnpm@12.15.0+sha512.b3951d6d6ff4a9f13dc7cf56cd28d2b8eb37dbcc9c68e52e1e1191873ea9f82a017287ab50baadc5ccc494f036c67c0e47eb13608c2fa36f47711b61ea128e61"
 }
