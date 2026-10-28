@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { advanceEm } from '../layout.ts';
-import { ciStoryboard, explainerStoryboard, type PlannedSlide } from '../plan.ts';
+import { ciStoryboard, explainerStoryboard, FPS, type PlannedSlide } from '../plan.ts';
 import { SceneFor } from './Scene.tsx';
 import { AGENDA_SIZE, AGENDA_TEXT_WIDTH } from './TitleScene.tsx';
 
@@ -27,7 +27,7 @@ const drawAcross = (slide: PlannedSlide, fps: number): readonly string[] => {
 };
 
 describe('explainer scenes', () => {
-  const full = explainerStoryboard(30);
+  const full = explainerStoryboard(FPS);
   for (const slide of full.slides)
     it(`draws ${slide.cue.kind} with every phrase it keys to narrated`, () => {
       expect(drawAcross(slide, full.fps)).toEqual([]);

@@ -50,6 +50,16 @@ examples/
 │   ├── probe.tsx                 # exports `compositions`: explainer-probe (the determinism gate)
 │   ├── script.ts                 # the structured script data (TASK-170 fills it in)
 │   ├── script.schema.ts          # the Zod schema for that script, next to the data it validates
+│   ├── plan.ts                   # the storyboard: the script on the frame grid, shared by every layer
+│   ├── look.ts                   # the palette, the frame's regions and the asset paths, as constants
+│   ├── layout.ts                 # subtitle line breaking and sizing, pure arithmetic on the text
+│   ├── motion.ts                 # the arrivals and the spring every scene uses
+│   ├── audio.ts                  # the soundtrack as AudioTrack data: voice, bed, whooshes
+│   ├── synth.ts                  # the music bed and the whoosh, a pure function of the sample index
+│   ├── ExplainerScene.tsx        # the five layers over one storyboard
+│   ├── Background.tsx            # the night-blue ground and its drifting grid
+│   ├── Chrome.tsx                # the top bar: title, chapter, progress segments
+│   ├── flat.tsx                  # the probe's flat surfaces
 │   ├── slides/                   # the TransitionSeries over the scenes, and the probe's flat slide
 │   ├── scenes/                   # one designed scene per cue kind
 │   ├── Speakers.tsx              # both portraits, the speaker lit, the expression as a reaction mark

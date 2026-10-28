@@ -8,6 +8,7 @@ import { type Character } from './look.ts';
 import {
   codePointLength,
   lineStartTimes,
+  slideOverlapSeconds,
   slidePlan,
   splitSentences,
   totalSeconds as totalSecondsOf,
@@ -23,9 +24,6 @@ import { script } from './script.ts';
  * read this one constant and cannot drift apart.
  */
 export const FPS = 30;
-
-/** The crossfade between two slides, in seconds: every storyboard overlaps its slides by this. */
-const CROSSFADE_SECONDS = 0.4;
 
 /**
  * One sentence of a line, on the frame grid: the subtitle shows one sentence at a time, and a scene
@@ -184,7 +182,7 @@ export const phraseTime = (
  */
 export const explainerStoryboard = (fps: number): Storyboard => {
   const spans = slidePlan(script.lines);
-  const overlapFrames = toFrames(CROSSFADE_SECONDS, fps);
+  const overlapFrames = toFrames(slideOverlapSeconds, fps);
   const lines = placeLines(script.lines, fps);
   const slides = spans.map((span, index) => {
     const last = index === spans.length - 1;
@@ -274,7 +272,7 @@ const cueOf = (id: string): SlideCue => {
  */
 export const ciStoryboard = (): Storyboard => {
   const fps = FPS;
-  const overlap = toFrames(CROSSFADE_SECONDS, fps);
+  const overlap = toFrames(slideOverlapSeconds, fps);
   return shortStoryboard(
     fps,
     [
@@ -296,7 +294,7 @@ export const ciStoryboard = (): Storyboard => {
 /** `explainer-probe`: the same shape at 480x270 for 30 frames, with flat surfaces instead of media. */
 export const probeStoryboard = (): Storyboard => {
   const fps = FPS;
-  const overlap = toFrames(CROSSFADE_SECONDS, fps);
+  const overlap = toFrames(slideOverlapSeconds, fps);
   return shortStoryboard(
     fps,
     [
