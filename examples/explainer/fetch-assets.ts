@@ -3,16 +3,15 @@
 // "Assets and provenance"). Everything it writes lands in the gitignored `assets.local/`; nothing
 // under `assets/` is ever touched, and no fetched or synthesized file is committed.
 //
-//   step 1  placeholders: a `sine` tone bed and silent voice placeholders. The placeholder sprites
-//           need no file at all — `assets: 'placeholder'` draws its character in the sprite layer
-//           instead of loading an image (design doc, "Assets and provenance", amended
-//           2026-10-27) — so step 1 is FFmpeg and nothing else, and CI runs it before the smoke
-//           render.
-//   step 2  the real thing, locally only: the 立ち絵 sprites from a manual download, and the voice
-//           from a local VOICEVOX engine, or macOS `say -v Kyoko` where no engine is installed.
-//           Every part skips with an instruction when its input is missing, so step 1 alone always
-//           leaves a renderable tree. Each voice clip is fitted to its line's slot here rather than
-//           at render time: a synthesized line is rarely exactly as long as the script says it is.
+//   step 1  what needs nothing but Node and FFmpeg: the music bed and the transition whoosh
+//           (synthesised by `synth.ts`), and silent voice placeholders. The placeholder characters
+//           need no file at all — `assets: 'placeholder'` draws a badge in the speaker layer — so CI
+//           runs step 1 before the smoke render.
+//   step 2  the real thing, locally only: the voice and the two portraits from a local VOICEVOX
+//           engine (the voice falls back to macOS `say -v Kyoko` where no engine answers). Every
+//           part skips with an instruction when its input is missing, so step 1 alone always leaves
+//           a renderable tree. Each sentence is synthesized on its own and fitted to the sentence's
+//           slot (`plan.ts`), so the voice moves on to a sentence on the frame its subtitle does.
 //
 //   node examples/explainer/fetch-assets.ts                # both steps
 //   node examples/explainer/fetch-assets.ts --placeholders # step 1 only (what CI runs)
@@ -20,17 +19,24 @@
 // Run it from the repository root: the paths below are relative to it.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { CHARACTERS, EXPRESSIONS, MOUTHS, type Character } from './look.ts';
-import { script } from './script.ts';
+import {
+  CHARACTERS,
+  framesToSeconds,
+  LOCAL_PATH,
+  musicSource,
+  whooshSource,
+  type Character,
+} from './look.ts';
+import { explainerStoryboard, FPS, type PlannedLine } from './plan.ts';
+import { script, totalSeconds } from './script.ts';
+import { encodeWav, musicBed, whoosh } from './synth.ts';
 
-const root = 'examples/explainer/assets.local';
-const spritesDir = (mode: 'final') => join(root, 'sprites', mode);
+const root = LOCAL_PATH;
 const voiceDir = join(root, 'voice');
-const toneBed = join(root, 'music', 'tone.wav');
-const spriteSourceDir = join(root, 'sprite-source');
+const portraitDir = join(root, 'portraits');
 
 /** Where a step reports what it did: the CLI prints, and the smoke test collects. */
 export type Report = (message: string) => void;
@@ -54,23 +60,18 @@ const ffprobeSeconds = (file: string): number => {
 };
 
 /**
- * The tone bed. It is generated so a reader can hear the pipeline, but the explainer declares no
- * music track: the placeholder render stays silent and the narrated one is voice only.
+ * The music bed for the whole video and the whoosh every slide change plays. Both are synthesised
+ * (`synth.ts`), so they are as available as FFmpeg is and step 1 writes the real files, not stand-ins.
  */
-const generateToneBed = (report: Report): void => {
-  mkdirSync(join(root, 'music'), { recursive: true });
-  ffmpeg([
-    '-f',
-    'lavfi',
-    '-i',
-    'sine=frequency=220:sample_rate=48000:duration=20',
-    '-af',
-    'volume=0.05',
-    '-ac',
-    '2',
-    toneBed,
-  ]);
-  report(`step 1: tone bed ${toneBed}`);
+const generateSoundtrack = (report: Report): void => {
+  for (const [path, buffer] of [
+    [musicSource, musicBed(totalSeconds)],
+    [whooshSource, whoosh()],
+  ] as const) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, encodeWav(buffer));
+    report(`step 1: synthesised ${path}`);
+  }
 };
 
 /**
@@ -90,38 +91,6 @@ const placeholderVoice = (report: Report): void => {
 
 /** A placeholder is 0.4 s of silence; a real clip is longer or louder, so step 2 overwrites it. */
 const isSilentPlaceholder = (file: string): boolean => Math.abs(ffprobeSeconds(file) - 0.4) < 0.001;
-
-const fetchSprites = (): void => {
-  if (!existsSync(spriteSourceDir)) {
-    log(
-      `step 2: sprites skipped — download the 坂本アヒル 立ち絵 sets manually into ${spriteSourceDir}/<character>/<expression>-<mouth>.png (see docs/decisions/20261026-example-asset-licensing.accepted.md)`,
-    );
-    return;
-  }
-  const dir = spritesDir('final');
-  let copied = 0;
-  for (const character of CHARACTERS) {
-    for (const expression of EXPRESSIONS) {
-      for (const mouth of MOUTHS) {
-        const source = join(spriteSourceDir, character, `${expression}-${mouth}.png`);
-        if (!existsSync(source)) continue;
-        const target = join(dir, character, `${expression}-${mouth}.png`);
-        mkdirSync(join(dir, character), { recursive: true });
-        ffmpeg([
-          '-i',
-          source,
-          '-vf',
-          `scale=540:900:force_original_aspect_ratio=decrease,pad=540:900:(ow-iw)/2:(oh-ih)/2:color=#00000000`,
-          '-pix_fmt',
-          'rgba',
-          target,
-        ]);
-        copied += 1;
-      }
-    }
-  }
-  log(`step 2: ${String(copied)} fetched sprites normalised into ${dir}`);
-};
 
 const voicevoxSpeaker: Record<Character, number> = { metan: 2, zundamon: 3 };
 
@@ -159,43 +128,51 @@ const sayAvailable = (): boolean =>
 /**
  * The band the fit may time-stretch within: at most 25 % faster and 25 % slower than the engine
  * spoke. Inside it a tempo change is the same voice at a slightly different pace; outside it, the
- * clip keeps its own pace and the rest of the slot is the silence every clip is padded with.
+ * clip keeps the clamped pace: a short one is padded with silence, a long one is cut and reported.
  */
 const maxTempo = 1.25;
 
 /**
- * The breath the fit leaves at the end of every line. Two lines are two sentences by two speakers,
- * so the one that ends on the frame the next begins on sounds like a single run-on line; the slot a
- * line is given is speech time plus this pause.
+ * The breath the fit leaves at the end of every sentence. Two sentences that end and begin on the
+ * same frame sound like a single run-on one; the slot a sentence is given is speech time plus this
+ * pause.
  */
-const linePauseSeconds = 0.4;
+const pauseSeconds = 0.4;
 
-/** How much of a line's slot the speech may occupy: the slot less the pause, and at least 80 % of it. */
-const speechSeconds = (slot: number): number => Math.max(slot - linePauseSeconds, slot * 0.8);
+/** How much of a slot the speech may occupy: the slot less the pause, and at least 80 % of it. */
+const speechSeconds = (slot: number): number => Math.max(slot - pauseSeconds, slot * 0.8);
 
 /**
- * The `atempo` that lands a `raw`-second clip on `speech` seconds of its line, clamped to the band
+ * The `atempo` that lands a `raw`-second clip on `speech` seconds of its slot, clamped to the band
  * above. Pure, so the smoke test holds the bounds without needing an engine to synthesize a clip.
  */
 export const fitTempo = (raw: number, speech: number): number =>
   Math.min(maxTempo, Math.max(1 / maxTempo, raw / speech));
 
 /**
- * Fit one synthesized clip to its line: the lead-in trimmed, the speech tempo'd to the line's own
- * pace, and the result padded or cut to exactly the line's `seconds`.
+ * Fit one synthesized clip to its slot: the lead-in trimmed, the speech tempo'd to the script's own
+ * pace, and the result padded or cut to exactly `seconds`.
  *
  * The narration is timed by the script, not by the engine. `say -v Kyoko` reads a 5-character-per-
  * second line in about 80 % of its slot, so a raw clip leaves up to three seconds of silence before
  * the next line — and a slower engine's clip is cut mid-word by the track's `endInFrames` instead.
- * Fitting here means every clip is exactly as long as its line, so the subtitle, the sprite and the
- * voice start and end together, with the same pause between every pair of lines. The lead-in has to
+ * Fitting here means every clip is exactly as long as its slot, so the subtitle, the speaker's bob
+ * and the voice start and end together, with the same pause after every sentence. The lead-in has to
  * go too: `say` writes ~0.1 s of digital silence before the first phoneme, which at 30 fps is three
- * frames of the line's slot with the mouth moving and nobody speaking.
+ * frames of the slot with the speaker lit and nobody speaking.
  *
  * Two passes, because the length to measure is the trimmed one: a lead-in left in the measurement
  * would be read as speech and the tempo would come out slow by its share.
+ *
+ * A clip too long even at the fastest tempo is cut at the slot's end, and `report` names it: the
+ * fix is a shorter sentence or a longer slot in the script, not a faster voice.
  */
-export const fitClip = (input: string, target: string, seconds: number): number => {
+export const fitClip = (
+  input: string,
+  target: string,
+  seconds: number,
+  report: Report = log,
+): number => {
   const trimmed = tempPath(`trim-${basename(target)}`);
   ffmpeg([
     '-i',
@@ -208,7 +185,13 @@ export const fitClip = (input: string, target: string, seconds: number): number 
     '1',
     trimmed,
   ]);
-  const tempo = fitTempo(ffprobeSeconds(trimmed), speechSeconds(seconds));
+  const speech = ffprobeSeconds(trimmed);
+  const tempo = fitTempo(speech, speechSeconds(seconds));
+  const overrun = speech / tempo - seconds;
+  if (overrun > 0.01)
+    report(
+      `warning: ${basename(target)} is cut by ${overrun.toFixed(2)} s at atempo ${tempo.toFixed(2)}; shorten the sentence or lengthen its slot`,
+    );
   ffmpeg([
     '-i',
     trimmed,
@@ -231,61 +214,162 @@ const tempPath = (name: string): string => {
   return join(root, 'tmp', name);
 };
 
-/** `say -v Kyoko`, then the same fit every engine's clip goes through. Returns the tempo it used. */
-const sayClip = (text: string, seconds: number, target: string): number => {
-  const aiff = tempPath('line.aiff');
-  const spoken = spawnSync('say', ['-v', 'Kyoko', '-o', aiff, text], { stdio: 'inherit' });
+/** `say -v Kyoko` into an AIFF the fit reads like any engine's clip. */
+const saySpeak = (text: string, target: string): void => {
+  const spoken = spawnSync('say', ['-v', 'Kyoko', '-o', target, text], { stdio: 'inherit' });
   if (spoken.status !== 0) throw new Error(`say exited ${String(spoken.status)}`);
-  const tempo = fitClip(aiff, target, seconds);
-  rmSync(aiff, { force: true });
-  return tempo;
+};
+
+type Engine = { readonly kind: 'voicevox'; readonly url: string } | { readonly kind: 'say' };
+
+const speak = async (
+  engine: Engine,
+  speaker: Character,
+  text: string,
+  target: string,
+): Promise<void> => {
+  if (engine.kind === 'say') return saySpeak(text, target);
+  writeFileSync(target, await voicevoxClip(engine.url, voicevoxSpeaker[speaker], text));
 };
 
 /**
- * Step 2's voice: VOICEVOX where an engine answers, `say` where it does not, nothing otherwise.
- * Whichever spoke, `fitClip` lands the clip on the line's own seconds before it is measured, so
- * `durations.json` records the slots the timeline already uses rather than the engine's own timing.
+ * One line's clip: each sentence synthesized on its own and fitted to its sentence's slot, then the
+ * fitted parts joined and cut to exactly the line's frames. Fitting per sentence is what keeps the
+ * voice on the subtitle: the subtitle changes sentence on a frame the plan computes, and a whole-line
+ * fit would let the engine's own pacing drift the second sentence off it by up to a second. The
+ * pause each fit leaves at a sentence's end is the breath between two sentences of one speaker.
  */
-const fetchVoice = async (): Promise<void> => {
+const lineClip = async (
+  engine: Engine,
+  line: PlannedLine,
+  target: string,
+): Promise<readonly number[]> => {
+  const tempos: number[] = [];
+  const parts: string[] = [];
+  for (const [index, sentence] of line.sentences.entries()) {
+    const raw = tempPath(`${line.id}-${String(index)}.${engine.kind === 'say' ? 'aiff' : 'wav'}`);
+    const part = tempPath(`${line.id}-${String(index)}-fitted.wav`);
+    await speak(engine, line.speaker, sentence.text, raw);
+    tempos.push(fitClip(raw, part, framesToSeconds(sentence.frames, FPS)));
+    rmSync(raw, { force: true });
+    parts.push(part);
+  }
+  ffmpeg([
+    ...parts.flatMap((part) => ['-i', part]),
+    '-filter_complex',
+    `${parts.map((_, index) => `[${String(index)}:a]`).join('')}concat=n=${String(parts.length)}:v=0:a=1,apad[out]`,
+    '-map',
+    '[out]',
+    '-t',
+    String(framesToSeconds(line.frames, FPS)),
+    '-ar',
+    '48000',
+    '-ac',
+    '1',
+    target,
+  ]);
+  for (const part of parts) rmSync(part, { force: true });
+  return tempos;
+};
+
+const engineUrl = (): string => process.env['VOICEVOX_ENGINE_URL'] ?? 'http://127.0.0.1:50021';
+
+/**
+ * Step 2's voice: VOICEVOX where an engine answers, `say` where it does not, nothing otherwise.
+ * Whichever spoke, every clip is exactly its line's seconds, so `durations.json` records the slots
+ * the timeline already uses rather than the engine's own timing.
+ */
+const fetchVoice = async (useVoicevox: boolean): Promise<void> => {
   mkdirSync(voiceDir, { recursive: true });
-  const engineUrl = process.env['VOICEVOX_ENGINE_URL'] ?? 'http://127.0.0.1:50021';
-  const useVoicevox = await voicevoxAvailable(engineUrl);
   if (!useVoicevox && !sayAvailable()) {
     log(
       'step 2: voice skipped — start a local VOICEVOX engine (VOICEVOX_ENGINE_URL) or run this on macOS with `say`',
     );
     return;
   }
+  const engine: Engine = useVoicevox ? { kind: 'voicevox', url: engineUrl() } : { kind: 'say' };
   const durations: Record<string, number> = {};
   const tempos: number[] = [];
-  for (const line of script.lines) {
+  for (const line of explainerStoryboard(FPS).lines) {
     const target = join(voiceDir, `${line.id}.wav`);
-    if (useVoicevox) {
-      const raw = tempPath(`${line.id}.wav`);
-      writeFileSync(raw, await voicevoxClip(engineUrl, voicevoxSpeaker[line.speaker], line.text));
-      tempos.push(fitClip(raw, target, line.seconds));
-      rmSync(raw, { force: true });
-    } else {
-      tempos.push(sayClip(line.text, line.seconds, target));
-    }
+    tempos.push(...(await lineClip(engine, line, target)));
     durations[line.id] = Math.round(ffprobeSeconds(target) * 1000) / 1000;
   }
   writeFileSync(join(voiceDir, 'durations.json'), `${JSON.stringify(durations, null, 2)}\n`);
   log(
-    `step 2: ${String(script.lines.length)} voice clips via ${useVoicevox ? 'VOICEVOX' : 'say -v Kyoko'} into ${voiceDir}, fitted to their lines with atempo ${Math.min(...tempos).toFixed(2)}-${Math.max(...tempos).toFixed(2)} (durations.json is local-only)`,
+    `step 2: ${String(script.lines.length)} voice clips via ${engine.kind === 'voicevox' ? 'VOICEVOX' : 'say -v Kyoko'} into ${voiceDir}, fitted sentence by sentence with atempo ${Math.min(...tempos).toFixed(2)}-${Math.max(...tempos).toFixed(2)} (durations.json is local-only)`,
+  );
+};
+
+/** The engine's own speaker list, enough of it to find a style's character. */
+type SpeakerEntry = {
+  readonly speaker_uuid: string;
+  readonly styles: readonly { readonly id: number }[];
+};
+
+const isSpeakerList = (value: unknown): value is readonly SpeakerEntry[] =>
+  Array.isArray(value) &&
+  value.every(
+    (entry: unknown) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      'speaker_uuid' in entry &&
+      typeof entry.speaker_uuid === 'string' &&
+      'styles' in entry &&
+      Array.isArray(entry.styles),
+  );
+
+/** A VOICEVOX GET answered as JSON; a non-2xx status throws rather than parsing an error page. */
+const fetchJson = async (url: string): Promise<unknown> => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`VOICEVOX ${url} answered ${String(response.status)}`);
+  return response.json();
+};
+
+/**
+ * Step 2's portraits: the character art the VOICEVOX engine ships for each speaker (`/speaker_info`,
+ * 坂本アヒル's 立ち絵), written as `<root>/portraits/<character>.png`. They come with the engine the
+ * voice already needs, under the same character guideline, so there is no separate manual download.
+ */
+const fetchPortraits = async (useVoicevox: boolean): Promise<void> => {
+  if (!useVoicevox) {
+    log('step 2: portraits skipped — they come from a local VOICEVOX engine (VOICEVOX_ENGINE_URL)');
+    return;
+  }
+  const url = engineUrl();
+  const speakers: unknown = await fetchJson(`${url}/speakers`);
+  if (!isSpeakerList(speakers)) throw new Error('VOICEVOX /speakers answered an unexpected shape');
+  mkdirSync(portraitDir, { recursive: true });
+  for (const character of CHARACTERS) {
+    const entry = speakers.find((speaker) =>
+      speaker.styles.some((style) => style.id === voicevoxSpeaker[character]),
+    );
+    if (entry === undefined)
+      throw new Error(`VOICEVOX has no speaker with style ${String(voicevoxSpeaker[character])}`);
+    const info: unknown = await fetchJson(`${url}/speaker_info?speaker_uuid=${entry.speaker_uuid}`);
+    if (
+      typeof info !== 'object' ||
+      info === null ||
+      !('portrait' in info) ||
+      typeof info.portrait !== 'string'
+    )
+      throw new Error(`VOICEVOX /speaker_info has no portrait for ${character}`);
+    writeFileSync(join(portraitDir, `${character}.png`), Buffer.from(info.portrait, 'base64'));
+  }
+  log(
+    `step 2: ${String(CHARACTERS.length)} portraits from VOICEVOX /speaker_info into ${portraitDir}`,
   );
 };
 
 /**
- * Step 1 as one call: the tone bed and the silent voice placeholders. It needs FFmpeg and nothing
- * else, so the smoke test runs it as its own setup — CI has no committed media, no VOICEVOX engine
- * and no network (docs/design-doc/20261025-reference-examples.md, "Assets and provenance"). The
- * placeholder sprites used to be FFmpeg `color` fills; they are drawn in the sprite layer now, so
- * there is no image to generate for them.
+ * Step 1 as one call: the music bed, the whoosh and the silent voice placeholders. It needs Node and
+ * FFmpeg and nothing else, so the smoke test runs it as its own setup — CI has no committed media,
+ * no VOICEVOX engine and no network (docs/design-doc/20261025-reference-examples.md, "Assets and
+ * provenance").
  */
 export const generatePlaceholders = (report: Report = log): void => {
   mkdirSync(root, { recursive: true });
-  generateToneBed(report);
+  generateSoundtrack(report);
   placeholderVoice(report);
   report('step 1 done');
 };
@@ -293,8 +377,9 @@ export const generatePlaceholders = (report: Report = log): void => {
 const main = async (): Promise<void> => {
   generatePlaceholders();
   if (process.argv.includes('--placeholders')) return;
-  fetchSprites();
-  await fetchVoice();
+  const useVoicevox = await voicevoxAvailable(engineUrl());
+  await fetchPortraits(useVoicevox);
+  await fetchVoice(useVoicevox);
 };
 
 // Importing this file (the smoke test does) runs nothing: only `node examples/explainer/fetch-assets.ts`

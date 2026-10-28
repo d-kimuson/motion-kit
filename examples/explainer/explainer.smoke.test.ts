@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { compositions as explainerCompositions, storyboard } from './entry.tsx';
 import { fitClip, fitTempo, generatePlaceholders } from './fetch-assets.ts';
-import { mouthAt } from './look.ts';
+import { framesToSeconds } from './look.ts';
 import { ciStoryboard, crossFadeTime } from './plan.ts';
 import { compositions as probeCompositions } from './probe.tsx';
 import { lineStartTimes, slidePlan } from './script.schema.ts';
@@ -87,8 +87,8 @@ const pcmTail = (file: string, seconds: number): Buffer =>
   pcmWindow(file, ['-sseof', `-${String(seconds)}`]);
 
 describe('explainer example', () => {
-  // The smoke test is its own setup: CI has no committed media and no network, so step 1's tone bed
-  // and silent voice clips are generated here (docs/design-doc/20261025-reference-examples.md,
+  // The smoke test is its own setup: CI has no committed media and no network, so step 1's music bed,
+  // whoosh and silent voice clips are generated here (docs/design-doc/20261025-reference-examples.md,
   // "Assets and provenance"). `explainer-ci` itself needs neither — it declares no audio and draws
   // its characters — but the step this example ships has to keep working, and a clone's first
   // full-length render is what needs the voice files.
@@ -115,7 +115,7 @@ describe('explainer example', () => {
     ]);
   });
 
-  it('places the slides, the subtitles and the sprites on the script’s own frames', () => {
+  it('places the slides, the subtitles and the speakers on the script’s own frames', () => {
     // Every layer reads one `Storyboard`, so this is the assertion that the three cannot disagree:
     // each slide starts on its first line, each line starts on the sum of the lines before it, and
     // a slide's `TransitionScene` declares its dialogue plus the 0.4 s outgoing crossfade — which
@@ -156,24 +156,14 @@ describe('explainer example', () => {
       ['disclaimer-1', 24, 36],
     ]);
     expect(ci.durationInFrames).toBe(60);
-    // The speaker alternates rest/open every 0.15 s (4.5 frames at 30 fps), counted from its own
-    // line's start — the sprite layer's only per-frame change with no lip-sync asset contract.
-    expect([0, 4, 5, 8, 9, 13].map((frame) => mouthAt(frame / 30))).toEqual([
-      'rest',
-      'rest',
-      'open',
-      'open',
-      'rest',
-      'rest',
-    ]);
   });
 
   it('hands the CI crossfade a slide that keeps its own clock, instead of jumping 13 frames', () => {
     // `contentFrames` is where the outgoing scene stops drawing, and the overlay hands the slide
     // `contentFrames + elapsed` from then on. The `まとめ` slide is drawn by its own scene for frames
     // 0–23, so the handoff at frame 24 must be one frame on (0.800 s, not 1.200 s): a jump there
-    // advances the bullets slide's local time by 0.43 s in a single frame and item 2's `reveal(0.87)`
-    // snaps from 0 to 1 instead of ramping, which `slides/shared.ts` rules out.
+    // advances the checklist scene's local time by 0.43 s in a single frame, and a check whose arrival
+    // falls in that gap snaps from nothing to drawn instead of ramping.
     const ci = ciStoryboard();
     const outgoing = ci.slides[0];
     expect(outgoing).toBeDefined();
@@ -183,7 +173,7 @@ describe('explainer example', () => {
     // The overlay's first frame (nothing elapsed yet) continues one frame past that frame.
     expect(crossFadeTime(outgoing, ci.fps, 0) * ci.fps).toBeCloseTo(lastDrawnFrame + 1, 6);
     // And the clock runs at 1x through the overlap, ending one frame inside the scene's own span.
-    const lastOverlapFrame = (ci.overlapFrames - 1) / ci.fps;
+    const lastOverlapFrame = framesToSeconds(ci.overlapFrames - 1, ci.fps);
     expect(crossFadeTime(outgoing, ci.fps, lastOverlapFrame) * ci.fps).toBeCloseTo(
       outgoing.frames - 1,
       6,
@@ -292,15 +282,25 @@ describe('explainer narration fit', () => {
     // 12, which is exactly the mutation this assertion exists to catch.
     expect(rmsOf(pcmWindow(padded, ['-ss', '6.1', '-t', '0.15']))).toBeGreaterThan(0.01);
     expect(rmsOf(pcmWindow(padded, ['-ss', '6.4', '-t', '0.2']))).toBeLessThan(0.001);
-    // 5 s into a 4 s line: the clamp is 1.25, so `-t` is what lands the file on the slot.
+    // 5 s into a 4 s line: the clamp is 1.25, so `-t` is what lands the file on the slot. The speech
+    // takes the whole slot, its pause included, and nothing is cut, so nothing is reported.
     const cut = join(dir, 'cut.wav');
-    expect(fitClip(source, cut, 4)).toBe(1.25);
+    const quiet: string[] = [];
+    expect(fitClip(source, cut, 4, (message) => quiet.push(message))).toBe(1.25);
     expect(clipSeconds(cut)).toBe(4);
+    expect(quiet).toEqual([]);
+    // 5 s into 3.5 s: even at 1.25 the speech runs 4 s, so `-t` cuts its end — which the fit says
+    // out loud rather than leaving for a listener to notice.
+    const overrun = join(dir, 'overrun.wav');
+    const reported: string[] = [];
+    expect(fitClip(source, overrun, 3.5, (message) => reported.push(message))).toBe(1.25);
+    expect(clipSeconds(overrun)).toBe(3.5);
+    expect(reported).toEqual([expect.stringContaining('cut by 0.50 s')]);
   }, 60_000);
 
   it('starts the speech on the clip’s first sample, so nobody speaks a frame late', () => {
     // `say` writes ~0.1 s of digital silence before the first phoneme; left in, the voice would start
-    // three frames after its subtitle and its sprite. A delayed sine stands in for that lead-in.
+    // three frames after its subtitle. A delayed sine stands in for that lead-in.
     const dir = join(outDirectory, 'fit');
     mkdirSync(dir, { recursive: true });
     const source = join(dir, 'lead-in.wav');

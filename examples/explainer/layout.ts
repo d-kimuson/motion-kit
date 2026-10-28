@@ -1,274 +1,220 @@
-// The explainer's vertical layout: what each slide stacks inside the body box and what the subtitle
-// plate reserves for a line. Pure arithmetic on the frame size and the script's own strings, so a
-// slide cannot place a block under the band and a line cannot outgrow the plate.
+// How a subtitle sentence is set: pure arithmetic on the sentence's own code points, so a sentence
+// can never outgrow the subtitle box and `layout.test.ts` can walk every sentence of the script
+// without rendering one.
 //
-// A slide stacks from `safeArea().bodyTop` downwards with a cursor (`stacker`), and every block's
-// height comes from its text (`block`): a title that wraps to two lines pushes what follows it down
-// instead of painting over it, and a stack that would pass `bodyBottom` is what `layout.test.ts`
-// walks every cue looking for. The band reverses the rule: its height is fixed, and the body size
-// shrinks from 72 px (`BODY_SIZE`) until the longest line fits `BODY_LINES` of them.
-import { BODY_LINES, BODY_MIN_SIZE, CREDITS, px, type SafeArea } from './look.ts';
+// The layout picks the line breaks itself instead of leaving them to the browser. A sentence is cut
+// into phrases (`phrases`), the phrases are packed onto as few lines as fit, and among those packings
+// the most even one wins (`breakLines`), so a line never ends one kana into a word and the second
+// line is never a stub. The box is fixed (`SUBTITLE` in `look.ts`): a sentence is set at
+// `SUBTITLE_SIZE` on up to `SUBTITLE_LINES` lines, shrinking towards `SUBTITLE_MIN_SIZE` until it
+// fits; only a sentence too long for that gets a third line, set tighter and at the largest size the
+// plate's height allows.
+import {
+  SUBTITLE,
+  SUBTITLE_LINES,
+  SUBTITLE_MAX_LINES,
+  SUBTITLE_LINE_HEIGHT,
+  SUBTITLE_MIN_SIZE,
+  SUBTITLE_PADDING_BOTTOM,
+  SUBTITLE_PADDING_TOP,
+  SUBTITLE_PADDING_X,
+  SUBTITLE_PLATE_OFFSET,
+  SUBTITLE_SIZE,
+  SUBTITLE_TIGHT_LINE_HEIGHT,
+  px,
+} from './look.ts';
 
 /**
- * A text run's width in em, from the code points: a Japanese glyph advances about 1 em, a Latin one
- * about 0.55, and letter-spaced text adds the tracking the plates set (0.06 em). The estimate is the
- * widest a run can be, so a real line never wraps into more lines than the layout reserved — a long
- * Latin run is the case it over-counts, and over-counting only costs a little air.
+ * A text run's width in em, from the code points: a Japanese glyph advances 1 em, a Latin one about
+ * 0.55, and the subtitle's tracking adds 0.04 em. That covers what the script sets — kana, kanji,
+ * punctuation and digits — so a line the layout measured does not overflow in the browser. It is an
+ * estimate, not a bound: a wide Latin capital (`W`, `M`) runs past 0.55 em, and a script that uses
+ * them needs a wider figure here.
  */
-const TRACKING = 1.06;
+const TRACKING = 1.04;
 const FULL_EM = 1;
 const HALF_EM = 0.55;
 
 const isFullWidth = (char: string): boolean => (char.codePointAt(0) ?? 0) >= 0x2000;
 
-/** A run's width in em. `codePoints`, not `length`, so a surrogate pair counts once. */
+/** A run's width in em. `for…of` walks code points, so a surrogate pair counts once. */
 export const advanceEm = (text: string): number => {
   let em = 0;
   for (const char of text) em += (isFullWidth(char) ? FULL_EM : HALF_EM) * TRACKING;
   return em;
 };
 
-/** How many lines `text` wraps to in `width` px at `size` px. At least one. */
-export const lineCount = (text: string, width: number, size: number): number =>
-  Math.max(1, Math.ceil((advanceEm(text) * size) / Math.max(1, width)));
+/** Hiragana particles a phrase may end on: `投資は|`, `会社を|`, `ペースで|`. */
+const PARTICLES = new Set(['は', 'が', 'を', 'に', 'で', 'と', 'も', 'へ', 'や', 'の']);
+const OPENING = /[「『（(【〈《“]/u;
+const CLOSING = /[」』）)】〉》”、。，．！？!?…]/u;
+/** A character a phrase can start with after a particle: kanji, katakana, Latin letters, digits. */
+const WORD = /[\p{Script=Han}\p{Script=Katakana}々〆A-Za-z0-9０-９]/u;
 
-/** The body size a subtitle line is drawn at: `target`, shrunk until it fits `lines` plate lines. */
-export const fitSize = (
+/** The shortest phrase a particle may end, so `私の|` never stands alone. */
+const MIN_PHRASE = 3;
+/** `この` and its kin modify the word after them, so they never end a phrase: `この方法`, `その指数`. */
+const DEMONSTRATIVE = /[こそあど]の$/u;
+
+/**
+ * `text` cut into phrases — the places a Japanese line may break without splitting a word: after a
+ * stop or a closing bracket, before an opening bracket, and after a particle that a kanji, katakana
+ * or Latin word follows (`値段は|ずっと|上がり続ける`). Okurigana never ends a phrase, so `考え方`
+ * and `上がり続ける` stay whole, and a word in `keep` (the sentence's emphasised words) is never cut.
+ */
+export const phrases = (text: string, keep: readonly string[] = []): readonly string[] => {
+  const chars = Array.from(text);
+  const kept = new Set<number>();
+  for (const word of keep) {
+    const length = Array.from(word).length;
+    if (length === 0) continue;
+    for (let start = 0; start + length <= chars.length; start += 1)
+      if (chars.slice(start, start + length).join('') === word)
+        for (let inside = start + 1; inside < start + length; inside += 1) kept.add(inside);
+  }
+  const out: string[] = [];
+  let phrase: string[] = [];
+  chars.forEach((char, index) => {
+    const previous = chars[index - 1] ?? '';
+    const cut =
+      phrase.length > 0 &&
+      !kept.has(index) &&
+      !CLOSING.test(char) &&
+      (CLOSING.test(previous) ||
+        OPENING.test(char) ||
+        (PARTICLES.has(previous) &&
+          WORD.test(char) &&
+          phrase.length >= MIN_PHRASE &&
+          !DEMONSTRATIVE.test(phrase.join(''))));
+    if (cut) {
+      out.push(phrase.join(''));
+      phrase = [];
+    }
+    phrase.push(char);
+  });
+  if (phrase.length > 0) out.push(phrase.join(''));
+  return out;
+};
+
+/** Every way to cut `count` items into `lines` non-empty consecutive groups, as the group sizes. */
+const partitions = (count: number, lines: number): readonly (readonly number[])[] => {
+  if (lines === 1) return count > 0 ? [[count]] : [];
+  const out: (readonly number[])[] = [];
+  for (let first = 1; first <= count - lines + 1; first += 1)
+    for (const rest of partitions(count - first, lines - 1)) out.push([first, ...rest]);
+  return out;
+};
+
+/** What a break after a word costs over one after a stop, in em: `持てば、|ひとつの` beats `ひとつの|失敗`. */
+const MID_SENTENCE_BREAK = 4;
+/** What a stub line costs, in em: a line under `STUB` of the widest one reads as an afterthought. */
+const STUB_LINE = 5;
+const STUB = 0.4;
+
+/**
+ * `text` set on the fewest lines, up to `maxLines`, that each fit `width` px at `size` px, or
+ * `undefined` if no packing fits. Among the packings that fit, the most even one wins — a break
+ * mid-sentence and a stub line each counting as some em wider. With `split`, a phrase wider than a
+ * whole line is cut into its characters; without, such a sentence does not fit.
+ */
+export const breakLines = (
   text: string,
-  width: number,
-  target: number,
-  lines: number,
-  floor: number,
-): number => {
-  let size = px(target);
-  const lowest = Math.max(1, px(floor));
-  while (size > lowest && lineCount(text, width, size) > lines) size -= 1;
-  return size;
-};
-
-/** The body size a line's subtitle is drawn at, in the plate it is given. */
-export const bodyFontSize = (text: string, area: SafeArea, target: number): number =>
-  fitSize(text, area.bandInnerWidth, target, BODY_LINES, px(area.height * BODY_MIN_SIZE));
-
-/** Where one stacked block starts, how tall it is, and the type the component sets it in. */
-export type Block = {
-  readonly top: number;
-  readonly height: number;
-  readonly size: number;
-  readonly lineHeight: number;
-  readonly lines: number;
-};
-
-/** A vertical cursor: `place` returns a block's top and moves past it, `skip` moves over a gap. */
-export type Stacker = {
-  readonly at: number;
-  readonly place: (height: number) => number;
-  readonly skip: (gap: number) => void;
-};
-
-export const stacker = (top: number): Stacker => {
-  let at = top;
-  return {
-    get at() {
-      return at;
-    },
-    place(height) {
-      const start = at;
-      at += Math.max(0, Math.round(height));
-      return start;
-    },
-    skip(gap) {
-      at += Math.max(0, Math.round(gap));
-    },
-  };
-};
-
-/** Stack one text run: its height is its own line count, so a wrapped line pushes the next down. */
-const block = (
-  flow: Stacker,
-  text: string,
+  keep: readonly string[],
   width: number,
   size: number,
-  lineHeight: number,
-  gapAfter = 0,
-): Block => {
-  const lines = lineCount(text, width, size);
-  const height = Math.ceil(size * lineHeight) * lines;
-  const top = flow.place(height);
-  flow.skip(gapAfter);
-  return { top, height, size, lineHeight, lines };
-};
-
-/** A block stacked without any text: an accent rule, a chart card. */
-const plain = (flow: Stacker, height: number, gapAfter = 0): number => {
-  const top = flow.place(height);
-  flow.skip(gapAfter);
-  return top;
-};
-
-/** The last row a stack actually paints, which is what has to clear `area.bodyBottom`. */
-const painted = (...bottoms: readonly number[]): number => Math.max(...bottoms);
-
-const footOf = (item: Block): number => item.top + item.height;
-
-/** The rule under a slide's heading, and the rule that closes a bullet list. */
-const ruleHeight = (height: number): number => Math.max(2, px(height * 0.0042));
-
-/** The opening slide's tagline: the one line of copy the slide carries that the script does not. */
-export const TAGLINE = 'ずんだもんと四国めたんが、やさしく整理します。';
-
-export type TitleLayout = {
-  readonly eyebrow: Block;
-  readonly title: Block;
-  readonly rule: number;
-  readonly tagline: Block;
-  /** The stack's last row: at most `area.bodyBottom`. */
-  readonly bottom: number;
-};
-
-export const titleLayout = (area: SafeArea, text: string): TitleLayout => {
-  const { height } = area;
-  const flow = stacker(area.bodyTop);
-  const eyebrow = block(
-    flow,
-    'INDEX INVESTING',
-    area.textWidth,
-    px(height * 0.024),
-    1.4,
-    px(height * 0.055),
+  maxLines: number,
+  split = false,
+): readonly string[] | undefined => {
+  const fits = (line: string): boolean => advanceEm(line) * size <= width;
+  const units = phrases(text, keep).flatMap((phrase) =>
+    split && !fits(phrase) ? Array.from(phrase) : [phrase],
   );
-  const titleSize = fitSize(text, area.textWidth, height * 0.098, 1, height * 0.055);
-  const title = block(flow, text, area.textWidth, titleSize, 1.18, px(height * 0.05));
-  const rule = plain(flow, Math.max(2, px(height * 0.005)), px(height * 0.04));
-  const tagline = block(flow, TAGLINE, area.textWidth, px(height * 0.032), 1.6);
-  return { eyebrow, title, rule, tagline, bottom: footOf(tagline) };
+  for (let lines = 1; lines <= Math.min(maxLines, units.length); lines += 1) {
+    let best: { readonly lines: readonly string[]; readonly cost: number } | undefined;
+    for (const sizes of partitions(units.length, lines)) {
+      let start = 0;
+      const set = sizes.map((group) => {
+        const line = units.slice(start, start + group).join('');
+        start += group;
+        return line;
+      });
+      if (!set.every(fits)) continue;
+      const midBreaks = set.slice(0, -1).filter((line) => !CLOSING.test(line.at(-1) ?? '')).length;
+      const widest = Math.max(...set.map(advanceEm));
+      const stubs = set.filter((line) => advanceEm(line) < STUB * widest).length;
+      const cost = widest + MID_SENTENCE_BREAK * midBreaks + STUB_LINE * stubs;
+      if (best === undefined || cost < best.cost) best = { lines: set, cost };
+    }
+    if (best !== undefined) return best.lines;
+  }
+  return undefined;
 };
 
-export type BulletsLayout = {
-  readonly eyebrow: Block;
-  readonly title: Block;
-  readonly rule: number;
-  readonly items: readonly Block[];
-  /** The bullet square and its gap to the item's text, and the width the text wraps in. */
-  readonly bullet: number;
-  readonly bulletGap: number;
-  readonly itemWidth: number;
-  /** The closing rule, when the list leaves room for it; `null` instead of painting over the band. */
-  readonly trailing: number | null;
-  readonly bottom: number;
-};
+/** The width a subtitle line may run across: the box less its side padding. */
+export const SUBTITLE_TEXT_WIDTH = SUBTITLE.width - 2 * SUBTITLE_PADDING_X;
 
-export const bulletsLayout = (
-  area: SafeArea,
-  cue: { readonly title: string; readonly items: readonly string[] },
-  number: string,
-): BulletsLayout => {
-  const { height } = area;
-  const bullet = px(height * 0.016);
-  const bulletGap = px(area.width * 0.016);
-  const itemWidth = area.textWidth - bullet - bulletGap;
-  const flow = stacker(area.bodyTop);
-  const eyebrow = block(flow, number, area.textWidth, px(height * 0.022), 1.4, px(height * 0.05));
-  const titleSize = fitSize(cue.title, area.textWidth, height * 0.062, 1, height * 0.05);
-  const title = block(flow, cue.title, area.textWidth, titleSize, 1.3, px(height * 0.03));
-  const rule = plain(flow, ruleHeight(height), px(height * 0.045));
-  const items = cue.items.map((item) =>
-    block(flow, item, itemWidth, px(height * 0.044), 1.35, px(height * 0.028)),
-  );
-  const trailingHeight = Math.max(1, px(height * 0.0016));
-  const trailingTop = flow.at + px(height * 0.02);
-  const trailing = trailingTop + trailingHeight <= area.bodyBottom ? trailingTop : null;
-  return {
-    eyebrow,
-    title,
-    rule,
-    items,
-    bullet,
-    bulletGap,
-    itemWidth,
-    trailing,
-    bottom: painted(...items.map(footOf), trailing === null ? 0 : trailing + trailingHeight),
-  };
-};
+/** The height the lines may stack to: the plate less its vertical padding. */
+export const SUBTITLE_TEXT_HEIGHT =
+  SUBTITLE.height - SUBTITLE_PLATE_OFFSET - SUBTITLE_PADDING_TOP - SUBTITLE_PADDING_BOTTOM;
 
-export type DisclaimerLayout = {
-  readonly eyebrow: Block;
-  readonly text: Block;
-  readonly credits: readonly Block[];
-  readonly bottom: number;
-};
-
-export const disclaimerLayout = (area: SafeArea, text: string): DisclaimerLayout => {
-  const { height } = area;
-  const flow = stacker(area.bodyTop);
-  const eyebrow = block(
-    flow,
-    'ご注意',
-    area.textWidth,
-    px(height * 0.028),
-    1.4,
-    px(height * 0.035),
-  );
-  const body = block(flow, text, area.textWidth, px(height * 0.038), 1.7, px(height * 0.05));
-  const size = px(height * 0.0215);
-  const credits = CREDITS.map((credit) => block(flow, credit, area.textWidth, size, 1.8));
-  return { eyebrow, text: body, credits, bottom: painted(footOf(body), ...credits.map(footOf)) };
+export type SubtitleFit = {
+  readonly size: number;
+  readonly lines: readonly string[];
+  readonly lineHeight: number;
 };
 
 /**
- * The chart slide's card: the chart example's own component, drawn into the body box.
- *
- * `ChartScene` lays itself out in fractions of the *Composition*, so its plot and its year labels
- * run to 0.96 of the frame height — straight under the plate. The slide therefore scales the whole
- * chart down and offsets it so the chart's own content box (`CHART_*`, the outer margins it draws in)
- * fills the card, and clips only the empty margins it leaves outside that box.
+ * The size a sentence is set at, the lines it is set on, and the line height it is set with. Whole
+ * phrases are tried at every size first; only a sentence no size can set that way has a phrase cut.
  */
-const CHART_BOX = { left: 0.062, right: 0.962, top: 0.062, bottom: 0.962 } as const;
-
-export type ChartLayout = {
-  readonly rule: number;
-  readonly caption: Block;
-  /** The card, and the transform that puts the chart's content box inside it. */
-  readonly card: {
-    readonly left: number;
-    readonly top: number;
-    readonly width: number;
-    readonly height: number;
-    readonly scale: number;
-    readonly offsetX: number;
-    readonly offsetY: number;
+export const subtitleFit = (text: string, keep: readonly string[] = []): SubtitleFit =>
+  fitWith(text, keep, false) ??
+  fitWith(text, keep, true) ?? {
+    size: 1,
+    lines: [text],
+    lineHeight: SUBTITLE_TIGHT_LINE_HEIGHT,
   };
-  readonly bottom: number;
+
+const fitWith = (
+  text: string,
+  keep: readonly string[],
+  split: boolean,
+): SubtitleFit | undefined => {
+  for (let size = px(SUBTITLE_SIZE); size >= px(SUBTITLE_MIN_SIZE); size -= 1) {
+    const lines = breakLines(text, keep, SUBTITLE_TEXT_WIDTH, size, SUBTITLE_LINES, split);
+    if (lines !== undefined) return { size, lines, lineHeight: SUBTITLE_LINE_HEIGHT };
+  }
+  const tallest = Math.floor(
+    SUBTITLE_TEXT_HEIGHT / (SUBTITLE_MAX_LINES * SUBTITLE_TIGHT_LINE_HEIGHT),
+  );
+  for (let size = Math.min(px(SUBTITLE_SIZE), tallest); size > 1; size -= 1) {
+    const lines = breakLines(text, keep, SUBTITLE_TEXT_WIDTH, size, SUBTITLE_MAX_LINES, split);
+    if (lines !== undefined) return { size, lines, lineHeight: SUBTITLE_TIGHT_LINE_HEIGHT };
+  }
+  return undefined;
 };
 
-export const chartLayout = (area: SafeArea, caption: string): ChartLayout => {
-  const { width, height } = area;
-  const flow = stacker(area.bodyTop);
-  const rule = plain(flow, Math.max(2, px(height * 0.004)), px(height * 0.014));
-  const captionBlock = block(
-    flow,
-    caption,
-    area.textWidth,
-    px(height * 0.028),
-    1.5,
-    px(height * 0.016),
-  );
-  const top = flow.at;
-  const cardHeight = Math.max(1, area.bodyBottom - top);
-  const scale = cardHeight / ((CHART_BOX.bottom - CHART_BOX.top) * height);
-  const cardWidth = Math.round((CHART_BOX.right - CHART_BOX.left) * width * scale);
-  return {
-    rule,
-    caption: captionBlock,
-    card: {
-      left: area.textLeft,
-      top,
-      width: cardWidth,
-      height: cardHeight,
-      scale,
-      offsetX: px(-CHART_BOX.left * width * scale),
-      offsetY: px(-CHART_BOX.top * height * scale),
-    },
-    bottom: area.bodyBottom,
-  };
+/** A sentence cut at its emphasised words, so the subtitle can colour them. */
+export type Run = { readonly text: string; readonly emphasis: boolean };
+
+/** Split `text` at every occurrence of each word in `emphasis`; the longest word wins an overlap. */
+export const emphasisRuns = (text: string, emphasis: readonly string[]): readonly Run[] => {
+  const words = [...emphasis].filter((word) => word !== '').sort((a, b) => b.length - a.length);
+  const runs: Run[] = [];
+  let plain = '';
+  let index = 0;
+  while (index < text.length) {
+    const word = words.find((candidate) => text.startsWith(candidate, index));
+    if (word === undefined) {
+      plain += text[index] ?? '';
+      index += 1;
+      continue;
+    }
+    if (plain !== '') runs.push({ text: plain, emphasis: false });
+    plain = '';
+    runs.push({ text: word, emphasis: true });
+    index += word.length;
+  }
+  if (plain !== '') runs.push({ text: plain, emphasis: false });
+  return runs;
 };

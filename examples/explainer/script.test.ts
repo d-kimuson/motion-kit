@@ -47,8 +47,14 @@ const scriptOfSlideSeconds = (slideSeconds: readonly number[]): Script => {
     speaker: index % 2 === 0 ? 'metan' : 'zundamon',
     text: 'あ'.repeat(seconds * codePointsPerSecond),
     expression: 'normal',
-    slide: { kind: 'bullets', title: `slide ${index}`, items: [`item ${index}`] },
+    slide: {
+      kind: 'summary',
+      title: `slide ${index}`,
+      items: [`item ${index}`, `item ${index}b`],
+      closing: `closing ${index}`,
+    },
     seconds,
+    emphasis: [],
   }));
   return { ...script, lines: [...lines, disclaimerLine] };
 };
@@ -90,7 +96,7 @@ describe('explainer script', () => {
   });
 
   it('bounds the whole timeline, not only the dialogue', () => {
-    // Twelve bullet slides of 23–24 s plus the script's own 13 s disclaimer line: 1481 characters,
+    // Twelve checklist slides of 23–24 s plus the script's own 13 s disclaimer line: 1481 characters,
     // 13 lines, a cue every 16–24 s, and the total lands exactly on the window's edge.
     const inside = scriptOfSlideSeconds([24, 24, 24, 24, 24, 24, 24, 24, 23, 23, 23, 23]);
     expect(scriptSchema.safeParse(inside).success).toBe(true);
@@ -139,11 +145,20 @@ describe('explainer script', () => {
       speaker: 'zundamon' as const,
       text: 'あいうえおか',
       expression: 'normal' as const,
-      slide: { kind: 'title' as const, text: 'probe' },
+      slide: { kind: 'title' as const, text: 'probe', kicker: 'probe', agenda: ['a', 'b'] },
     };
     expect(scriptLineSchema.safeParse({ ...base, seconds: 2 }).success).toBe(true);
     // The schema does not trust the number: a line that under- or over-states its text is rejected.
     expect(() => scriptLineSchema.parse({ ...base, seconds: 3 })).toThrow(/is 2 s, not 3 s/);
+  });
+
+  it('promises on the title slide the chapters the top bar then counts, in order', () => {
+    const [opening, ...rest] = slideSpans.map((span) => span.cue);
+    if (opening?.kind !== 'title') throw new Error('the first slide is not the title');
+    const chapters = rest.flatMap((cue) =>
+      cue.kind === 'title' || cue.kind === 'disclaimer' ? [] : [cue.title],
+    );
+    expect(opening.agenda).toEqual(chapters);
   });
 
   it('groups consecutive lines into slides and starts each one at its first line', () => {
@@ -152,14 +167,14 @@ describe('explainer script', () => {
     expect(groups[0]?.cue.kind).toBe('title');
     expect(groups.map((group) => group.cue.kind)).toEqual([
       'title',
-      'bullets',
-      'bullets',
+      'index',
+      'spread',
       'chart',
-      'bullets',
-      'bullets',
-      'bullets',
-      'bullets',
-      'bullets',
+      'cost',
+      'instalment',
+      'risk',
+      'scope',
+      'summary',
       'disclaimer',
     ]);
     // No two slides share a cue: the picture changes exactly when the cue does.

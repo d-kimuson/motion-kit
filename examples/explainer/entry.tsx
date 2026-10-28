@@ -15,9 +15,9 @@ import {
 } from '@kimuson/motion-kit';
 import { z } from 'zod';
 
-import { voiceTracks } from './audio.ts';
+import { soundtrack } from './audio.ts';
 import { ExplainerScene } from './ExplainerScene.tsx';
-import { ciStoryboard, explainerStoryboard } from './plan.ts';
+import { ciStoryboard, explainerStoryboard, FPS } from './plan.ts';
 import { totalSeconds } from './script.ts';
 
 const unwrap = <T,>(result: Result<T>): T => {
@@ -25,9 +25,9 @@ const unwrap = <T,>(result: Result<T>): T => {
   return result.value;
 };
 
-/** 30 fps: the design doc's rate for every example. */
-export const fps = unwrap(createFrameRate({ numerator: 30, denominator: 1 }));
-const fpsValue = Number(fps.numerator) / Number(fps.denominator);
+/** `FPS` (`plan.ts`) as the Time Module's rate, and as the Compositions declare it. */
+const rate = { numerator: FPS, denominator: 1 } as const;
+export const fps = unwrap(createFrameRate(rate));
 
 /** The script's 222 s as 6660 frames: the video's whole length, derived at module load. */
 export const durationInFrames = Number(
@@ -36,10 +36,11 @@ export const durationInFrames = Number(
 
 /**
  * The one switch every media example carries: `placeholder` (the default, and what CI and every
- * commit-time render use) draws the FFmpeg-generated sprites and the committed font; `final` draws
- * the fetched sprites. The voices are declared on the Composition either way, because audio is
- * descriptor data rather than a prop — `fetch-assets.ts` writes silent placeholders for step 1 and
- * replaces them in step 2, so a placeholder render is silent rather than a link error.
+ * commit-time render use) draws a badge for each character and the committed font; `final` draws
+ * the portraits the local VOICEVOX engine ships. The voices are declared on the Composition either
+ * way, because audio is descriptor data rather than a prop — `fetch-assets.ts` writes silent voice
+ * placeholders for step 1 and replaces them in step 2, so a placeholder render carries the music bed
+ * and the whoosh with no voice rather than failing on a missing file.
  */
 export const assetsProps = z.object({
   assets: z.enum(['placeholder', 'final']).default('placeholder'),
@@ -48,7 +49,7 @@ export const assetsProps = z.object({
 type ExplainerProps = z.infer<typeof assetsProps>;
 
 /** Both Compositions read one storyboard each, built once at module load. */
-export const storyboard = explainerStoryboard(fpsValue);
+export const storyboard = explainerStoryboard(FPS);
 export const ci = ciStoryboard();
 
 const Explainer = ({ assets }: ExplainerProps) => (
@@ -69,17 +70,17 @@ export const compositions = defineCompositions([
     id: 'explainer',
     width: 1920,
     height: 1080,
-    fps: { numerator: 30, denominator: 1 },
+    fps: rate,
     durationInFrames,
     schema: assetsProps,
     component: Explainer,
-    audio: voiceTracks(storyboard),
+    audio: soundtrack(storyboard),
   }),
   defineComposition({
     id: 'explainer-ci',
     width: 960,
     height: 540,
-    fps: { numerator: 30, denominator: 1 },
+    fps: rate,
     durationInFrames: ci.durationInFrames,
     schema: assetsProps,
     component: ExplainerCi,

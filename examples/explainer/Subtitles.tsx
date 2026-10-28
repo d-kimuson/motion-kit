@@ -1,133 +1,158 @@
-// The subtitle layer: one `Sequence` per line, at the line's frame-derived start, with no
-// transitions anywhere. It is the layer that proves many `Sequence`s in one Composition keep exact
-// timing, so a line appears on the first frame of its own line and never a frame early.
+// The subtitle layer: one sentence at a time, one `Sequence` per sentence at its frame-derived start,
+// so a sentence appears on the first frame the voice starts it and never a frame early.
 //
-// The band carries the speaker's name, so the video reads with the sound off: the name is the only
-// thing that says who is talking when only one sprite is mouthing.
-//
-// Its geometry is the shared one (`look.ts`'s `safeArea`): the plate fills the band box between
-// `BAND_TOP` and the frame's bottom margin, and no slide paints between the body and it. The plate is
-// a fixed height — a name line and `BODY_LINES` body lines at 72 px — and a line too long for three
-// lines at that size is drawn smaller until it fits (`layout.ts`'s `bodyFontSize`), so the band never
-// grows over the slide and never clips a line.
-import { Sequence, useTimeline } from '@kimuson/motion-kit';
+// The box is fixed (`SUBTITLE` in `look.ts`) and a sentence is sized and broken into lines to fit it
+// (`layout.ts`), so it never grows over the stage, never clips, and never wraps mid-word. The
+// speaker's name rides on the box's top edge in their colour, and the glyphs are stroked in the
+// speaker's deep shade, so the video reads with the sound off. The words the line's `emphasis`
+// names are set in gold — the same words the scene animates.
+import { Sequence, useTime } from '@kimuson/motion-kit';
 
-import { FlatRect } from './flat.tsx';
-import { bodyFontSize } from './layout.ts';
+import { DesignRect } from './flat.tsx';
+import { emphasisRuns, subtitleFit } from './layout.ts';
 import {
-  ACCENT,
-  BODY_LINE_HEIGHT,
-  BODY_SIZE,
-  INK,
-  NAME_LINE_HEIGHT,
-  NAME_SIZE,
-  PANEL,
+  SUBTITLE,
+  SUBTITLE_PADDING_BOTTOM,
+  SUBTITLE_PADDING_TOP,
+  SUBTITLE_PADDING_X,
+  SUBTITLE_PLATE_OFFSET,
   characterColor,
+  characterInk,
   characterName,
   framesToTime,
-  px,
-  safeArea,
-  type AssetsMode,
+  palette,
 } from './look.ts';
-import { type PlannedLine, type Storyboard } from './plan.ts';
+import { enter } from './motion.ts';
+import { type PlannedSentence, type Storyboard } from './plan.ts';
+import { codePointLength } from './script.schema.ts';
 import { useFlat } from './slides/shared.ts';
 
-const SubtitleLine = ({ line }: { readonly line: PlannedLine }) => {
-  const { width, height } = useTimeline();
-  const area = safeArea(width, height);
-  const bodySize = bodyFontSize(line.text, area, px(height * BODY_SIZE));
+const NAME_SIZE = 28;
+
+const SubtitleSentence = ({ sentence }: { readonly sentence: PlannedSentence }) => {
+  const t = useTime();
+  const fit = subtitleFit(sentence.text, sentence.emphasis);
+  const arrive = enter(t, 0, 0.18);
+  const ink = characterInk[sentence.speaker];
   return (
     <div
       style={{
         position: 'absolute',
-        left: area.bandLeft,
-        top: area.bandTop,
-        width: area.bandWidth,
-        height: area.bandHeight,
-        padding: `${area.bandPaddingY}px ${area.bandPaddingX}px`,
+        left: SUBTITLE.left,
+        top: SUBTITLE.top + SUBTITLE_PLATE_OFFSET,
+        width: SUBTITLE.width,
+        height: SUBTITLE.height - SUBTITLE_PLATE_OFFSET,
         boxSizing: 'border-box',
-        borderRadius: px(height * 0.012),
-        border: `${Math.max(1, px(height * 0.0014))}px solid #ece4d4`,
-        background: PANEL,
-        opacity: 0.96,
+        padding: `${String(SUBTITLE_PADDING_TOP)}px ${String(SUBTITLE_PADDING_X)}px ${String(SUBTITLE_PADDING_BOTTOM)}px`,
+        borderRadius: 26,
+        background: 'linear-gradient(180deg, rgba(9, 16, 31, 0.92), rgba(9, 16, 31, 0.86))',
+        border: `3px solid ${characterColor[sentence.speaker]}99`,
+        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.45)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
       <div
         style={{
-          fontSize: px(height * NAME_SIZE),
-          lineHeight: NAME_LINE_HEIGHT,
-          letterSpacing: '0.06em',
-          color: ACCENT,
+          position: 'absolute',
+          left: 36,
+          top: -24,
+          padding: '4px 22px',
+          borderRadius: 999,
+          background: characterColor[sentence.speaker],
+          color: ink,
+          fontSize: NAME_SIZE,
+          fontWeight: 900,
+          lineHeight: 1.3,
+          border: `3px solid ${palette.groundTop}`,
         }}
       >
-        {characterName[line.speaker]}
+        {characterName[sentence.speaker]}
       </div>
       <div
+        lang="ja"
         style={{
-          fontSize: bodySize,
-          fontWeight: 400,
-          lineHeight: BODY_LINE_HEIGHT,
-          color: INK,
+          width: '100%',
+          textAlign: 'center',
+          fontSize: fit.size,
+          lineHeight: fit.lineHeight,
+          fontWeight: 900,
+          letterSpacing: '0.04em',
+          color: palette.text,
+          WebkitTextStroke: `${String(Math.round(fit.size * 0.16))}px ${ink}`,
+          paintOrder: 'stroke fill',
+          whiteSpace: 'nowrap',
+          opacity: arrive,
+          transform: `translateY(${String(8 * (1 - arrive))}px)`,
         }}
       >
-        {line.text}
+        {fit.lines.map((line, row) => (
+          <div key={`${String(row)}-${line}`}>
+            {emphasisRuns(line, sentence.emphasis).map((run, index) => (
+              <span
+                key={`${String(index)}-${run.text}`}
+                style={run.emphasis ? { color: palette.gold } : undefined}
+              >
+                {run.text}
+              </span>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
-/**
- * The band under `flat`: the same rectangle in the same place, opaque, square-cornered and without a
- * glyph. The real band is 96 % opaque, has a rounded border and carries two lines of text — a blend,
- * an antialiased edge and a glyph run at a fractional alpha — which is the combination a probe cannot
- * compare byte for byte across platforms. The speaker still drives the frame: their name becomes a
- * solid block in their colour.
- */
-const FlatSubtitleBand = ({ line }: { readonly line: PlannedLine }) => {
-  const { width, height } = useTimeline();
-  const area = safeArea(width, height);
-  const speaker = px(height * 0.055);
+/** The probe's stand-in: the box, and one bar whose width is the sentence's own length. */
+const FlatSentence = ({ sentence }: { readonly sentence: PlannedSentence }) => {
+  const fit = subtitleFit(sentence.text, sentence.emphasis);
+  const width = Math.min(
+    SUBTITLE.width - 2 * SUBTITLE_PADDING_X,
+    codePointLength(sentence.text) * fit.size * 0.5,
+  );
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left: area.bandLeft,
-        top: area.bandTop,
-        width: area.bandWidth,
-        height: area.bandHeight,
-        background: PANEL,
-      }}
-    >
-      <FlatRect
-        left={area.bandPaddingX}
-        top={Math.round((area.bandHeight - speaker) / 2)}
-        width={speaker}
-        height={speaker}
-        color={characterColor[line.speaker]}
+    <>
+      <DesignRect
+        left={SUBTITLE.left}
+        top={SUBTITLE.top + SUBTITLE_PLATE_OFFSET}
+        width={SUBTITLE.width}
+        height={SUBTITLE.height - SUBTITLE_PLATE_OFFSET}
+        color={palette.panel}
       />
-    </div>
+      <DesignRect
+        left={SUBTITLE.left + 36}
+        top={SUBTITLE.top}
+        width={160}
+        height={44}
+        color={characterColor[sentence.speaker]}
+      />
+      <DesignRect
+        left={SUBTITLE.left + (SUBTITLE.width - width) / 2}
+        top={SUBTITLE.top + 100}
+        width={width}
+        height={fit.size}
+        color={palette.text}
+      />
+    </>
   );
 };
 
-export type SubtitlesProps = {
-  readonly storyboard: Storyboard;
-  /** Present so both visual layers take the same props; the band is DOM text either way. */
-  readonly assets: AssetsMode;
-};
-
-export const Subtitles = ({ storyboard }: SubtitlesProps) => {
+export const Subtitles = ({ storyboard }: { readonly storyboard: Storyboard }) => {
   const flat = useFlat();
   return (
     <>
-      {storyboard.lines.map((line) => (
-        <Sequence
-          key={`subtitle-${line.id}`}
-          from={framesToTime(line.startFrame, storyboard.fps)}
-          duration={framesToTime(line.frames, storyboard.fps)}
-        >
-          {flat ? <FlatSubtitleBand line={line} /> : <SubtitleLine line={line} />}
-        </Sequence>
-      ))}
+      {storyboard.lines.flatMap((line) =>
+        line.sentences.map((sentence, index) => (
+          <Sequence
+            key={`${line.id}-${String(index)}`}
+            from={framesToTime(sentence.startFrame, storyboard.fps)}
+            duration={framesToTime(sentence.frames, storyboard.fps)}
+          >
+            {flat ? <FlatSentence sentence={sentence} /> : <SubtitleSentence sentence={sentence} />}
+          </Sequence>
+        )),
+      )}
     </>
   );
 };

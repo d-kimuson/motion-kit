@@ -10,6 +10,10 @@
 // compares PNG bytes with no tolerance.
 //
 // The primitive rounds, because whole pixels are the rule rather than a habit a caller remembers.
+import { useTimeline } from '@kimuson/motion-kit';
+
+import { DESIGN } from './look.ts';
+
 export type FlatRectProps = {
   readonly left: number;
   readonly top: number;
@@ -31,3 +35,23 @@ export const FlatRect = ({ left, top, width, height, color }: FlatRectProps) => 
     }}
   />
 );
+
+/**
+ * A `FlatRect` given in the 1920x1080 design space (`look.ts`), scaled to the Composition's own size
+ * here rather than by a CSS `transform` on an ancestor: a scaled layer is resampled, and a resampled
+ * edge is an antialiased one. Scaling the numbers and letting `FlatRect` round them keeps every edge
+ * on a whole output pixel.
+ */
+export const DesignRect = (props: FlatRectProps) => {
+  const { width } = useTimeline();
+  const scale = width / DESIGN.width;
+  return (
+    <FlatRect
+      left={props.left * scale}
+      top={props.top * scale}
+      width={props.width * scale}
+      height={props.height * scale}
+      color={props.color}
+    />
+  );
+};

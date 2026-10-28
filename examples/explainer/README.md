@@ -1,7 +1,7 @@
 # `explainer`
 
 The explainer: 222 seconds on what an index fund is, in 19 spoken lines over 10 slides, drawn by
-three layers that share one storyboard. `script.ts` is the script; `script.schema.ts` owns the format,
+five layers that share one storyboard. `script.ts` is the script; `script.schema.ts` owns the format,
 the reading rate and the timing arithmetic; `script.test.ts` holds the numbers to their literals;
 `plan.ts` converts seconds to frames once for every layer.
 [The reference-examples design doc](../../docs/design-doc/20261025-reference-examples.md#explainer--long-duration-many-sequences-and-transitions-subtitles-against-audio)
@@ -12,22 +12,28 @@ the prose belong to `script.ts` and `script.schema.ts`; the layers that draw the
 
 ## Layout
 
-| File                   | What it owns                                                                     |
-| ---------------------- | -------------------------------------------------------------------------------- |
-| `script.ts`            | The script: 19 spoken lines, a slide cue on each, the disclaimer, the credits    |
-| `script.schema.ts`     | The format, `seconds = ceil(codePoints / 5)`, the frame-free timing arithmetic   |
-| `plan.ts`              | The one conversion to frames — `Storyboard`, shared by all three layers          |
-| `entry.tsx`            | `explainer` (1920×1080, 6660 frames) and `explainer-ci` (960×540, 60 frames)     |
-| `probe.tsx`            | `explainer-probe` (480×270, 30 frames) for the determinism gate                  |
-| `ExplainerScene.tsx`   | The tree: slides, sprites, subtitles over one storyboard; the font `Suspense`    |
-| `slides/`              | `SlideSeries` (a `TransitionSeries`, 0.4 s crossfades) and the four slide bodies |
-| `Sprites.tsx`          | One `Sequence` per line: both characters, the speaker lit, mouth every 0.15 s    |
-| `Subtitles.tsx`        | One `Sequence` per line, no transitions: the band with the speaker's name        |
-| `look.ts`              | Palette, committed font, sprite/voice paths, the shared arithmetic, safe areas   |
-| `layout.ts`            | What each slide stacks in the body box, and how a long line fits the plate       |
-| `audio.ts`             | One voice track per line, at the line's frame start and end                      |
-| `fetch-assets.ts`      | Step 1 placeholders (FFmpeg) and step 2 the fetched sprites and voice            |
-| `assets.manifest.json` | Every file under `assets/` and `assets.local/`, with its provenance              |
+| File                   | What it owns                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `script.ts`            | The script: 19 spoken lines, a scene cue and an expression on each, the credits        |
+| `script.schema.ts`     | The format, the ten cue kinds, `seconds = ceil(codePoints / 5)`, the timing arithmetic |
+| `plan.ts`              | The one conversion to frames — `Storyboard`, sentences included — shared by the layers |
+| `entry.tsx`            | `explainer` (1920×1080, 6660 frames) and `explainer-ci` (960×540, 60 frames)           |
+| `probe.tsx`            | `explainer-probe` (480×270, 30 frames) for the determinism gate                        |
+| `flat.tsx`             | The probe's drawing language: opaque, axis-aligned rectangles on whole pixels          |
+| `ExplainerScene.tsx`   | The tree: five layers in one 1920×1080 design space, scaled once; the font `Suspense`  |
+| `Background.tsx`       | The ground, a drifting grid and lights, the stage panel                                |
+| `slides/`              | `SlideSeries` (a `TransitionSeries`, 0.4 s handoffs) and the probe's `FlatSlide`       |
+| `scenes/`              | One designed scene per cue kind, every beat keyed to a narrated phrase (`clock.at`)    |
+| `Chrome.tsx`           | The title and the chapter progress along the top                                       |
+| `Speakers.tsx`         | Both portraits in the side lanes: the speaker lit and bobbing, a reaction mark         |
+| `Subtitles.tsx`        | One `Sequence` per sentence: the plate, the speaker's name, emphasis in gold           |
+| `look.ts`              | Palette, committed font, asset paths, the fixed regions, credit lines                  |
+| `layout.ts`            | How a sentence is broken into phrase-whole lines and sized to fit the plate            |
+| `motion.ts`            | The arrival curves every scene shares (a spring, rises, pops)                          |
+| `audio.ts`             | The narration per line, the music bed under all of it, a whoosh on every slide change  |
+| `synth.ts`             | The music bed and the whoosh, synthesised sample by sample (no download, no licence)   |
+| `fetch-assets.ts`      | Step 1 the bed, the whoosh and silent voice; step 2 VOICEVOX voice and portraits       |
+| `assets.manifest.json` | Every file under `assets/` and `assets.local/`, with its provenance                    |
 
 ## Running it
 
@@ -35,19 +41,20 @@ Every command runs from the repository root (`pnpm test` builds `dist/` first):
 
 ```bash
 pnpm build
-node examples/explainer/fetch-assets.ts --placeholders   # tone bed and silent voice clips
+node examples/explainer/fetch-assets.ts --placeholders   # music bed, whoosh and silent voice clips
 node dist/cli.js render examples/explainer/entry.tsx --composition explainer-ci --out out/explainer-ci.mp4 --json
 node dist/cli.js frame examples/explainer/entry.tsx --composition explainer --frame 2200 --out out/still.png
 ```
 
-`--placeholders` is step 1 and the only step CI needs; a bare `node examples/explainer/fetch-assets.ts`
-also copies `assets.local/sprite-source/` into `assets.local/sprites/final/` and synthesizes the voice
-(VOICEVOX on `VOICEVOX_ENGINE_URL`, or macOS `say -v Kyoko`), skipping with an instruction when neither
-is available. The voice is fitted to the script rather than the other way round: each clip's lead-in is
-trimmed, its pace moved by FFmpeg `atempo` inside ±25 %, and the result padded or cut to the line's own
-`seconds`, so narration starts on the line's frame and stops where the subtitle and the sprite do
-(`assets.local/voice/durations.json` records the result). `--props '{"assets":"final"}'` renders the
-fetched 立ち絵 instead of the drawn placeholder characters. The full 6660-frame render is a local QA Check:
+`--placeholders` is step 1 and the only step CI needs. A bare `node examples/explainer/fetch-assets.ts`
+also runs step 2 against a local VOICEVOX engine (`VOICEVOX_ENGINE_URL`, default
+`http://127.0.0.1:50021`): the narration (四国めたん style 2, ずんだもん style 3; macOS `say -v Kyoko`
+where no engine answers) and the two portraits the engine ships (`/speaker_info`), each part skipping
+with an instruction when its input is missing. The voice is fitted to the script rather than the other
+way round: each sentence's clip is trimmed, its pace moved by FFmpeg `atempo`, and the result padded or
+cut to the sentence's own slot, so the voice starts a sentence on the frame its subtitle does
+(`assets.local/voice/durations.json` records the result). `--props '{"assets":"final"}'` draws the
+portraits instead of the placeholder badges. The full 6660-frame render is a local QA Check:
 `--out out/explainer.mp4` takes minutes and is never a CI step.
 
 ## Known limitations
@@ -55,53 +62,46 @@ fetched 立ち絵 instead of the drawn placeholder characters. The full 6660-fra
 - **`explainer-probe` draws opaque rectangles and nothing else.** The determinism gate compares PNG
   bytes with no tolerance on macOS and on the Linux runner, so the probe draws only what rasterises
   identically on both: solid, fully opaque, integer-pixel rectangles with square corners
-  (`flat.tsx`). No font, no glyph, no sprite image (`useAsset` inside a `Sequence` is the construct
-  the design doc records as an intermittent `reverse` failure), no `border-radius`, no `box-shadow`,
-  no gradient, no `opacity < 1`, no fractional size or position, and no animation of a paint
-  property. Every one of those is a construct that has painted differently between two platforms or
-  between two paints of the same frame: antialiased edges are a coverage mask, fractional alpha is a
-  blend, and a glyph is the platform's rasteriser, not ours. `explainer-ci`, which does load the committed
-  font and draws the placeholder characters, stays out of the gate.
-- **The probe's arrival and crossfade are discrete.** `useSlideReveal` never runs under `flat`:
-  `SlideSeries` swaps the reveal-only `Slide` for `FlatSlide` and the 0.4 s crossfade for a switch at
-  the overlap's first frame, where the incoming slide is painted alone and fully opaque. Nothing is
-  half-arrived, so no frame depends on the paint that came before it. The ramp and the blend belong
-  to the look and only the real compositions draw them.
-- **The probe keeps the structure, not the picture.** What it still exercises is the axis the gate
-  exists for: the `TransitionSeries` overlap, one `Sequence` per line in the sprite and subtitle
-  layers, the cue-driven slide shape (a bullets slide's item count and item widths are the cue's own
-  data) and the speaker alternation. Correctness of the byte comparison wins over fidelity here.
-- **The placeholder sprites are drawn, not a generated image.** `assets: 'placeholder'` is a DOM
-  character in the sprite layer — a head with eyes, a mouth on the same 0.15 s rhythm, a body and a
-  name plate — so a fresh clone needs no sprite file at all and step 1 generates none. The figure is
-  a stand-in for the 立ち絵, not a likeness; `--props '{"assets":"final"}'` draws the fetched set
-  through `useAsset` as before.
-- **The chart slide draws the `chart` example's component at about half scale.** `ChartScene` fills
-  its frame (its plot runs to 0.96 of the height), which is under the subtitle plate, so the slide
-  scales the whole chart into the body box and clips only the empty margins it draws in. The axis,
-  the year labels and the source line are all visible; the type is the size `chart-ci` renders it at.
-  Giving the chart example a box prop is its own task, not this one's.
+  (`flat.tsx`). No font, no glyph, no image, no `border-radius`, no `box-shadow`, no gradient, no
+  `opacity < 1`, no fractional size or position, and no animation of a paint property. Each is a
+  construct that has painted differently between two platforms or between two paints of the same
+  frame. `explainer-ci`, which loads the committed font and draws the real scenes, stays out of the
+  gate.
+- **The probe keeps the structure, not the picture.** `SlideSeries` swaps each scene for `FlatSlide`
+  and the 0.4 s handoff for a switch at the overlap's first frame. What it still exercises is the
+  axis the gate exists for: the `TransitionSeries` overlap, one `Sequence` per sentence in the
+  subtitle layer, the cue-driven shape of each slide and the speaker alternation.
+- **The portraits are one pose each.** The VOICEVOX engine ships one 立ち絵 per speaker, so a line's
+  `expression` is drawn as a reaction mark beside the face (漫符: "!", "?", sparkles, sweat) rather
+  than a different picture, and speaking is a bob and a glow rather than a moving mouth. A full
+  expression set would be a hand-downloaded 立ち絵 pack, which this example deliberately does not
+  require.
+- **`/motion` has no public subpath yet.** `motion.ts` names the curves the scenes share (a closed-form
+  spring, rises and pops) as plain arithmetic on a scene's local seconds; Phase 2 swaps them for
+  `/motion` without changing the scenes.
+- **The subtitle line breaks are computed, not left to the browser.** Chromium's `word-break:
+  auto-phrase` cannot be predicted from Node, so the plate could not be sized against it.
+  `layout.ts` cuts a sentence into phrases (after a particle before a word, after punctuation, never
+  inside an emphasised word) and picks the most even packing; each line is then drawn `nowrap`.
 
-## Safe areas
+## Regions
 
-`look.ts` fixes the frame's proportions once and `safeArea` resolves them for one render, so the three
-layers cannot disagree about where they may paint:
+`look.ts` fixes every region once in the 1920×1080 design space, and `ExplainerScene` scales that
+space to the Composition's own size, so the layers cannot disagree about where they may paint and
+the CI twin is the same picture at half size:
 
-| Area  | Rows                                            | Who draws there                                  |
-| ----- | ----------------------------------------------- | ------------------------------------------------ |
-| body  | `SAFE_TOP` (0.06 H) .. `SLIDE_BOTTOM` (0.56 H)  | every slide, stacked from the top by `layout.ts` |
-| band  | `BAND_TOP` (0.60 H) .. H − `BAND_BOTTOM` (0.03) | the subtitle plate: name line, then body lines   |
-| lanes | the two side strips, 0.5 H tall                 | the characters, feet tucked behind the plate     |
+| Region     | Box (left, top, width, height) | Who draws there                                                      |
+| ---------- | ------------------------------ | -------------------------------------------------------------------- |
+| `TOP_BAR`  | 330, 30, 1260, 56              | the title and the chapter progress                                   |
+| `STAGE`    | 330, 112, 1260, 652            | every scene, inside `SCENE_BODY` under its heading                   |
+| `SUBTITLE` | 330, 792, 1260, 256            | one sentence at a time, the speaker's name on its edge               |
+| side lanes | x < 330 and x > 1590           | the portraits (めたん left, ずんだもん right), head beside the stage |
 
-The text column is everything between the two lanes (`textLeft`, `textWidth`), which is what keeps a
-character from standing on a bullet. `BAND_GAP` (0.04 H) is the air between the body and the plate:
-no slide paints in it, so nothing can be covered at any slide or crossfade.
-
-The plate is a fixed height — a name line plus three body lines at 72 px, the design doc's target —
-and a line too long for three lines at 72 px is drawn smaller instead: `bodyFontSize` steps the size
-down (never below 0.052 H) until the line fits, so the plate never grows over the slide and no line is
-ever clipped. Only the longest lines of the script move: the two 14-second lines are drawn at 69 px
-and 70 px, the rest at 72. `layout.test.ts` holds both rules at 1920×1080, 960×540 and 480×270.
+The plate is a fixed height. A sentence is set at 60 px on up to two lines, shrinking towards 44 px
+until it fits; only a sentence too long for that gets a third, tighter line at the largest size the
+plate allows (one sentence of the script, at 48 px). `layout.test.ts` holds the fit, the phrase-whole
+breaks, the minimum time on screen and the regions; `scenes/scenes.test.ts` renders every scene and
+fails when a beat keys to a phrase the narration never says.
 
 ## Credit lines
 
@@ -128,10 +128,10 @@ every copy: `assets/fonts/NotoSansJP[wght].woff2` ships with `OFL.txt` beside it
 | ------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
 | Font (Noto Sans JP, variable, OFL-1.1)            | Yes — `assets/fonts/*.woff2` with `OFL.txt` | Converted once from the upstream TTF — commands below — and committed |
 | Voice (VOICEVOX:ずんだもん / VOICEVOX:四国めたん) | No — `assets.local/voice/`                  | Synthesized from `script.ts` against a **local** VOICEVOX engine      |
-| Sprites (坂本アヒル 立ち絵)                       | No — `assets.local/sprites/`                | Fetched by the setup script into the ignored directory                |
-| Music and backgrounds                             | No — generated                              | FFmpeg (`sine`, `anoisesrc`), so they are the project's own output    |
+| Portraits (坂本アヒル 立ち絵)                     | No — `assets.local/portraits/`              | Written from the **local** VOICEVOX engine (`/speaker_info`)          |
+| Music bed and whoosh                              | No — `assets.local/music/`, `sfx/`          | Synthesised by `synth.ts`, so they are the project's own output       |
 
-Sprites, voice and music are **generated or fetched into `assets.local/` and never committed**: the
+Portraits, voice and music are **generated or fetched into `assets.local/` and never committed**: the
 voice libraries and the 立ち絵 sets are licensed for use but not for re-sublicensing, and a committed
 file is redistributed by every clone and fork. `.gitignore` keeps `assets.local/` out of the tree, the
 generation and fetch scripts are committed, and a render started before setup fails through the
@@ -139,15 +139,15 @@ asset-readiness diagnostic rather than falling back silently. The rule and its r
 licensing ADR's.
 
 Only the font is committed: `examples/explainer/` holds the script, the entries, the layers and the
-OFL font, and nothing else — the voice, the sprites, the tone bed and the music are all one
+OFL font, and nothing else — the voice, the portraits, the music bed and the whoosh are all one
 `fetch-assets.ts` run away.
 
 `assets.manifest.json` is the design doc's provenance record for both directories
 ([Assets and provenance](../../docs/design-doc/20261025-reference-examples.md#assets-and-provenance)):
 one row per file under `assets/` and `assets.local/` with `path`, `kind`, `source`, `license` and
 `credit`, committed while the files it names mostly are not. The font rows carry the OFL, the
-placeholders, the tone bed and `durations.json` are `generated`, the voice clips name the voices and
-the fetched `final/` sprite set names the illustrator. No script reads it, so it is reviewed by hand
+music bed, the whoosh and `durations.json` are `generated`, the voice clips name the voices and
+the portraits name the illustrator. No script reads it, so it is reviewed by hand
 with this example's PR.
 
 ### The committed face is reproducible
