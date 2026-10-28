@@ -3,11 +3,12 @@
 // (measured by `drawdowns`), and the stamp on the bottom that selling there makes the loss real.
 import { SCENE_BODY, palette } from '../look.ts';
 import { enter, popIn, slideIn, springStep } from '../motion.ts';
-import { dataset } from './datasets.ts';
+import { dataset, datasetSource } from './datasets.ts';
 import {
   at,
   cardStyle,
   drawOn,
+  Footnote,
   Heading,
   pathThrough,
   SceneRoot,
@@ -207,6 +208,7 @@ export const RiskScene = ({ cue, clock, chapter }: SceneProps<'risk'>) => {
           </div>
         </div>
       ))}
+      <Footnote>{datasetSource}</Footnote>
     </SceneRoot>
   );
 };
