@@ -7,23 +7,7 @@
 // FFmpeg binaries is not a package dependency; its license is reviewed by hand (REVIEW.md, Dependencies).
 import { spawnSync } from 'node:child_process';
 
-const ALLOWED: ReadonlySet<string> = new Set([
-  'MIT',
-  'ISC',
-  'BSD-2-Clause',
-  'BSD-3-Clause',
-  'Apache-2.0',
-  '0BSD',
-  'CC0-1.0',
-  'Unlicense',
-  'BlueOak-1.0.0',
-  'MIT-0',
-  'Python-2.0',
-]);
-
-// Packages whose license field is missing or non-standard but whose license was checked by hand.
-// Key: package name. Value: the reason, with the license actually found.
-const EXCEPTIONS: Readonly<Record<string, string>> = {};
+import { EXCEPTIONS, isAllowed } from './license-allowlist.ts';
 
 type LicenseEntry = {
   readonly name: string;
@@ -41,17 +25,6 @@ const isLicenseReport = (value: unknown): value is LicenseReport =>
   typeof value === 'object' &&
   value !== null &&
   Object.values(value).every((entries) => Array.isArray(entries) && entries.every(isLicenseEntry));
-
-const stripParens = (expression: string): string => expression.replace(/[()]/g, '').trim();
-
-// SPDX expression: `A OR B` passes when either side passes; `A AND B` passes when both sides pass.
-const isAllowed = (expression: string): boolean => {
-  const normalized = stripParens(expression);
-  if (normalized.includes(' OR ')) return normalized.split(' OR ').some((part) => isAllowed(part));
-  if (normalized.includes(' AND '))
-    return normalized.split(' AND ').every((part) => isAllowed(part));
-  return ALLOWED.has(normalized);
-};
 
 const readReport = (): LicenseReport => {
   const result = spawnSync('pnpm', ['licenses', 'list', '--prod', '--json'], { encoding: 'utf8' });

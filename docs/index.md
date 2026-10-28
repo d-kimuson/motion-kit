@@ -189,4 +189,5 @@ examples do.
 
 ## License
 
-MIT
+MIT. The package also ships `THIRD_PARTY_LICENSES.md`, which reproduces the license texts and
+attribution notices of its runtime dependencies.

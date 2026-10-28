@@ -12,7 +12,7 @@ The first version of a new package can only be published by hand, because npm of
    git switch main && git pull
    pnpm install --frozen-lockfile
    pnpm build && pnpm exec clean-pkg-json
-   npm pack --dry-run --ignore-scripts     # dist/, docs/index.md, docs/guide, README, LICENSE, package.json
+   npm pack --dry-run --ignore-scripts     # dist/, docs/index.md, docs/guide, THIRD_PARTY_LICENSES.md, README, LICENSE, package.json
    npm login                                  # an account with publish rights to @kimuson
    npm publish --access public --tag latest    # 2FA prompt
    git restore package.json
@@ -88,7 +88,7 @@ npm dist-tag ls @kimuson/motion-kit
 npm view @kimuson/motion-kit@$VERSION dependencies devDependencies engines repository
 ```
 
-The dist-tag list must show the new version under `latest` (or under `beta` for a prerelease), and the published `package.json` must carry no `devDependencies` and no `scripts`. The tarball is `dist/`, the user documentation (`docs/index.md` and `docs/guide`), `README.md`, `LICENSE` and `package.json` — the same list a local `npm pack --dry-run --ignore-scripts` prints.
+The dist-tag list must show the new version under `latest` (or under `beta` for a prerelease), and the published `package.json` must carry no `devDependencies` and no `scripts`. The tarball is `dist/`, the user documentation (`docs/index.md` and `docs/guide`), `THIRD_PARTY_LICENSES.md`, `README.md`, `LICENSE` and `package.json` — the same list a local `npm pack --dry-run --ignore-scripts` prints.
 
 A version published by the workflow is attested. The package and the repository are both public, so npm generates the provenance statement from the OIDC identity the publish already presents:
 
