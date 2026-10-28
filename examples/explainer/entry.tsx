@@ -15,7 +15,7 @@ import {
 } from '@kimuson/motion-kit';
 import { z } from 'zod';
 
-import { voiceTracks } from './audio.ts';
+import { soundtrack } from './audio.ts';
 import { ExplainerScene } from './ExplainerScene.tsx';
 import { ciStoryboard, explainerStoryboard } from './plan.ts';
 import { totalSeconds } from './script.ts';
@@ -36,8 +36,8 @@ export const durationInFrames = Number(
 
 /**
  * The one switch every media example carries: `placeholder` (the default, and what CI and every
- * commit-time render use) draws the FFmpeg-generated sprites and the committed font; `final` draws
- * the fetched sprites. The voices are declared on the Composition either way, because audio is
+ * commit-time render use) draws a badge for each character and the committed font; `final` draws
+ * the portraits the local VOICEVOX engine ships. The voices are declared on the Composition either way, because audio is
  * descriptor data rather than a prop — `fetch-assets.ts` writes silent placeholders for step 1 and
  * replaces them in step 2, so a placeholder render is silent rather than a link error.
  */
@@ -73,7 +73,7 @@ export const compositions = defineCompositions([
     durationInFrames,
     schema: assetsProps,
     component: Explainer,
-    audio: voiceTracks(storyboard),
+    audio: soundtrack(storyboard),
   }),
   defineComposition({
     id: 'explainer-ci',

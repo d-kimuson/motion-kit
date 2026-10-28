@@ -1,26 +1,18 @@
 // The probe's slide stand-in: the cue's own shape, drawn as opaque rectangles on whole pixels.
 //
-// It replaces `Slide` under `flat` (`ExplainerScene`) and keeps what the gate is here to watch — the
-// cue still selects the geometry, so a title, a bullets slide with `n` items, a chart block and a
-// disclaimer still differ frame to frame, and the `TransitionSeries` still places each of them. What
-// it drops is everything a platform rasterises their own way: the glyphs, the fractional opacity of
-// the entrance, the border radius and the SVG the chart slide composes. `progress` is not read: a
-// probe has no partial-arrival state, so nothing here can fade between two frames.
+// It replaces the scene under `flat` (`ExplainerScene`) and keeps what the gate is here to watch —
+// the cue still selects the geometry, so a checklist with `n` points and a disclaimer with its credit
+// rows still differ frame to frame, and the `TransitionSeries` still places each of them. What it
+// drops is everything a platform rasterises its own way: the glyphs, the fractional opacity of an
+// arrival, the rounded corner, the SVG a chart composes. Nothing here reads time, so a probe has no
+// partial-arrival state and nothing can fade between two frames.
 //
-// The rows come from the same layout the real slides stack with (`layout.ts`), so the probe's blocks
-// sit in the shared body box too and nothing here can reach the subtitle plate below it.
-import { useTimeline } from '@kimuson/motion-kit';
-
-import { FlatRect } from '../flat.tsx';
-import {
-  bulletsLayout,
-  chartLayout,
-  disclaimerLayout,
-  titleLayout,
-  type Block,
-} from '../layout.ts';
-import { ACCENT, GROUND, INK, MUTED, RULE, px, safeArea } from '../look.ts';
+// Every block sits inside the `STAGE` region the real scenes draw in, so the probe's blocks keep
+// clear of the subtitle band and the character lanes exactly as the real frame does.
+import { DesignRect } from '../flat.tsx';
+import { CREDITS, HEADING_HEIGHT, SCENE_BODY, STAGE, STAGE_PADDING, palette } from '../look.ts';
 import { type PlannedSlide } from '../plan.ts';
+import { type SlideCue } from '../script.schema.ts';
 
 type Bar = {
   readonly left: number;
@@ -30,99 +22,87 @@ type Bar = {
   readonly color: string;
 };
 
-/** One block of a layout as a bar: the block's own rows, and a width the cue's text decides. */
-const blockBar = (left: number, item: Block, width: number, color: string): Bar => ({
-  left,
-  top: item.top,
-  width: Math.max(2, Math.round(width)),
-  height: Math.max(2, item.height),
-  color,
-});
+/** The width a run of `length` characters takes at `size`, capped to the scene body. */
+const textWidth = (length: number, size: number): number =>
+  Math.min(SCENE_BODY.width, length * size);
 
-/** A rule or a card: no text, so the caller names every row. */
-const plainBar = (
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-  color: string,
-): Bar => ({
-  left,
-  top,
-  width: Math.max(2, Math.round(width)),
-  height: Math.max(2, Math.round(height)),
-  color,
-});
-
-/** One bar per element the real slide draws: a heading, a rule, an item, the chart's card. */
-const bars = (slide: PlannedSlide, width: number, height: number): readonly Bar[] => {
-  const area = safeArea(width, height);
-  const column = area.textWidth;
-  const left = area.textLeft;
-  switch (slide.cue.kind) {
-    case 'title': {
-      const box = titleLayout(area, slide.cue.text);
-      return [
-        blockBar(left, box.eyebrow, column * 0.34, ACCENT),
-        blockBar(left, box.title, column, INK),
-        plainBar(left, box.rule, width * 0.1, Math.max(2, px(height * 0.005)), ACCENT),
-        blockBar(left, box.tagline, column * 0.62, MUTED),
-      ];
-    }
-    case 'bullets': {
-      const cue = slide.cue;
-      const box = bulletsLayout(area, cue, '00');
-      return [
-        blockBar(left, box.eyebrow, column * 0.05, MUTED),
-        blockBar(left, box.title, column * 0.82, INK),
-        plainBar(left, box.rule, width * 0.085, Math.max(2, px(height * 0.0042)), ACCENT),
-        // The item's own length sets its width: the cue's data still drives the frame.
-        ...box.items.map((item, index) =>
-          blockBar(
-            left,
-            item,
-            Math.min(column, (cue.items[index] ?? '').length * height * 0.03),
-            MUTED,
-          ),
-        ),
-        ...(box.trailing === null
-          ? []
-          : [plainBar(left, box.trailing, column, Math.max(1, px(height * 0.0016)), RULE)]),
-      ];
-    }
-    case 'chart': {
-      const box = chartLayout(area, slide.cue.caption);
-      return [
-        plainBar(left, box.rule, column * 0.2, Math.max(2, px(height * 0.004)), ACCENT),
-        blockBar(left, box.caption, column * 0.7, MUTED),
-        plainBar(box.card.left, box.card.top, box.card.width, box.card.height, MUTED),
-      ];
-    }
-    case 'disclaimer': {
-      const box = disclaimerLayout(area, slide.cue.text);
-      return [
-        blockBar(left, box.eyebrow, column * 0.2, ACCENT),
-        blockBar(left, box.text, column, INK),
-        ...box.credits.map((credit) => blockBar(left, credit, column * 0.9, MUTED)),
-      ];
-    }
+/** The rows a scene's body stacks: one per point, card or warning its cue carries. */
+const bodyRows = (cue: SlideCue): readonly string[] => {
+  switch (cue.kind) {
+    case 'title':
+      return cue.agenda;
+    case 'index':
+      return [cue.indexLabel, cue.takeaway];
+    case 'spread':
+      return [cue.concentrated, cue.diversified];
+    case 'chart':
+      return [cue.caption];
+    case 'cost':
+      return [cue.note];
+    case 'instalment':
+      return [...cue.pillars, cue.takeaway];
+    case 'risk':
+      return cue.warnings;
+    case 'scope':
+      return [cue.near.label, cue.far.label, cue.question];
+    case 'summary':
+      return [...cue.items, cue.closing];
+    case 'disclaimer':
+      return [cue.text, ...CREDITS];
     default:
-      return [];
+      return cue satisfies never;
   }
 };
 
-/**
- * A slide as flat surfaces: an opaque ground, then the cue's blocks. Full-bleed on purpose, so the
- * crossfade's stand-in can paint the incoming slide over the outgoing one without any blending.
- */
-export const FlatSlide = ({ slide }: { readonly slide: PlannedSlide }) => {
-  const { width, height } = useTimeline();
-  return (
-    <div style={{ position: 'absolute', inset: 0 }}>
-      <FlatRect left={0} top={0} width={width} height={height} color={GROUND} />
-      {bars(slide, width, height).map((item, index) => (
-        <FlatRect key={`${slide.cue.kind}-${String(index)}`} {...item} />
-      ))}
-    </div>
-  );
+const headingOf = (cue: SlideCue): string =>
+  cue.kind === 'disclaimer' ? '' : cue.kind === 'title' ? cue.text : cue.title;
+
+/** One bar per element the real scene leads with: the heading, then a row per body item. */
+const bars = (cue: SlideCue): readonly Bar[] => {
+  const left = STAGE.left + SCENE_BODY.left;
+  const heading = headingOf(cue);
+  const rows = bodyRows(cue);
+  const rowHeight = Math.min(56, Math.floor(SCENE_BODY.height / Math.max(1, rows.length)) - 12);
+  return [
+    ...(heading === ''
+      ? []
+      : [
+          { left, top: STAGE.top + STAGE_PADDING, width: 64, height: 64, color: palette.gold },
+          {
+            left: left + 86,
+            top: STAGE.top + STAGE_PADDING + 8,
+            width: textWidth(heading.length, 50) - 86,
+            height: 48,
+            color: palette.text,
+          },
+          {
+            left,
+            top: STAGE.top + STAGE_PADDING + HEADING_HEIGHT - 16,
+            width: SCENE_BODY.width / 3,
+            height: 4,
+            color: palette.gold,
+          },
+        ]),
+    ...rows.map((row, index) => ({
+      left,
+      top: STAGE.top + SCENE_BODY.top + index * (rowHeight + 12),
+      width: textWidth(row.length, 30),
+      height: rowHeight,
+      color: index === 0 ? palette.mint : palette.muted,
+    })),
+  ];
 };
+
+/**
+ * A slide as flat surfaces: the stage panel, then the cue's blocks. The panel is opaque and covers
+ * the whole stage, so the crossfade's stand-in can paint the incoming slide over the outgoing one
+ * without any blending.
+ */
+export const FlatSlide = ({ slide }: { readonly slide: PlannedSlide }) => (
+  <div style={{ position: 'absolute', inset: 0 }}>
+    <DesignRect {...STAGE} color={palette.panel} />
+    {bars(slide.cue).map((item, index) => (
+      <DesignRect key={`${slide.cue.kind}-${String(index)}`} {...item} />
+    ))}
+  </div>
+);

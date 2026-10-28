@@ -1,26 +1,48 @@
-// The voice track, as data on the Composition (the render audio muxing ADR).
+// The soundtrack, as data on the Composition (the render audio muxing ADR): the narration, a quiet
+// music bed under all of it, and a soft whoosh on every slide change.
 //
 // Audio is a descriptor field, not a prop: `defineComposition` freezes it at declaration, so it
-// cannot switch on `--props`. The explainer therefore declares one clip per line at the line's
-// frame-derived start — the same starts the subtitle and sprite `Sequence`s use — and
-// `fetch-assets.ts` writes the files the declaration names:
+// cannot switch on `--props`. Every file named here is written by `fetch-assets.ts`:
 //
-//   step 1  silent placeholders (`anullsrc`), so a placeholder render is silent, not a link error;
-//   step 2  VOICEVOX, or `say -v Kyoko` where no engine is installed, into the same paths.
+//   step 1  silent placeholders (`anullsrc`) at every path, so a placeholder render is silent rather
+//           than a link error;
+//   step 2  the narration from VOICEVOX (or `say -v Kyoko`), the bed and the whoosh synthesised.
 //
-// `endInFrames` is a guard, not a cut: `fetch-assets.ts` fits every clip to its line's `seconds`
-// (step 2, local only), so the voice starts on the line's frame and stops where the subtitle and the
-// sprite do. The bound stays because the timeline is frame-derived: a clip that ever ran long must
-// not talk over the line that follows it.
+// Each narration clip is fitted sentence by sentence to its line's slot (`fetch-assets.ts`), so the
+// voice starts each sentence on the frame its subtitle does. `endInFrames` is a guard, not a cut:
+// the timeline is frame-derived, and a clip that ever ran long must not talk over the next line.
 import { type AudioTrack } from '@kimuson/motion-kit';
 
-import { voiceSource } from './look.ts';
+import { musicSource, voiceSource, whooshSource } from './look.ts';
 import { type Storyboard } from './plan.ts';
 
-/** One clip per line, in line order, at the frame the line's `Sequence` starts. */
+/** The bed sits well under the voice: it fills the pauses without competing with a word. */
+const MUSIC_VOLUME = 0.16;
+const WHOOSH_VOLUME = 0.35;
+
+/** How far ahead of a slide's first frame the whoosh starts, so its peak lands on the handoff. */
+const WHOOSH_LEAD_FRAMES = 3;
+
+/** One clip per line, in line order, at the frame the line starts. */
 export const voiceTracks = (storyboard: Storyboard): readonly AudioTrack[] =>
   storyboard.lines.map((line) => ({
     src: voiceSource(line.id),
     startInFrames: line.startFrame,
     endInFrames: line.startFrame + line.frames,
   }));
+
+/** The whole soundtrack: the narration, the bed for the video's whole length, a whoosh per handoff. */
+export const soundtrack = (storyboard: Storyboard): readonly AudioTrack[] => [
+  ...voiceTracks(storyboard),
+  {
+    src: musicSource,
+    startInFrames: 0,
+    endInFrames: storyboard.durationInFrames,
+    volume: MUSIC_VOLUME,
+  },
+  ...storyboard.slides.slice(1).map((slide) => ({
+    src: whooshSource,
+    startInFrames: Math.max(0, slide.startFrame - WHOOSH_LEAD_FRAMES),
+    volume: WHOOSH_VOLUME,
+  })),
+];

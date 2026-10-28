@@ -1,19 +1,37 @@
-import { type Character } from './look.ts';
 // The storyboard: the script's data turned into whole frames, once, for all three layers.
 //
 // `script.schema.ts` owns the timing arithmetic in seconds; this file is the only place that
-// converts to the Composition's frame grid, so the slide layer, the subtitle layer and the sprite
+// converts to the Composition's frame grid, so the slide layer, the subtitle layer and the speaker
 // layer cannot disagree: each takes the same `Storyboard`. Every frame count is an integer because
 // every line's seconds are.
+import { type Character } from './look.ts';
 import {
+  codePointLength,
   lineStartTimes,
   slidePlan,
+  splitSentences,
   totalSeconds as totalSecondsOf,
   type Expression,
   type ScriptLine,
   type SlideCue,
 } from './script.schema.ts';
 import { script } from './script.ts';
+
+/**
+ * One sentence of a line, on the frame grid: the subtitle shows one sentence at a time, and a scene
+ * times its beats to the words a sentence says (`phraseTime`). A line's frames are shared between
+ * its sentences in proportion to their code points, the same five-per-second rule the line's own
+ * seconds come from, and `fetch-assets.ts` fits each sentence's voice to exactly this slot.
+ */
+export type PlannedSentence = {
+  readonly lineId: string;
+  readonly speaker: Character;
+  readonly text: string;
+  /** The line's emphasis words that occur in this sentence. */
+  readonly emphasis: readonly string[];
+  readonly startFrame: number;
+  readonly frames: number;
+};
 
 /** One spoken line, placed on the frame grid. */
 export type PlannedLine = {
@@ -23,6 +41,7 @@ export type PlannedLine = {
   readonly expression: Expression;
   readonly startFrame: number;
   readonly frames: number;
+  readonly sentences: readonly PlannedSentence[];
 };
 
 /** One slide cue, and the span a `TransitionScene` declares for it. */
@@ -35,6 +54,8 @@ export type PlannedSlide = {
   readonly frames: number;
   /** The frames its content is drawn on: the dialogue, plus the held tail on the last slide. */
   readonly contentFrames: number;
+  /** The sentences spoken over it, in order, on the absolute frame grid. */
+  readonly sentences: readonly PlannedSentence[];
 };
 
 export type Storyboard = {
@@ -53,21 +74,88 @@ const toFrames = (seconds: number, fps: number): number => Math.round(seconds * 
  * Where the outgoing slide's own clock stands when the crossfade hands it to the overlay: the frames
  * its own scene drew (`contentFrames`), plus the overlap already elapsed. At the overlap's first frame
  * this is one frame past the last frame that scene drew, so the slide keeps animating instead of
- * jumping — `slides/shared.ts`'s "nothing jumps at either edge of a crossfade".
+ * jumping at either edge of the crossfade.
  */
 export const crossFadeTime = (slide: PlannedSlide, fps: number, elapsedSeconds: number): number =>
   slide.contentFrames / fps + elapsedSeconds;
 
+/**
+ * A line's sentences on its own frames: boundary `k` sits at the share of the line's code points
+ * spoken before sentence `k`, rounded once, so the slots tile the line exactly with no gap.
+ */
+export const placeSentences = (
+  line: Pick<ScriptLine, 'id' | 'speaker' | 'text' | 'emphasis'>,
+  startFrame: number,
+  frames: number,
+): readonly PlannedSentence[] => {
+  const sentences = splitSentences(line.text);
+  const total = sentences.reduce((sum, text) => sum + codePointLength(text), 0);
+  let spoken = 0;
+  return sentences.map((text) => {
+    const from = Math.round((frames * spoken) / total);
+    spoken += codePointLength(text);
+    const to = Math.round((frames * spoken) / total);
+    return {
+      lineId: line.id,
+      speaker: line.speaker,
+      text,
+      emphasis: line.emphasis.filter((word) => text.includes(word)),
+      startFrame: startFrame + from,
+      frames: to - from,
+    };
+  });
+};
+
+const planLine = (line: ScriptLine, startFrame: number, frames: number): PlannedLine => ({
+  id: line.id,
+  speaker: line.speaker,
+  text: line.text,
+  expression: line.expression,
+  startFrame,
+  frames,
+  sentences: placeSentences(line, startFrame, frames),
+});
+
 const placeLines = (lines: readonly ScriptLine[], fps: number): readonly PlannedLine[] => {
   const starts = lineStartTimes(lines);
-  return lines.map((line, index) => ({
-    id: line.id,
-    speaker: line.speaker,
-    text: line.text,
-    expression: line.expression,
-    startFrame: toFrames(starts[index] ?? 0, fps),
-    frames: toFrames(line.seconds, fps),
-  }));
+  return lines.map((line, index) =>
+    planLine(line, toFrames(starts[index] ?? 0, fps), toFrames(line.seconds, fps)),
+  );
+};
+
+/** The sentences a slide shows: those of the lines that start inside its span, in order. */
+const sentencesIn = (
+  lines: readonly PlannedLine[],
+  startFrame: number,
+  endFrame: number,
+): readonly PlannedSentence[] =>
+  lines
+    .filter((line) => line.startFrame >= startFrame && line.startFrame < endFrame)
+    .flatMap((line) => line.sentences);
+
+/**
+ * When a slide's narration reaches `phrase`, in seconds since the slide's own zero: the start of the
+ * sentence that holds it, plus the phrase's share of that sentence's slot. A scene keys a beat to
+ * the word that names it ("225社", "コストが低いほう") rather than to a hand-written second, so an
+ * edit to the narration moves the picture with it.
+ *
+ * `undefined` when the slide does not say it: a short storyboard narrates only part of a slide, and
+ * the scene treats an unsaid phrase as already said (`scenes/kit.tsx`). On the full storyboard every
+ * phrase a scene asks for must resolve, which `scenes/scenes.test.tsx` checks.
+ */
+export const phraseTime = (
+  slide: PlannedSlide,
+  phrase: string,
+  fps: number,
+): number | undefined => {
+  for (const sentence of slide.sentences) {
+    const at = sentence.text.indexOf(phrase);
+    if (at < 0) continue;
+    const before = codePointLength(sentence.text.slice(0, at));
+    const share = before / codePointLength(sentence.text);
+    return (sentence.startFrame - slide.startFrame + share * sentence.frames) / fps;
+  }
+  return undefined;
 };
 
 /**
@@ -78,14 +166,18 @@ const placeLines = (lines: readonly ScriptLine[], fps: number): readonly Planned
 export const explainerStoryboard = (fps: number): Storyboard => {
   const spans = slidePlan(script.lines);
   const overlapFrames = toFrames(0.4, fps);
+  const lines = placeLines(script.lines, fps);
   const slides = spans.map((span, index) => {
     const last = index === spans.length - 1;
+    const startFrame = toFrames(span.startSeconds, fps);
+    const contentFrames = toFrames(span.onScreenSeconds, fps);
     return {
       index,
       cue: span.cue,
-      startFrame: toFrames(span.startSeconds, fps),
+      startFrame,
       frames: toFrames(last ? span.onScreenSeconds : span.sceneSeconds, fps),
-      contentFrames: toFrames(span.onScreenSeconds, fps),
+      contentFrames,
+      sentences: sentencesIn(lines, startFrame, startFrame + contentFrames),
     };
   });
   return {
@@ -93,7 +185,7 @@ export const explainerStoryboard = (fps: number): Storyboard => {
     overlapFrames,
     durationInFrames: toFrames(totalSecondsOf(script.lines), fps),
     slides,
-    lines: placeLines(script.lines, fps),
+    lines,
   };
 };
 
@@ -126,35 +218,38 @@ export const shortStoryboard = (
     // without a jump: the overlay hands the outgoing slide `contentFrames + elapsed`, one frame past
     // the last frame its own scene drew. Only the last slide draws through its whole span (the tail).
     const last = index === spec.length - 1;
+    const placedLines: PlannedLine[] = [];
+    let at = slideStart;
+    for (const placed of item.lines) {
+      const source = byId.get(placed.id);
+      if (source === undefined) throw new Error(`explainer: unknown line ${placed.id}`);
+      placedLines.push(planLine(source, at, placed.frames));
+      at += placed.frames;
+    }
+    lines.push(...placedLines);
     slides.push({
       index,
       cue: item.cue,
       startFrame: slideStart,
       frames: item.frames,
       contentFrames: last ? item.frames : item.frames - overlapFrames,
+      sentences: placedLines.flatMap((line) => line.sentences),
     });
-    let at = slideStart;
-    for (const placed of item.lines) {
-      const source = byId.get(placed.id);
-      if (source === undefined) throw new Error(`explainer: unknown line ${placed.id}`);
-      lines.push({
-        id: source.id,
-        speaker: source.speaker,
-        text: source.text,
-        expression: source.expression,
-        startFrame: at,
-        frames: placed.frames,
-      });
-      at += placed.frames;
-    }
     durationInFrames = slideStart + item.frames;
     slideStart += item.frames - overlapFrames;
   });
   return { fps, overlapFrames, durationInFrames, slides, lines };
 };
 
+/** The cue a script line carries, for a short storyboard that reuses it. */
+const cueOf = (id: string): SlideCue => {
+  const line = script.lines.find((item) => item.id === id);
+  if (line === undefined) throw new Error(`explainer: unknown line ${id}`);
+  return line.slide;
+};
+
 /**
- * `explainer-ci`: 60 frames at 30 fps. One dialogue line on the `まとめ` bullets slide, a 0.4 s
+ * `explainer-ci`: 60 frames at 30 fps. One dialogue line on the `まとめ` checklist slide, a 0.4 s
  * crossfade, and the disclaimer slide with its tail — the three layers, a `Transition` overlap, two
  * placeholder characters and Japanese text through the committed face, in two seconds.
  */
@@ -165,10 +260,7 @@ export const ciStoryboard = (): Storyboard => {
     fps,
     [
       {
-        cue: script.lines.find((line) => line.id === 'summary-2')?.slide ?? {
-          kind: 'title',
-          text: script.title,
-        },
+        cue: cueOf('summary-2'),
         frames: 36,
         lines: [{ id: 'summary-2', frames: 24 }],
       },
@@ -190,10 +282,7 @@ export const probeStoryboard = (): Storyboard => {
     fps,
     [
       {
-        cue: script.lines.find((line) => line.id === 'summary-2')?.slide ?? {
-          kind: 'title',
-          text: script.title,
-        },
+        cue: cueOf('summary-2'),
         frames: 21,
         lines: [{ id: 'summary-2', frames: 15 }],
       },
@@ -206,3 +295,27 @@ export const probeStoryboard = (): Storyboard => {
     overlap,
   );
 };
+
+/**
+ * What is on at `frame`: the line being spoken, the sentence of it the subtitle shows, and the slide
+ * the top bar names. The latest one to have started wins, so where a short storyboard overlaps two
+ * lines the newer speaker has the floor. Pure lookups, so the layers that read them stay functions of
+ * the frame and the tests can walk a whole storyboard without rendering it.
+ */
+const latestAt = <T extends { readonly startFrame: number; readonly frames: number }>(
+  items: readonly T[],
+  frame: number,
+): T | undefined =>
+  items.findLast((item) => item.startFrame <= frame && frame < item.startFrame + item.frames);
+
+export const lineAt = (storyboard: Storyboard, frame: number): PlannedLine | undefined =>
+  latestAt(storyboard.lines, frame);
+
+export const sentenceAt = (storyboard: Storyboard, frame: number): PlannedSentence | undefined =>
+  latestAt(
+    storyboard.lines.flatMap((line) => line.sentences),
+    frame,
+  );
+
+export const slideAt = (storyboard: Storyboard, frame: number): PlannedSlide | undefined =>
+  latestAt(storyboard.slides, frame);

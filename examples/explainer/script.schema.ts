@@ -46,7 +46,7 @@ export const codePointLength = (text: string): number => Array.from(text).length
 export const estimateSeconds = (text: string): number =>
   Math.ceil(codePointLength(text) / codePointsPerSecond);
 
-/** The six expressions a sprite can hold, per the design doc. */
+/** The six expressions a line can carry; `Speakers.tsx` draws each as a reaction beside the face. */
 export const expressionSchema = z.enum([
   'normal',
   'happy',
@@ -58,25 +58,96 @@ export const expressionSchema = z.enum([
 
 export type Expression = z.infer<typeof expressionSchema>;
 
+/** A chapter's headline: what the chapter chip and the scene's own heading show. */
+const headline = z.string().min(1);
+
 /**
- * What is on screen behind a line. Consecutive lines that carry the same cue share one slide, so the
- * cue *is* the slide: `groupSlides` never needs a separate slide id.
+ * What is on screen behind a line. Consecutive lines that carry the same cue share one scene, so the
+ * cue *is* the scene: `groupSlides` never needs a separate slide id. Each kind is one designed scene
+ * with its own data — the numbers a scene animates are written here, next to the narration that
+ * names them, and the scene derives everything else from them (`scenes/math.ts`).
  */
 export const slideCueSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('title'), text: z.string().min(1) }),
+  /** The cold open: the title, a kicker above it, and the chapters the video walks through. */
   z.object({
-    kind: z.literal('bullets'),
-    title: z.string().min(1),
-    items: z.array(z.string().min(1)).min(1),
+    kind: z.literal('title'),
+    text: z.string().min(1),
+    kicker: z.string().min(1),
+    agenda: z.array(z.string().min(1)).min(2).max(6),
   }),
-  z.object({ kind: z.literal('chart'), chartId: z.string().min(1), caption: z.string().min(1) }),
+  /** Many companies fold into one index line, and a fund follows that line. */
+  z.object({
+    kind: z.literal('index'),
+    title: headline,
+    constituents: z.int().min(20).max(500),
+    indexLabel: z.string().min(1),
+    fundLabel: z.string().min(1),
+    takeaway: z.string().min(1),
+  }),
+  /** One basket against many: the same shock, two outcomes, then the snack-box analogy. */
+  z.object({
+    kind: z.literal('spread'),
+    title: headline,
+    companies: z.int().min(4).max(64),
+    concentrated: z.string().min(1),
+    diversified: z.string().min(1),
+    analogy: z.string().min(1),
+  }),
+  /** A long series drawn on, its valleys marked, and every year's return under it. */
+  z.object({
+    kind: z.literal('chart'),
+    title: headline,
+    chartId: z.string().min(1),
+    caption: z.string().min(1),
+  }),
+  /** The same growth under two yearly fees, compounded side by side. */
+  z.object({
+    kind: z.literal('cost'),
+    title: headline,
+    principal: z.number().positive(),
+    years: z.int().min(5).max(50),
+    growth: z.number().positive().max(0.2),
+    fees: z.object({ low: z.number().nonnegative(), high: z.number().positive() }),
+    note: z.string().min(1),
+  }),
+  /** The three watchwords, then a fixed monthly amount buying through a moving price. */
+  z.object({
+    kind: z.literal('instalment'),
+    title: headline,
+    pillars: z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]),
+    monthly: z.number().positive(),
+    prices: z.array(z.number().positive()).min(6).max(24),
+    takeaway: z.string().min(1),
+  }),
+  /** The worst fall of a series, how long it stayed under water, and what selling at the bottom does. */
+  z.object({
+    kind: z.literal('risk'),
+    title: headline,
+    chartId: z.string().min(1),
+    warnings: z.array(z.string().min(1)).min(1).max(3),
+  }),
+  /** Money that may be invested against money that may not, and the question to ask oneself. */
+  z.object({
+    kind: z.literal('scope'),
+    title: headline,
+    near: z.object({ label: z.string().min(1), detail: z.string().min(1) }),
+    far: z.object({ label: z.string().min(1), detail: z.string().min(1) }),
+    question: z.string().min(1),
+  }),
+  /** The checklist the video leaves behind. */
+  z.object({
+    kind: z.literal('summary'),
+    title: headline,
+    items: z.array(z.string().min(1)).min(2).max(5),
+    closing: z.string().min(1),
+  }),
   z.object({ kind: z.literal('disclaimer'), text: z.string().min(1) }),
 ]);
 
 export type SlideCue = z.infer<typeof slideCueSchema>;
 
 /**
- * One spoken line. `id` is the stable key: it names the subtitle `Sequence`, the sprite `Sequence`
+ * One spoken line. `id` is the stable key: it keys the subtitle `Sequence`s, the narration track
  * and, once VOICEVOX audio exists, the entry in the generated `assets.local/voice/durations.json`.
  * `text` carries no speaker prefix, because the speaker is a separate field.
  */
@@ -88,8 +159,19 @@ export const scriptLineSchema = z
     expression: expressionSchema,
     slide: slideCueSchema,
     seconds: z.int().positive(),
+    /** Words the subtitle paints in the highlight colour; each one occurs in `text`. */
+    emphasis: z.array(z.string().min(1)).default([]),
   })
   .superRefine((line, ctx) => {
+    line.emphasis.forEach((word, index) => {
+      if (!line.text.includes(word)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['emphasis', index],
+          message: `${word} does not occur in the line`,
+        });
+      }
+    });
     const expected = estimateSeconds(line.text);
     if (line.seconds !== expected) {
       ctx.addIssue({
@@ -101,6 +183,19 @@ export const scriptLineSchema = z
   });
 
 export type ScriptLine = z.infer<typeof scriptLineSchema>;
+
+/** A line as `script.ts` writes it, before the schema fills `emphasis` in. */
+export type ScriptLineInput = z.input<typeof scriptLineSchema>;
+
+/**
+ * A line's sentences, each with its terminal punctuation: what one subtitle card shows and what one
+ * synthesized voice clip says. A line with no terminal punctuation is one sentence.
+ */
+export const splitSentences = (text: string): readonly string[] =>
+  text
+    .split(/(?<=[。！？!?])/u)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
 
 /**
  * The whole script. Two structural rules live here rather than in `scriptIssues`, because they are

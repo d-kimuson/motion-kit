@@ -7,7 +7,6 @@ import { z } from 'zod';
 
 import { compositions as explainerCompositions, storyboard } from './entry.tsx';
 import { fitClip, fitTempo, generatePlaceholders } from './fetch-assets.ts';
-import { mouthAt } from './look.ts';
 import { ciStoryboard, crossFadeTime } from './plan.ts';
 import { compositions as probeCompositions } from './probe.tsx';
 import { lineStartTimes, slidePlan } from './script.schema.ts';
@@ -115,7 +114,7 @@ describe('explainer example', () => {
     ]);
   });
 
-  it('places the slides, the subtitles and the sprites on the script’s own frames', () => {
+  it('places the slides, the subtitles and the speakers on the script’s own frames', () => {
     // Every layer reads one `Storyboard`, so this is the assertion that the three cannot disagree:
     // each slide starts on its first line, each line starts on the sum of the lines before it, and
     // a slide's `TransitionScene` declares its dialogue plus the 0.4 s outgoing crossfade — which
@@ -156,24 +155,14 @@ describe('explainer example', () => {
       ['disclaimer-1', 24, 36],
     ]);
     expect(ci.durationInFrames).toBe(60);
-    // The speaker alternates rest/open every 0.15 s (4.5 frames at 30 fps), counted from its own
-    // line's start — the sprite layer's only per-frame change with no lip-sync asset contract.
-    expect([0, 4, 5, 8, 9, 13].map((frame) => mouthAt(frame / 30))).toEqual([
-      'rest',
-      'rest',
-      'open',
-      'open',
-      'rest',
-      'rest',
-    ]);
   });
 
   it('hands the CI crossfade a slide that keeps its own clock, instead of jumping 13 frames', () => {
     // `contentFrames` is where the outgoing scene stops drawing, and the overlay hands the slide
     // `contentFrames + elapsed` from then on. The `まとめ` slide is drawn by its own scene for frames
     // 0–23, so the handoff at frame 24 must be one frame on (0.800 s, not 1.200 s): a jump there
-    // advances the bullets slide's local time by 0.43 s in a single frame and item 2's `reveal(0.87)`
-    // snaps from 0 to 1 instead of ramping, which `slides/shared.ts` rules out.
+    // advances the checklist scene's local time by 0.43 s in a single frame, and a check whose arrival
+    // falls in that gap snaps from nothing to drawn instead of ramping.
     const ci = ciStoryboard();
     const outgoing = ci.slides[0];
     expect(outgoing).toBeDefined();
@@ -300,7 +289,7 @@ describe('explainer narration fit', () => {
 
   it('starts the speech on the clip’s first sample, so nobody speaks a frame late', () => {
     // `say` writes ~0.1 s of digital silence before the first phoneme; left in, the voice would start
-    // three frames after its subtitle and its sprite. A delayed sine stands in for that lead-in.
+    // three frames after its subtitle. A delayed sine stands in for that lead-in.
     const dir = join(outDirectory, 'fit');
     mkdirSync(dir, { recursive: true });
     const source = join(dir, 'lead-in.wav');

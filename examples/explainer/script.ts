@@ -18,7 +18,7 @@ import {
   slidePlan,
   totalSeconds as computeTotalSeconds,
   type Script,
-  type ScriptLine,
+  type ScriptLineInput,
   type SlideCue,
 } from './script.schema.ts';
 
@@ -32,69 +32,92 @@ const title = 'はじめてのインデックス投資';
 const disclaimer =
   'この動画は教育目的でお伝えするもので、特定の商品の勧誘や投資助言ではありません。実際の判断は、ご自身の責任でお願いします。';
 
-// One cue constant per slide: consecutive lines that carry the same cue are on the same slide
-// (`groupSlides`), so sharing the constant is what makes a slide, and two lines of one slide cannot
-// drift into two slightly different cues.
-const titleSlide: SlideCue = { kind: 'title', text: title };
+// One cue constant per scene: consecutive lines that carry the same cue are on the same scene
+// (`groupSlides`), so sharing the constant is what makes a scene, and two lines of one scene cannot
+// drift into two slightly different cues. Every number a scene animates is written here, beside the
+// narration that names it; `scenes/math.ts` derives the rest (compounded totals, units bought, the
+// deepest valley) so the picture and the data cannot disagree.
+const titleSlide: SlideCue = {
+  kind: 'title',
+  text: title,
+  kicker: 'ずんだもんと学ぶ お金のきほん',
+  agenda: [
+    'インデックスってなに？',
+    '分散して持つ',
+    '長い目で見る',
+    'コストも見る',
+    '長期・積立・分散',
+    'リスクと向き不向き',
+  ],
+};
 
 const indexSlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'index',
   title: 'インデックスってなに？',
-  items: [
-    'たくさんの銘柄の値動きをまとめた指標',
-    '指数に連動するように作られた商品',
-    '会社を自分で選ばなくてよい',
-  ],
+  constituents: 225,
+  indexLabel: '日経平均株価',
+  fundLabel: 'インデックスファンド',
+  takeaway: '銘柄選びはおまかせ',
 };
 
 const diversificationSlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'spread',
   title: '分散して持つ',
-  items: ['ひとつの会社に頼らない', 'たくさんの会社をまとめて持つ', 'ひとつの失敗が全体を壊さない'],
+  companies: 25,
+  concentrated: '1社に集中',
+  diversified: '25社に分散',
+  analogy: 'お菓子は小分けにしておく',
 };
 
-// `chartId` names a dataset the `chart` example owns: `examples/chart/data/index-30y.json` on the
-// unmerged `examples/chart` branch (TASK-207), which merges before TASK-209 renders this slide, so
-// the same JSON drives the same SVG component rather than a second copy of the data. Nothing here
-// validates `chartId`, so the two are held together by that merge order.
+// `chartId` names a dataset the `chart` example owns (`examples/chart/data/index-30y.json`), so the
+// same JSON drives both examples rather than a second copy of the data. `scenes/datasets.ts` is the
+// one table that resolves it, and the scene test fails on a name it does not hold.
 const chartSlide: SlideCue = {
   kind: 'chart',
+  title: '長い目で見る',
   chartId: 'index-30y',
-  caption: '長い目で見れば右肩上がりでも、途中には深い谷がある',
+  caption: '長い目で見れば右肩上がり。でも途中には深い谷がある',
 };
 
 const costSlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'cost',
   title: 'コストも見る',
-  items: [
-    '信託報酬は持ち続けるあいだかかる',
-    '何年も積み重なる',
-    '同じ運用ならコストが低いほうが残る',
-  ],
+  principal: 100,
+  years: 30,
+  growth: 0.05,
+  fees: { low: 0.001, high: 0.015 },
+  note: '試算例：100万円を年5%で30年運用した場合。税金・分配金は考慮していません',
 };
 
 const instalmentSlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'instalment',
   title: '長期・積立・分散',
-  items: ['一度に大きく賭けない', '決まった金額を決まったペースで', '積立投資・ドルコスト平均法'],
+  pillars: ['長期', '積立', '分散'],
+  monthly: 1,
+  prices: [100, 94, 86, 78, 72, 80, 88, 84, 92, 101, 108, 115],
+  takeaway: '安いときは多く、高いときは少なく買える',
 };
 
 const riskSlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'risk',
   title: 'リスクを知る',
-  items: ['元本は保証されない', '価格は大きく下がることがある', '回復までに長い時間がかかる'],
+  chartId: 'index-30y',
+  warnings: ['元本は保証されない', '大きく下がることがある', '回復に何年もかかることも'],
 };
 
 const scopeSlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'scope',
   title: '向くお金、向かないお金',
-  items: ['数年以内に使うお金は別に置く', 'なくなっても困らないお金で', '下がっても続けられるか'],
+  near: { label: '数年以内に使うお金', detail: '元本が保証される手段へ' },
+  far: { label: '当面使わないお金', detail: '長期の投資を考えられる' },
+  question: '下がっても、続けられる？',
 };
 
 const summarySlide: SlideCue = {
-  kind: 'bullets',
+  kind: 'summary',
   title: 'まとめ',
-  items: ['指数に連動する商品を', '分散して、長い期間、積み立てる', 'コストも確かめる'],
+  items: ['指数に連動する商品を', '分散して', '長い期間、積み立てる', 'コストも確かめる'],
+  closing: '自分に合うか、ゆっくり考えよう',
 };
 
 const disclaimerSlide: SlideCue = { kind: 'disclaimer', text: disclaimer };
@@ -103,7 +126,7 @@ const disclaimerSlide: SlideCue = { kind: 'disclaimer', text: disclaimer };
 // in the file; the schema rejects any line whose `seconds` is not `ceil(codePoints / 5)`, so the two
 // can never disagree. The lines alternate speakers, one slide every two lines, and the last slide is
 // the disclaimer, which the entry holds for a further three seconds.
-const lines: readonly ScriptLine[] = [
+const lines: readonly ScriptLineInput[] = [
   {
     id: 'title-1',
     speaker: 'metan',
@@ -111,6 +134,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: titleSlide,
     seconds: 13,
+    emphasis: ['インデックス投資'],
   },
   {
     id: 'title-2',
@@ -119,6 +143,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'happy',
     slide: titleSlide,
     seconds: 9,
+    emphasis: ['仕組み'],
   },
   {
     id: 'index-1',
@@ -127,6 +152,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: indexSlide,
     seconds: 12,
+    emphasis: ['指標', '225社'],
   },
   {
     id: 'index-2',
@@ -135,6 +161,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: indexSlide,
     seconds: 12,
+    emphasis: ['インデックスファンド', '選ばなくてよい'],
   },
   {
     id: 'diversification-1',
@@ -143,6 +170,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: diversificationSlide,
     seconds: 13,
+    emphasis: ['ひとつの会社に頼りきらない'],
   },
   {
     id: 'diversification-2',
@@ -151,6 +179,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'happy',
     slide: diversificationSlide,
     seconds: 11,
+    emphasis: ['小分け'],
   },
   {
     id: 'chart-1',
@@ -159,6 +188,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'serious',
     slide: chartSlide,
     seconds: 12,
+    emphasis: ['右肩上がり', '深い谷'],
   },
   {
     id: 'chart-2',
@@ -167,6 +197,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'surprised',
     slide: chartSlide,
     seconds: 10,
+    emphasis: ['大きく下がる年'],
   },
   {
     id: 'cost-1',
@@ -175,6 +206,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: costSlide,
     seconds: 10,
+    emphasis: ['信託報酬'],
   },
   {
     id: 'cost-2',
@@ -183,6 +215,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'thinking',
     slide: costSlide,
     seconds: 12,
+    emphasis: ['コストが低いほう'],
   },
   {
     id: 'instalment-1',
@@ -191,6 +224,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: instalmentSlide,
     seconds: 14,
+    emphasis: ['長期・積立・分散', 'ドルコスト平均法'],
   },
   {
     id: 'instalment-2',
@@ -199,6 +233,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'happy',
     slide: instalmentSlide,
     seconds: 10,
+    emphasis: ['毎月コツコツ'],
   },
   {
     id: 'risk-1',
@@ -207,6 +242,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'serious',
     slide: riskSlide,
     seconds: 9,
+    emphasis: ['元本は保証されません'],
   },
   {
     id: 'risk-2',
@@ -215,6 +251,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'serious',
     slide: riskSlide,
     seconds: 11,
+    emphasis: ['損が確定'],
   },
   {
     id: 'scope-1',
@@ -223,6 +260,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: scopeSlide,
     seconds: 14,
+    emphasis: ['数年以内に使う予定のあるお金'],
   },
   {
     id: 'scope-2',
@@ -231,6 +269,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'thinking',
     slide: scopeSlide,
     seconds: 10,
+    emphasis: ['慌てて売ってしまう'],
   },
   {
     id: 'summary-1',
@@ -239,6 +278,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'normal',
     slide: summarySlide,
     seconds: 12,
+    emphasis: ['分散して', '長い期間', '積み立てる'],
   },
   {
     id: 'summary-2',
@@ -247,6 +287,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'wink',
     slide: summarySlide,
     seconds: 12,
+    emphasis: ['自分に合うかどうか'],
   },
   {
     id: 'disclaimer-1',
@@ -255,6 +296,7 @@ const lines: readonly ScriptLine[] = [
     expression: 'serious',
     slide: disclaimerSlide,
     seconds: 13,
+    emphasis: ['投資助言ではありません'],
   },
 ];
 
