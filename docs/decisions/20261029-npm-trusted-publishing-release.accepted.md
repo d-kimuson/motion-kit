@@ -32,7 +32,7 @@ The forces:
 
 **The release job builds and strips from the tag.** It runs `pnpm build`, then `pnpm exec clean-pkg-json`, which removes `scripts`, `devDependencies` and `packageManager` from `package.json` in the workspace before `npm publish` reads it. The strip lives in the workflow, not in a `prepublishOnly`/`prepare` script, so a local `pnpm pack` still shows the development fields and no local command can publish a half-cleaned package by accident.
 
-**`engines.node` is `>=22.14.0`; the npm CLI floor is a publish-time check, not an engine.** Node 22.14.0 is the oldest Node the package supports, and it is also the version Trusted Publishing requires. The npm CLI requirement (11.5.1 or later) belongs to the release job, which asserts it before publishing; putting `npm` in `engines` would warn every consumer who installs with an older npm, which has nothing to do with this package.
+**`engines.node` is `>=22.14.0`; the npm CLI floor is a publish-time check, not an engine.** The declared floor is the Node version Trusted Publishing itself requires, so the oldest supported consumer Node and the release job agree on one number. The npm CLI requirement (11.5.1 or later) belongs to the release job, which asserts it before publishing: Node 22.14.0 ships npm 10.9.2, so the bundled CLI is checked rather than assumed, and `npm` is kept out of `engines` because it would warn every consumer who installs with an older npm for a requirement only the release job has.
 
 **`repository` is exact.** `repository.url` is `git+https://github.com/d-kimuson/motion-kit.git` and must stay equal to the GitHub repository the trusted publisher names; `homepage` and `bugs` point at the same repository.
 
