@@ -23,10 +23,11 @@ DIRENV_DISABLE=1 timeout 900 lake build   # "Build completed successfully (11 jo
 
 `pnpm test` is green afterwards.
 
-When the Lean sources (`src/core/**/*.lean`, `spec/`, `lakefile.toml`, `lean-toolchain`) are identical to another checkout that already has `.lake/`, linking its build is faster than building. The link is valid only while the sources stay identical; once a `*.lean` file differs, build in the worktree instead:
+When the Lean sources (`src/core/**/*.lean`, `spec/`, `lakefile.toml`, `lean-toolchain`) are identical to another checkout that already has `.lake/`, linking its build is faster than building. The link is valid only while the sources stay identical; once a `*.lean` file differs, build in the worktree instead, and remove the symlink first (`rm .lake` removes only the link) so `lake build` does not write through it into the other checkout's build output:
 
 ```sh
-ln -s <other checkout>/.lake .lake
+ln -s <other checkout>/.lake .lake   # link while the sources are identical
+rm .lake                             # before `lake build` in the worktree, once a *.lean file differs
 ```
 
 `.gitignore` ignores `.lake` as a symlink as well as a directory. `pnpm test --project cli` (and any project without `*.oracle.test.ts`) does not need it.
