@@ -94,7 +94,7 @@ stdout; without it, the same data is printed as a short human summary. `node dis
 motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
 
 # Render a whole Composition: an .mp4 target is encoded video, any other target is PNG frames.
-motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--json]
+motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--concurrency <n>] [--json]
 ```
 
 `--composition` may be omitted only when the registry exports exactly one Composition;
@@ -110,6 +110,11 @@ ships and downloads no binary, so this is a prerequisite you install yourself
 ([encoding decision](docs/contexts/render/adr/20261025-system-ffmpeg-encoder.accepted.md)). A
 missing or unsupported FFmpeg is `encode.ffmpeg-not-found` or `encode.ffmpeg-unsupported`
 before the first frame; `frame` and an `--out` directory need no FFmpeg at all.
+
+`--concurrency` sets how many renderers capture frames at once, each a browser of its own; it
+defaults to half the machine's cores and must be a positive integer. A frame's bytes do not depend
+on which renderer captured it. The `.mp4` route captures JPEG (quality 95) rather than PNG, since
+the H.264 encode is lossy anyway; the directory route writes PNG.
 
 Audio has no flag either: the `.mp4` route muxes whatever the Composition declares in `audio`,
 resolving each `src` against the directory the command runs in. `volume: 1` is the file's own

@@ -30,6 +30,8 @@ export const RenderArgsSchema = z.strictObject({
   composition,
   out,
   props: propsText.optional(),
+  /** Renderers capturing at once; half the machine's parallelism when omitted. */
+  concurrency: z.coerce.number().int().positive().optional(),
   json,
 });
 

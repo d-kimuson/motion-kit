@@ -128,13 +128,13 @@ try {
     process.stderr.write(JSON.stringify(frame));
     process.exit(1);
   }
-  writeFileSync(out, frame.value.png);
+  writeFileSync(out, frame.value.image);
   process.stdout.write(JSON.stringify({
     ok: true,
     frame: frame.value.frame,
     width: frame.value.width,
     height: frame.value.height,
-    bytes: frame.value.png.length,
+    bytes: frame.value.image.length,
   }));
 } finally {
   await renderer.dispose();

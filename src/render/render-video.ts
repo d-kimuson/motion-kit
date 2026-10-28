@@ -1,6 +1,6 @@
 import { createFrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
-import { type FrameCaptureResult } from './capture/frame.ts';
+import { type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';
 import { encoderInvariantDiagnostic } from './encoding/diagnostics.ts';
 import {
   type EncodeOutcome,
@@ -11,7 +11,8 @@ import {
 import { createFfmpegEncoder } from './encoding/ffmpeg.ts';
 
 /** The Composition surface video output needs: a mounted descriptor and its frame stream.
- * `Renderer` satisfies it structurally, which keeps this module free of a renderer import.
+ * `Renderer` and `RendererPool` satisfy it structurally, which keeps this module free of a
+ * renderer import.
  */
 export type VideoComposition = {
   readonly descriptor: () => LoadingDescriptor;
@@ -19,6 +20,7 @@ export type VideoComposition = {
     readonly from: number;
     readonly to: number;
     readonly signal?: AbortSignal;
+    readonly format?: CaptureFormat;
   }) => AsyncIterable<FrameCaptureResult>;
 };
 
@@ -37,8 +39,15 @@ export type RenderVideoOptions = {
   readonly ffmpegPath?: FfmpegEncoderOptions['ffmpegPath'];
 };
 
+/**
+ * The capture video frames use. libx264's 4:2:0 output already discards more than a quality-95
+ * JPEG does (measured on the explainer: 39.8 dB PSNR from PNG input, 39.3 dB from this JPEG), and
+ * a JPEG captures in well under half a PNG's time at 1080p (system-ffmpeg-encoder ADR).
+ */
+export const videoCapture = { type: 'jpeg', quality: 95 } as const satisfies CaptureFormat;
+
 /** Renders `composition`'s whole frame range and pipes it into the Encoder port.
- * No PNG file ever reaches the disk: the frames go from capture to the child's stdin.
+ * No frame file ever reaches the disk: the frames go from capture to the child's stdin.
  * Audio crosses as the descriptor's declarations: the same call, the same child.
  */
 export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOutcome> => {
@@ -76,7 +85,9 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
       from: 0,
       to: descriptor.durationInFrames,
       signal,
+      format: videoCapture,
     }),
+    imageFormat: videoCapture.type,
     fps: descriptor.fps,
     frameCount: descriptor.durationInFrames,
     output,

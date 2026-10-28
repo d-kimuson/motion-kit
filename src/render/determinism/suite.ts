@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { createRendererPool, type RendererPool } from '../pool.ts';
 import { createRenderer, type Renderer } from '../renderer.ts';
 import {
   byteMismatchMessage,
@@ -145,7 +146,7 @@ const readFrame = async (
       ok: false,
       message: 'capture emitted seek.uncontrolled and is not certified deterministic',
     };
-  return { ok: true, png: result.value.png };
+  return { ok: true, png: result.value.image };
 };
 
 const modeResult = (
@@ -204,31 +205,100 @@ const compareOrder = async (
   );
 };
 
+/** Frames that renderers in separate realms captured in turn, against the single-realm baseline. */
+const compareConcurrent = async (
+  pool: RendererPool,
+  baseline: ReadonlyMap<number, Buffer>,
+  focus: number,
+  composition: string,
+  tolerance: CrossEnvironmentTolerance | undefined,
+): Promise<DeterminismModeResult> => {
+  const mode = 'concurrent';
+  let captured = 0;
+  for await (const result of pool.renderFrames({ from: 0, to: focus + 1 })) {
+    if (!result.ok)
+      return modeResult(
+        composition,
+        mode,
+        false,
+        `${composition}/${mode}: frame ${focus} ${captureFailure(result)}`,
+      );
+    const { frame, image } = result.value;
+    const expected = baseline.get(frame);
+    if (expected === undefined)
+      return modeResult(
+        composition,
+        mode,
+        false,
+        `${composition}/${mode}: frame ${frame} has no sequential 0..N capture`,
+      );
+    const comparison = pngBytesMatch(image, expected, tolerance);
+    if (!comparison.equal)
+      return modeResult(
+        composition,
+        mode,
+        false,
+        byteMismatchMessage(composition, mode, frame, comparison, image.length, expected.length),
+      );
+    captured += 1;
+  }
+  return captured === baseline.size
+    ? modeResult(
+        composition,
+        mode,
+        true,
+        `${composition}/${mode}: PNG bytes match the sequential 0..N capture`,
+      )
+    : modeResult(
+        composition,
+        mode,
+        false,
+        `${composition}/${mode}: ${captured} of ${baseline.size} frames were captured`,
+      );
+};
+
+const rendererOptions = (directory: string, composition: DeterminismSuite['composition']) => ({
+  projectRoot: directory,
+  entry: 'entry.ts',
+  compositionId: composition.compositionId,
+  ...(composition.props === undefined ? {} : { props: composition.props }),
+  frameTimeoutMs: 10_000,
+});
+
+const openFailure = (opened: { ok: false; error?: { message: string } }): Error =>
+  new Error(
+    `Determinism suite could not open a renderer: ${opened.error === undefined ? 'creation aborted.' : opened.error.message}`,
+  );
+
 const openRenderer = async (
   directory: string,
   composition: DeterminismSuite['composition'],
 ): Promise<Renderer> => {
-  const opened = await createRenderer({
-    projectRoot: directory,
-    entry: 'entry.ts',
-    compositionId: composition.compositionId,
-    ...(composition.props === undefined ? {} : { props: composition.props }),
-    frameTimeoutMs: 10_000,
-  });
-  if (!opened.ok)
-    throw new Error(
-      `Determinism suite could not open a renderer: ${'error' in opened ? opened.error.message : 'creation aborted.'}`,
-    );
+  const opened = await createRenderer(rendererOptions(directory, composition));
+  if (!opened.ok) throw openFailure(opened);
   return opened.value;
 };
 
-/** Capture one registered Composition across the seven traversal modes. */
+/** Two realms are the fewest that interleave: each captures every other frame. */
+const openPool = async (
+  directory: string,
+  composition: DeterminismSuite['composition'],
+): Promise<RendererPool> => {
+  const opened = await createRendererPool({
+    ...rendererOptions(directory, composition),
+    concurrency: 2,
+  });
+  if (!opened.ok) throw openFailure(opened);
+  return opened.value;
+};
+
+/** Capture one registered Composition across the eight traversal modes. */
 export const runDeterminismSuite = async (
   suite: DeterminismSuite,
   options: DeterminismRunOptions = {},
 ): Promise<DeterminismReport> => {
   const directory = prepareProject(suite.composition);
-  const renderers: Renderer[] = [];
+  const renderers: (Renderer | RendererPool)[] = [];
   try {
     const renderer = await openRenderer(directory, suite.composition);
     renderers.push(renderer);
@@ -271,7 +341,7 @@ export const runDeterminismSuite = async (
             },
           ],
         };
-      baseline.set(result.value.frame, result.value.png);
+      baseline.set(result.value.frame, result.value.image);
     }
     const captures = [...baseline.values()];
     const framesDiffer = captures.some((png) => captures.some((other) => !png.equals(other)));
@@ -336,6 +406,9 @@ export const runDeterminismSuite = async (
     modes.push(
       await compareOrder(fresh, baseline, [focus], name, 'fresh-renderer', suite.tolerance),
     );
+    const pool = await openPool(directory, suite.composition);
+    renderers.push(pool);
+    modes.push(await compareConcurrent(pool, baseline, focus, name, suite.tolerance));
     const constantMessage = `${name}: sequential 0..N captures are identical; a constant composition cannot prove traversal independence`;
     if (!framesDiffer) modes.push(modeResult(name, 'sequential-then-n', false, constantMessage));
     // Fail closed: a required traversal mode that did not run is a failure, not a silent pass.

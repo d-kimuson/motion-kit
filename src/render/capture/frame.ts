@@ -5,11 +5,21 @@ import { type Ownership } from '../../lib/frame-protocol.ts';
 import { type MountReceipt } from '../../lib/loading-protocol.ts';
 import { type FrameTransport } from './transport.ts';
 
+/** How a captured frame's pixels are encoded. PNG is lossless and is the identity the determinism
+ * suite compares; JPEG is for video, whose encoder discards more than a high-quality JPEG does.
+ * `quality` is an integer from 0 to 100.
+ */
+export type CaptureFormat =
+  | { readonly type: 'png' }
+  | { readonly type: 'jpeg'; readonly quality: number };
+export const pngCapture: CaptureFormat = { type: 'png' };
 export type RenderedFrame = Readonly<{
   frame: number;
   width: number;
   height: number;
-  png: Buffer;
+  /** The encoding of `image`, as requested by the capture. */
+  format: CaptureFormat['type'];
+  image: Buffer;
   diagnostics: readonly Diagnostic[];
 }>;
 /** Failure carries every diagnostic. Codes are not dropped or merged. */
@@ -33,6 +43,7 @@ export const createFrameJob = (options: {
   receipt: MountReceipt;
   frameTimeoutMs: number;
   queueTimeoutMs: number;
+  format: CaptureFormat;
   signal?: AbortSignal;
   dispose: () => Promise<unknown>;
 }): FrameJob => {
@@ -190,7 +201,11 @@ export const createFrameJob = (options: {
             }
             const diagnostics = await driver.warnings();
             if (expired()) return;
-            const png = await driver.capture(receipt.descriptor.width, receipt.descriptor.height);
+            const image = await driver.capture(
+              receipt.descriptor.width,
+              receipt.descriptor.height,
+              options.format,
+            );
             if (expired()) return;
             const completion = await driver.complete(lease);
             if (expired()) return;
@@ -212,7 +227,8 @@ export const createFrameJob = (options: {
                 frame,
                 width: receipt.descriptor.width,
                 height: receipt.descriptor.height,
-                png,
+                format: options.format.type,
+                image,
                 diagnostics: diagnostics.map((item) => ({
                   ...item,
                   location: { ...item.location, ...location },

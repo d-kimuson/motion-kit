@@ -66,6 +66,7 @@ describe('resolveCommand', () => {
   it('takes its value-taking options from the CLI declarations, so it cannot fall behind', () => {
     expect([...valueTakingOptions].sort()).toEqual([
       '--composition',
+      '--concurrency',
       '--frame',
       '--out',
       '--props',

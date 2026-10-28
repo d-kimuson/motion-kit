@@ -30,7 +30,7 @@ All are 64×64, DPR 1, 30 fps, six frames, in `src/render/determinism/fixtures/r
 
 ## Traversal modes
 
-The seven required modes are compared byte-for-byte against the sequential baseline:
+The eight required modes are compared byte-for-byte against the sequential baseline (`concurrent` was added by TASK-222):
 
 | Mode                | Order compared                                                   |
 | ------------------- | ---------------------------------------------------------------- |
@@ -41,6 +41,7 @@ The seven required modes are compared byte-for-byte against the sequential basel
 | `fresh-realm`       | N after re-selection; fails if the loading service PID restarts  |
 | `held-session`      | N after a 150 ms hold of the healthy realm                       |
 | `fresh-renderer`    | N alone in a newly opened renderer                               |
+| `concurrent`        | 0..N through a two-renderer pool, each capturing every other one |
 
 `canvas-drawing` additionally enables `sustained-session` (six repeated passes in one session) to cover resource growth. Exact bytes are the default; a tolerance is accepted only as `{ purpose: 'cross-environment', maxDifferentBytes }`.
 

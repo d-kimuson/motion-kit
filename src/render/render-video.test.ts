@@ -283,7 +283,7 @@ describe('renderVideo', () => {
       const captured = await renderer.renderFrame({ frame });
       if (!captured.ok) throw new Error(`Capture of frame ${String(frame)} failed`);
       const capturedPath = join(directory, `captured-${String(frame)}.png`);
-      writeFileSync(capturedPath, captured.value.png);
+      writeFileSync(capturedPath, captured.value.image);
       const decodedPath = join(directory, `decoded-${String(frame)}.png`);
       extractFrame(output, frame, decodedPath);
       const capturedRgb = decodeToRgb(capturedPath);

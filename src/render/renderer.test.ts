@@ -98,7 +98,7 @@ describe('qualified Chromium PNG transport', () => {
           ].map(([x, y]) => [...context.getImageData(x ?? 0, y ?? 0, 1, 1).data]);
           return { width: bitmap.width, height: bitmap.height, samples };
         },
-        [...output.png],
+        [...output.image],
       );
     expect(pixels).toEqual({
       width: 64,
@@ -250,7 +250,7 @@ describe('qualified Chromium PNG transport', () => {
     const output = await frame(renderer, 2);
     expect(capture).toHaveBeenCalledTimes(2);
     expect(generations).toEqual([2, 2]);
-    expect(output.png.equals(discarded ?? Buffer.alloc(0))).toBe(false);
+    expect(output.image.equals(discarded ?? Buffer.alloc(0))).toBe(false);
   }, 60_000);
 
   it('queues renderer frames through screenshot completion and removes a canceled queued request', async () => {

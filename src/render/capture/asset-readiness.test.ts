@@ -221,7 +221,7 @@ describe('asset readiness barrier', () => {
           textInk: text.some((pixel) => (pixel[0] ?? 255) < 200),
         };
       },
-      [...output.png],
+      [...output.image],
     );
     expect(pixels).toEqual({
       width: 64,
