@@ -4,7 +4,8 @@
 // The box is fixed (`SUBTITLE` in `look.ts`) and a sentence is sized and broken into lines to fit it
 // (`layout.ts`), so it never grows over the stage, never clips, and never wraps mid-word. The
 // speaker's name rides on the box's top edge in their colour, and the glyphs are stroked in the
-// speaker's deep shade, so the video reads with the sound off. The words the line's `emphasis` names are set in gold — the same words the scene animates.
+// speaker's deep shade, so the video reads with the sound off. The words the line's `emphasis`
+// names are set in gold — the same words the scene animates.
 import { Sequence, useTime } from '@kimuson/motion-kit';
 
 import { DesignRect } from './flat.tsx';

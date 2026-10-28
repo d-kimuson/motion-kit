@@ -13,7 +13,15 @@
 //
 // The layer reads the frame instead of opening a `Sequence` per line: how lit a character is depends
 // on their previous line as much as their current one (the dim fades in after they stop).
-import { useAsset, useFrame } from '@kimuson/motion-kit';
+import {
+  frameToTime,
+  toSeconds,
+  useAsset,
+  useFrame,
+  useTime,
+  useTimeline,
+  type FrameRate,
+} from '@kimuson/motion-kit';
 import { Suspense, type ReactNode } from 'react';
 
 import { DesignRect } from './flat.tsx';
@@ -51,18 +59,23 @@ type Presence = {
   readonly local: number;
 };
 
-const presenceOf = (storyboard: Storyboard, character: Character, frame: number): Presence => {
-  const fps = storyboard.fps;
+const presenceOf = (
+  storyboard: Storyboard,
+  character: Character,
+  frame: number,
+  rate: FrameRate,
+): Presence => {
+  const seconds = (frames: number) => toSeconds(frameToTime(BigInt(frames), rate));
   const last = storyboard.lines.findLast(
     (line) => line.speaker === character && line.startFrame <= frame,
   );
   if (last === undefined) return { lit: 0, line: undefined, local: 0 };
   const end = last.startFrame + last.frames;
   if (frame < end) {
-    const local = (frame - last.startFrame) / fps;
+    const local = seconds(frame - last.startFrame);
     return { lit: enter(local, 0, 0.25), line: last, local };
   }
-  return { lit: leave((frame - end) / fps, 0, 0.35), line: undefined, local: 0 };
+  return { lit: leave(seconds(frame - end), 0, 0.35), line: undefined, local: 0 };
 };
 
 const portraitBox = (character: Character) => {
@@ -328,14 +341,15 @@ export const Speakers = ({
   readonly assets: AssetsMode;
 }) => {
   const frame = useFrame();
+  const { frameRate } = useTimeline();
+  const t = useTime();
   const flat = useFlat();
-  const t = frame / storyboard.fps;
   if (flat)
     return (
       <>
         {CHARACTERS.map((character) => {
           const box = portraitBox(character);
-          const speaking = presenceOf(storyboard, character, frame).line !== undefined;
+          const speaking = presenceOf(storyboard, character, frame, frameRate).line !== undefined;
           return (
             <DesignRect
               key={character}
@@ -355,7 +369,7 @@ export const Speakers = ({
         <Speaker
           key={character}
           character={character}
-          presence={presenceOf(storyboard, character, frame)}
+          presence={presenceOf(storyboard, character, frame, frameRate)}
           t={t}
           assets={assets}
         />
