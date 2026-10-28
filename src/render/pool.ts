@@ -14,23 +14,33 @@ import {
 } from './renderer.ts';
 
 export type RendererPoolOptions = RendererOptions & {
-  /** How many renderers capture at once, each in its own realm. A positive integer. */
+  /** How many renderers capture at once, each in its own realm. A positive integer; the pool
+   * opens no more renderers than the Composition has frames.
+   *
+   * Each renderer holds one frame queued behind the one it captures, and `queueTimeoutMs` runs
+   * while it waits, so a queue budget shorter than one frame's capture aborts that frame.
+   */
   readonly concurrency: number;
 };
 
 /** Several renderers of one Composition behind the frame-stream surface `renderVideo` reads. */
 export type RendererPool = {
+  /** The renderers actually opened: the requested concurrency, capped at the frame count. */
   readonly concurrency: number;
   readonly descriptor: () => LoadingDescriptor;
   /** Half-open [from, to) in frame order, whichever renderer captured each frame; stops at the
-   * first failure or cancellation, exactly like `Renderer.renderFrames`.
+   * first failure or cancellation, like `Renderer.renderFrames`. The frames still in flight
+   * when it stops run to completion and are discarded, so the pool stays usable afterwards.
    */
   readonly renderFrames: (options: RenderFramesOptions) => AsyncIterable<FrameCaptureResult>;
   readonly dispose: () => Promise<Result<undefined>>;
 };
 
-/** Half the machine's parallelism: each renderer is a browser that rasterises on its own cores. */
-export const defaultConcurrency = (): number => Math.max(1, Math.floor(availableParallelism() / 2));
+/** Half the machine's parallelism: each renderer is a browser that rasterises on its own cores.
+ * Measured on the explainer, realms stop scaling at about 4 (render knowledge, capture throughput).
+ */
+export const defaultConcurrency = (parallelism = availableParallelism()): number =>
+  Math.max(1, Math.floor(parallelism / 2));
 
 const invalidConcurrency: Diagnostic = {
   code: 'cli.invalid-arguments',
@@ -42,7 +52,8 @@ const invalidConcurrency: Diagnostic = {
 /**
  * Deals frames round-robin and yields them in frame order. Each renderer serialises its own
  * requests, so at most two frames per renderer are in flight: enough to keep every realm busy
- * while the oldest is consumed, and few enough that a frame never waits near its queue budget.
+ * while the oldest is consumed, and a queued frame waits behind one capture at most (the
+ * `queueTimeoutMs` caveat on `RendererPoolOptions.concurrency`).
  */
 const renderInterleaved = async function* (
   renderers: readonly Renderer[],
@@ -59,9 +70,6 @@ const renderInterleaved = async function* (
     yield { ok: false, error: [invalid] };
     return;
   }
-  // Stopping early (a failure, or a consumer that returns) cancels every frame still in flight.
-  const stop = new AbortController();
-  const frameSignal = signal === undefined ? stop.signal : AbortSignal.any([signal, stop.signal]);
   const window = renderers.length * 2;
   const pending: Promise<FrameCaptureResult>[] = [];
   let next = from;
@@ -74,7 +82,7 @@ const renderInterleaved = async function* (
       pending.push(
         renderer.renderFrame({
           frame,
-          signal: frameSignal,
+          ...(signal === undefined ? {} : { signal }),
           ...(format === undefined ? {} : { format }),
         }),
       );
@@ -89,7 +97,11 @@ const renderInterleaved = async function* (
       dispatch();
     }
   } finally {
-    stop.abort();
+    // Stopping early (a failure, or a consumer that returns) lets the frames in flight finish
+    // rather than cancel them: a cancelled frame job recycles its realm, which would leave the
+    // pool unusable. At most two frames per renderer remain, and the caller's signal still
+    // cancels them.
+    await Promise.allSettled(pending);
   }
 };
 
@@ -104,15 +116,19 @@ export const createRendererPool = async (
   const { concurrency, ...rendererOptions } = options;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1)
     return { ok: false, error: invalidConcurrency };
+  // The first renderer reads the frame count, so a short Composition opens no idle browsers.
+  const opening = await createRenderer(rendererOptions);
+  if (!opening.ok) return opening;
+  const first = opening.value;
+  const extra = Math.min(concurrency, Math.max(1, first.descriptor().durationInFrames)) - 1;
   const opened = await Promise.all(
-    Array.from({ length: concurrency }, () => createRenderer(rendererOptions)),
+    Array.from({ length: extra }, () => createRenderer(rendererOptions)),
   );
-  const renderers = opened.flatMap((outcome) => (outcome.ok ? [outcome.value] : []));
+  const renderers = [first, ...opened.flatMap((outcome) => (outcome.ok ? [outcome.value] : []))];
   const failed = opened.find((outcome) => !outcome.ok);
-  const first = renderers[0];
-  if (failed !== undefined || first === undefined) {
+  if (failed !== undefined) {
     await Promise.all(renderers.map((renderer) => renderer.dispose()));
-    return failed ?? { ok: false, aborted: true };
+    return failed;
   }
   const dispose = async (): Promise<Result<undefined>> => {
     const results = await Promise.all(renderers.map((renderer) => renderer.dispose()));
@@ -121,7 +137,7 @@ export const createRendererPool = async (
   return {
     ok: true,
     value: {
-      concurrency,
+      concurrency: renderers.length,
       descriptor: () => first.descriptor(),
       dispose,
       renderFrames: (framesOptions) =>

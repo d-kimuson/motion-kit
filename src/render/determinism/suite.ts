@@ -221,9 +221,16 @@ const compareConcurrent = async (
         composition,
         mode,
         false,
-        `${composition}/${mode}: frame ${focus} ${captureFailure(result)}`,
+        `${composition}/${mode}: ${captureFailure(result)}`,
       );
-    const { frame, image } = result.value;
+    const { frame, image, diagnostics } = result.value;
+    if (diagnostics.some((item) => item.code === 'seek.uncontrolled'))
+      return modeResult(
+        composition,
+        mode,
+        false,
+        `${composition}/${mode}: frame ${frame} capture emitted seek.uncontrolled and is not certified deterministic`,
+      );
     const expected = baseline.get(frame);
     if (expected === undefined)
       return modeResult(

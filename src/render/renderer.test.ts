@@ -285,6 +285,23 @@ describe('qualified Chromium PNG transport', () => {
     ]);
   }, 60_000);
 
+  it('accepts JPEG quality 0 and 100 and rejects anything else before touching the page', async () => {
+    const renderer = await open();
+    for (const quality of [0, 100]) {
+      const result = await renderer.renderFrame({ frame: 2, format: { type: 'jpeg', quality } });
+      expect(result).toMatchObject({ ok: true, value: { format: 'jpeg' } });
+    }
+    for (const quality of [-1, 101, 50.5, Number.NaN]) {
+      const result = await renderer.renderFrame({ frame: 2, format: { type: 'jpeg', quality } });
+      expect(result).toEqual({
+        ok: false,
+        error: [expect.objectContaining({ code: 'cli.invalid-arguments' })],
+      });
+    }
+    // An invalid quality is the caller's mistake, not the realm's: the renderer stays usable.
+    expect((await frame(renderer, 3)).format).toBe('png');
+  }, 60_000);
+
   it.each([NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1, -1, 6])(
     'validates output frame %s without invalid diagnostic locations',
     async (number) => {

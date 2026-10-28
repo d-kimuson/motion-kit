@@ -1,4 +1,8 @@
-import { createRendererPool, type RendererPool } from '@kimuson/motion-kit/render';
+import {
+  createRendererPool,
+  defaultConcurrency,
+  type RendererPool,
+} from '@kimuson/motion-kit/render';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -100,6 +104,30 @@ describe('renderer pool', () => {
     const results = await collect(pool, 0, 6);
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ ok: false, error: [{ code: 'asset.load-failed' }] });
+  });
+
+  it('stays usable after a consumer stops reading partway', async () => {
+    const pool = await open(2);
+    for await (const result of pool.renderFrames({ from: 0, to: 6 })) {
+      expect(result.ok).toBe(true);
+      break;
+    }
+    const results = await collect(pool, 0, 6);
+    expect(results.map((result) => (result.ok ? result.value.frame : -1))).toEqual([
+      0, 1, 2, 3, 4, 5,
+    ]);
+  });
+
+  it('opens no more renderers than the Composition has frames', async () => {
+    const pool = await open(8);
+    expect(pool.concurrency).toBe(6);
+    expect((await collect(pool, 0, 6)).every((result) => result.ok)).toBe(true);
+  });
+
+  it('defaults to half the available parallelism, and never to zero', () => {
+    expect([1, 2, 3, 11, 16].map((parallelism) => defaultConcurrency(parallelism))).toEqual([
+      1, 1, 1, 5, 8,
+    ]);
   });
 
   it('reports an out-of-range request as one failure', async () => {
