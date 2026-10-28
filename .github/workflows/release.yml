@@ -25,7 +25,7 @@ jobs:
       # Reads the pnpm version from `packageManager`, so the release uses the same pnpm as a
       # local checkout and as CI.
       - name: Setup pnpm
-        uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -36,8 +36,11 @@ jobs:
           # piece of state the published bytes could depend on.
           package-manager-cache: false
 
+      # `--ignore-scripts` as in `check.yaml` (docs/guidelines/local-dev.md): a dependency's
+      # install script must not run inside the job that can mint the publishing identity, and
+      # the only permitted build script is the `lefthook install` this job does not need.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       # A tag that does not name the committed version would publish a version nobody pinned.
       # The ref comes from the environment, not from an expression, so a tag name cannot inject
@@ -86,8 +89,8 @@ jobs:
         run: pnpm exec clean-pkg-json
 
       # The npm CLI bundled with Node does the OIDC exchange and publish. No token and no
-      # `--provenance`: npm cannot generate provenance from a private repository, and
-      # `publishConfig.provenance` is `false` in package.json.
+      # `--provenance`: the repository is public, so npm generates the provenance attestation
+      # from the OIDC identity automatically, and the flag would only be a second way to ask.
       - name: Publish to npm
         env:
           DIST_TAG: ${{ steps.dist-tag.outputs.tag }}
