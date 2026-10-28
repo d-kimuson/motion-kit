@@ -162,3 +162,7 @@ dev/
 # Example assets fetched or generated locally; never committed
 # (docs/decisions/20261026-example-asset-licensing.accepted.md)
 assets.local/
+
+# Command Code harness state written next to the checkout (per-machine, never published).
+# Ignored globally on the author's machine, but oxfmt only reads this file.
+.commandcode/

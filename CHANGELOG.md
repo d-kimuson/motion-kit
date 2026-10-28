@@ -30,14 +30,16 @@ has a predecessor it must stay compatible with.
   export in this release.
 - **Reference examples.** `examples/teaser`, `examples/explainer`, `examples/chart` and
   `examples/slideshow` are four complete videos with CI gates, documented in
-  [the examples guide](docs/guide/examples.md). They ship in the repository, not in the npm package
-  (`package.json#files` is `dist` only).
+  [the examples guide](docs/guide/examples.md). They ship in the repository: the package carries
+  `dist/`, the user documentation, `README.md`, `LICENSE` and `THIRD_PARTY_LICENSES.md`.
+- **Attested release.** `0.0.1` is published from the `v0.0.1` tag by
+  `.github/workflows/release.yml` with npm Trusted Publishing, so the tarball carries a provenance
+  attestation that binds it to this repository and that workflow run
+  (`npm view @kimuson/motion-kit@0.0.1 dist.attestations`). No npm token exists for the project; the
+  earlier `0.0.0` was published by hand and has no attestation.
 
 ### Known limitations
 
-- **Provenance.** The project is developed in a private repository, so the published tarball has no
-  public commit history behind it and carries no build provenance or attestation yet. `pnpm build`
-  from a checkout produces the same `dist/` layout the tarball holds.
 - **Placeholder examples.** The reference examples render generated placeholders by default: the
   slideshow's photos are FFmpeg `gradients`/`noise` stills, the explainer draws badge characters
   unless the local media exist, and the chart's datasets are synthetic series shaped like an index.

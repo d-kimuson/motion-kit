@@ -24,7 +24,7 @@
     "url": "git+https://github.com/d-kimuson/motion-kit.git"
   },
   "bin": {
-    "motion-kit": "./dist/cli.js"
+    "motion-kit": "dist/cli.js"
   },
   "files": [
     "dist",
