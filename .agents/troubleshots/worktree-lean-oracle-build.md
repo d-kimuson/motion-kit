@@ -21,7 +21,16 @@ Build the specs once in the worktree before running the tests that consult the o
 DIRENV_DISABLE=1 timeout 900 lake build   # "Build completed successfully (11 jobs)."
 ```
 
-`pnpm test` is green afterwards. `pnpm test --project cli` (and any project without `*.oracle.test.ts`) does not need it.
+`pnpm test` is green afterwards.
+
+When the Lean inputs (`src/core/**/*.lean`, `spec/`, `lakefile.toml`, `lean-toolchain`, `lake-manifest.json`) are identical to another checkout that already has `.lake/`, linking its build is faster than building. The link is valid only while the inputs stay identical; once any of them differs from the linked checkout, build in the worktree instead, and remove the symlink first (`rm .lake` removes only the link) so `lake build` does not write through it into the other checkout's build output:
+
+```sh
+ln -s <other checkout>/.lake .lake   # link while the inputs are identical
+rm .lake                             # before `lake build` in the worktree, once any input differs
+```
+
+`pnpm test --project cli` (and any project without `*.oracle.test.ts`) does not need the oracle build. `.gitignore` ignores `.lake` as a symlink as well as a directory, so the link is never committed.
 
 ## Why Not Fixed
 
