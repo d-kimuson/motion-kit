@@ -18,7 +18,7 @@ const frames = [0, 15, 29] as const;
 
 describe('reference example probes', () => {
   it.each(probes)(
-    'captures the $name example identically across the seven traversal modes',
+    'captures the $name example identically across the eight traversal modes',
     async ({ name, compositionId }) => {
       const report = await runDeterminismSuite(
         defineDeterminismSuite({

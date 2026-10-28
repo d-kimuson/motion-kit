@@ -1,7 +1,7 @@
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type AudioTrack } from '../../lib/loading-protocol.ts';
 import { type Result } from '../../lib/result.ts';
-import { type FrameCaptureResult } from '../capture/frame.ts';
+import { type CaptureFormat, type FrameCaptureResult } from '../capture/frame.ts';
 
 /** Not a new type: exactly the stream `renderFrames` already yields, re-aliased so it cannot
  * drift from the public `FrameCaptureResult` (exported from the `./render` subpath).
@@ -17,6 +17,10 @@ export type EncodeProgress = {
 
 export type EncodeRequest = {
   readonly frames: FrameStream;
+  /** The encoding every frame of `frames` arrives in; PNG when omitted. A frame in another
+   * encoding is a contract violation (`internal.unexpected`).
+   */
+  readonly imageFormat?: CaptureFormat['type'];
   /** The Composition's rational rate; never a rounded float. */
   readonly fps: { readonly numerator: number; readonly denominator: number };
   /** The descriptor's `durationInFrames`: the total `frames` is expected to yield, and the

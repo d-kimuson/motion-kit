@@ -1,9 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
 import { validateOutputFrame } from '../core/timeline/time.ts';
+import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type MountReceipt, type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type Result } from '../lib/result.ts';
-import { createFrameJob, type FrameCaptureResult, type FrameJob } from './capture/frame.ts';
+import {
+  createFrameJob,
+  pngCapture,
+  type CaptureFormat,
+  type FrameCaptureResult,
+  type FrameJob,
+} from './capture/frame.ts';
 import { pageTransport } from './capture/transport.ts';
 import {
   openLoadingSession,
@@ -14,10 +21,16 @@ import {
 
 export type RenderOutcome<T> = LoadingOutcome<T>;
 export type RendererOptions = Omit<LoadingSessionOptions, 'acquire'> & Selection;
-export type RenderFrameOptions = { frame: number; signal?: AbortSignal };
-export type RenderFramesOptions = { from: number; to: number; signal?: AbortSignal };
+/** `format` defaults to PNG, the lossless capture the determinism suite compares. */
+export type RenderFrameOptions = { frame: number; signal?: AbortSignal; format?: CaptureFormat };
+export type RenderFramesOptions = {
+  from: number;
+  to: number;
+  signal?: AbortSignal;
+  format?: CaptureFormat;
+};
 export type Renderer = {
-  /** PNG bytes, only after capture completion accepts the current lease. */
+  /** The image bytes, only after capture completion accepts the current lease. */
   renderFrame: (options: RenderFrameOptions) => Promise<FrameCaptureResult>;
   /** Half-open [from, to); stop at the first failure or cancellation. */
   renderFrames: (options: RenderFramesOptions) => AsyncIterable<FrameCaptureResult>;
@@ -27,6 +40,36 @@ export type Renderer = {
   descriptor: () => LoadingDescriptor;
   dispose: () => Promise<Result<undefined>>;
 };
+
+/** Why a frame range cannot be rendered from a Composition of `durationInFrames`, if it cannot. */
+export const frameRangeDiagnostic = (
+  from: number,
+  to: number,
+  durationInFrames: number,
+): Diagnostic | undefined =>
+  !Number.isSafeInteger(to) ||
+  to < from ||
+  to > durationInFrames ||
+  !Number.isSafeInteger(from) ||
+  from < 0
+    ? {
+        code: 'composition.props-invalid',
+        severity: 'error',
+        message: 'The requested frame range is invalid.',
+        hint: 'Use safe integer endpoints with 0 <= from <= to <= durationInFrames.',
+      }
+    : undefined;
+
+const captureFormatDiagnostic = (format: CaptureFormat): Diagnostic | undefined =>
+  format.type === 'jpeg' &&
+  !(Number.isSafeInteger(format.quality) && format.quality >= 0 && format.quality <= 100)
+    ? {
+        code: 'cli.invalid-arguments',
+        severity: 'error',
+        message: 'The JPEG capture quality is invalid.',
+        hint: 'Use an integer quality from 0 to 100.',
+      }
+    : undefined;
 
 /** Owns one supervised loading session. Loading, caller/queue, and frame budgets
  * independently default to 30 seconds. Only ownership starts the frame budget.
@@ -82,9 +125,11 @@ export const createRenderer = async (
     tail = pending.catch(() => {});
     return pending;
   };
-  const renderFrame: Renderer['renderFrame'] = ({ frame, signal }) => {
+  const renderFrame: Renderer['renderFrame'] = ({ frame, signal, format = pngCapture }) => {
     if (disposed || signal?.aborted === true || options.signal?.aborted === true)
       return Promise.resolve({ ok: false, aborted: true });
+    const invalidFormat = captureFormatDiagnostic(format);
+    if (invalidFormat !== undefined) return Promise.resolve({ ok: false, error: [invalidFormat] });
     const combined = AbortSignal.any([
       cancellation.signal,
       ...(options.signal === undefined ? [] : [options.signal]),
@@ -126,6 +171,7 @@ export const createRenderer = async (
         receipt,
         frameTimeoutMs,
         queueTimeoutMs: remaining,
+        format,
         signal: combined,
         dispose,
       });
@@ -171,31 +217,19 @@ export const createRenderer = async (
           else await dispose();
           return result;
         }),
-      renderFrames: async function* ({ from, to, signal }) {
-        if (
-          !Number.isSafeInteger(to) ||
-          to < from ||
-          to > receipt.descriptor.durationInFrames ||
-          !Number.isSafeInteger(from) ||
-          from < 0
-        ) {
-          const invalid: FrameCaptureResult = {
-            ok: false,
-            error: [
-              {
-                code: 'composition.props-invalid',
-                severity: 'error',
-                message: 'The requested frame range is invalid.',
-                hint: 'Use safe integer endpoints with 0 <= from <= to <= durationInFrames.',
-              },
-            ],
-          };
+      renderFrames: async function* ({ from, to, signal, format }) {
+        const invalid = frameRangeDiagnostic(from, to, receipt.descriptor.durationInFrames);
+        if (invalid !== undefined) {
           await dispose();
-          yield invalid;
+          yield { ok: false, error: [invalid] };
           return;
         }
         for (let frame = from; frame < to; frame++) {
-          const result = await renderFrame({ frame, ...(signal === undefined ? {} : { signal }) });
+          const result = await renderFrame({
+            frame,
+            ...(signal === undefined ? {} : { signal }),
+            ...(format === undefined ? {} : { format }),
+          });
           yield result;
           if (!result.ok) return;
         }

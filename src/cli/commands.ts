@@ -11,6 +11,7 @@ const renderCommand = new Command('render')
   .option('--composition <id>')
   .requiredOption('--out <file-or-dir>')
   .option('--props <json>')
+  .option('--concurrency <n>')
   .option('--json')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
@@ -37,8 +38,8 @@ const valueTakingLongs = (command: Command): string[] =>
 
 /**
  * The options that consume the following argv token as their value, derived from the declarations
- * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`
- * and `--frame` today, while `--json` and `--help` take none.
+ * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`,
+ * `--concurrency` and `--frame` today, while `--json` and `--help` take none.
  *
  * Only long names are collected: `--opt <value>` is the form the resolver skips. A value-taking
  * option declared with a short alias (`-o <value>`) would slip past it, so none has one today, and

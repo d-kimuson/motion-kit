@@ -57,7 +57,7 @@ describe('phase 1 determinism suite', () => {
   }, 60_000);
 
   it.each(['css-transform', 'svg-path', 'sequence-boundary', 'transition-overlap'])(
-    'captures %s identically across the seven traversal modes',
+    'captures %s identically across the eight traversal modes',
     async (compositionId) => {
       const report = await runDeterminismSuite(referenceSuite(compositionId));
       logModes(report);
@@ -74,7 +74,7 @@ describe('phase 1 determinism suite', () => {
     expect(report.compositions[0]?.modes.map((mode) => mode.mode)).toContain('sustained-session');
   }, 60_000);
 
-  it('captures a nested Suspense font and image identically across the seven modes', async () => {
+  it('captures a nested Suspense font and image identically across the eight modes', async () => {
     const report = await runDeterminismSuite(referenceSuite('asset-suspense'));
     logModes(report);
     expect(report.passed).toBe(true);

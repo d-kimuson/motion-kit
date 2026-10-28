@@ -7,4 +7,10 @@ export {
   type RenderOutcome,
   type RenderedFrame,
 } from './renderer.ts';
-export type { FrameCaptureResult } from './capture/frame.ts';
+export {
+  createRendererPool,
+  defaultConcurrency,
+  type RendererPool,
+  type RendererPoolOptions,
+} from './pool.ts';
+export { pngCapture, type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';

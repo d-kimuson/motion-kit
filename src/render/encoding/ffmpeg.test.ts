@@ -37,9 +37,9 @@ afterEach(() => {
 const pathsLeftBehind = (path: string): string[] =>
   readdirSync(path).filter((name) => name.endsWith('.part') || name.startsWith('.'));
 
-/** PNG frames from a real FFmpeg fixture; the encoder's input contract is PNG bytes. */
-const pngFrames = (count: number): Buffer[] => {
-  const target = join(directory, 'source-%04d.png');
+/** Frames from a real FFmpeg fixture, as PNG (the default input) or JPEG bytes. */
+const pngFrames = (count: number, extension: 'png' | 'jpg' = 'png'): Buffer[] => {
+  const target = join(directory, `source-%04d.${extension}`);
   execFileSync('ffmpeg', [
     '-y',
     '-hide_banner',
@@ -65,10 +65,11 @@ const frameOf = (
   pngs: readonly Buffer[],
   index: number,
   size = { width: 64, height: 64 },
+  format: 'png' | 'jpeg' = 'png',
 ): FrameCaptureResult => {
   const png = pngs[index];
   if (png === undefined) throw new Error(`frame ${String(index)} is missing`);
-  return { ok: true, value: { frame: index, ...size, png, diagnostics: [] } };
+  return { ok: true, value: { frame: index, ...size, format, image: png, diagnostics: [] } };
 };
 
 /** A captured frame carrying warnings, which is what a Tier C Composition produces. */
@@ -254,6 +255,7 @@ const request = (options: {
   onProgress?: (progress: EncodeProgress) => void;
   audio?: readonly AudioTrack[];
   projectRoot?: string;
+  imageFormat?: 'png' | 'jpeg';
 }) => ({
   frames: options.frames,
   fps: options.fps ?? { numerator: 10, denominator: 1 },
@@ -263,6 +265,7 @@ const request = (options: {
   ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
   ...(options.audio === undefined ? {} : { audio: options.audio }),
   ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
+  ...(options.imageFormat === undefined ? {} : { imageFormat: options.imageFormat }),
 });
 
 const openEncoder = async (ffmpegPath: string): Promise<Encoder> => {
@@ -395,6 +398,52 @@ describe('FfmpegEncoder.encode', () => {
     expect(probed).toContain('codec_name=h264');
     expect(probed).toContain('nb_frames=10');
   }, 60_000);
+
+  it('encodes JPEG frames through the mjpeg input codec, in the limited range a PNG input gets', async () => {
+    const jpegs = pngFrames(5, 'jpg');
+    const encoder = await openEncoder('ffmpeg');
+    const output = outputPath();
+    const outcome = await encoder.encode(
+      request({
+        frames: asyncIterableOf(jpegs.map((_, index) => frameOf(jpegs, index, undefined, 'jpeg'))),
+        frameCount: jpegs.length,
+        output,
+        imageFormat: 'jpeg',
+      }),
+    );
+    expect(outcome).toMatchObject({ ok: true, value: { frameCount: 5, width: 64, height: 64 } });
+    const probed = execFileSync('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=codec_name,nb_frames,pix_fmt,color_range',
+      '-of',
+      'default=noprint_wrappers=1',
+      output,
+    ]).toString();
+    expect(probed).toContain('codec_name=h264');
+    expect(probed).toContain('nb_frames=5');
+    // mjpeg decodes to full-range yuvj420p; the MP4 must not inherit it.
+    expect(probed).toContain('pix_fmt=yuv420p\n');
+    expect(probed).toContain('color_range=tv');
+  }, 60_000);
+
+  it('treats a frame in another format than the request names as internal.unexpected', async () => {
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+    });
+    const encoder = await openEncoder(binary);
+    const output = outputPath();
+    const pngs = pngFrames(2);
+    const outcome = await encoder.encode(
+      request({ frames: streamOf(pngs), frameCount: 2, output, imageFormat: 'jpeg' }),
+    );
+    expect(errorsOf(outcome)[0]).toMatchObject({ code: 'internal.unexpected' });
+    expect(existsSync(output)).toBe(false);
+    expect(pathsLeftBehind(directory)).toEqual([]);
+  });
 
   it('reports a non-zero exit after a frame as encode.ffmpeg-failed with the stderr tail', async () => {
     const binary = fakeFfmpeg({
@@ -627,7 +676,14 @@ describe('FfmpegEncoder.encode', () => {
     const frames = asyncIterableOf<FrameCaptureResult>(
       Array.from({ length: 4 }, (_, index) => ({
         ok: true as const,
-        value: { frame: index, width: 64, height: 64, png, diagnostics: [] },
+        value: {
+          frame: index,
+          width: 64,
+          height: 64,
+          format: 'png' as const,
+          image: png,
+          diagnostics: [],
+        },
       })),
     );
     const pending = encoder.encode(
@@ -679,7 +735,14 @@ describe('FfmpegEncoder.encode', () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         yield {
           ok: true as const,
-          value: { frame: index, width: 64, height: 64, png, diagnostics: [] },
+          value: {
+            frame: index,
+            width: 64,
+            height: 64,
+            format: 'png' as const,
+            image: png,
+            diagnostics: [],
+          },
         };
       }
     })();

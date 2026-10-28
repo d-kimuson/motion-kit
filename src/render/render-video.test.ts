@@ -15,8 +15,8 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { type FrameCaptureResult } from './capture/frame.ts';
-import { type EncodeProgress } from './encoding/encoder.ts';
+import { type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';
+import { type EncodeProgress, type EncodeRequest } from './encoding/encoder.ts';
 import { renderVideo } from './render-video.ts';
 import { createRenderer, type Renderer } from './renderer.ts';
 
@@ -78,7 +78,7 @@ const probe = (path: string): Record<string, unknown> => {
     '-select_streams',
     'v:0',
     '-show_entries',
-    'stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_frames,duration,format_name',
+    'stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_frames,duration,format_name,pix_fmt,color_range',
     '-of',
     'json',
     path,
@@ -275,6 +275,9 @@ describe('renderVideo', () => {
       height: 120,
       r_frame_rate: '20/1',
       nb_frames: '40',
+      // The JPEG capture still yields the limited-range 4:2:0 a PNG capture did.
+      pix_fmt: 'yuv420p',
+      color_range: 'tv',
     });
     expect(Number(stream['duration'])).toBeCloseTo(2, 1);
 
@@ -283,7 +286,7 @@ describe('renderVideo', () => {
       const captured = await renderer.renderFrame({ frame });
       if (!captured.ok) throw new Error(`Capture of frame ${String(frame)} failed`);
       const capturedPath = join(directory, `captured-${String(frame)}.png`);
-      writeFileSync(capturedPath, captured.value.png);
+      writeFileSync(capturedPath, captured.value.image);
       const decodedPath = join(directory, `decoded-${String(frame)}.png`);
       extractFrame(output, frame, decodedPath);
       const capturedRgb = decodeToRgb(capturedPath);
@@ -334,6 +337,36 @@ describe('renderVideo', () => {
     });
     expect(rendered).toBe(0);
     expect(existsSync(join(directory, 'absent.mp4'))).toBe(false);
+  });
+
+  it('captures JPEG at quality 95 and tells the encoder the frames are JPEG', async () => {
+    const formats: (CaptureFormat | undefined)[] = [];
+    const requests: EncodeRequest[] = [];
+    const outcome = await renderVideo({
+      composition: {
+        descriptor: () => ({
+          id: 'jpeg',
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 1,
+        }),
+        renderFrames: ({ format }) => {
+          formats.push(format);
+          return asyncIterableOf<FrameCaptureResult>([]);
+        },
+      },
+      output: join(directory, 'jpeg.mp4'),
+      encoder: {
+        encode: (request) => {
+          requests.push(request);
+          return Promise.resolve({ ok: false, aborted: true });
+        },
+      },
+    });
+    expect(outcome).toEqual({ ok: false, aborted: true });
+    expect(formats).toEqual([{ type: 'jpeg', quality: 95 }]);
+    expect(requests.map((request) => request.imageFormat)).toEqual(['jpeg']);
   });
 
   it('treats a cancelled probe as aborted control flow, not as a Diagnostic', async () => {

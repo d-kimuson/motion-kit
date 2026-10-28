@@ -14,8 +14,9 @@ import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.t
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
+import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
 import { renderVideo } from '../render/render-video.ts';
-import { createRenderer, type RenderOutcome, type Renderer } from '../render/renderer.ts';
+import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
 import { CliArgsSchema, type FrameArgs, type RenderArgs } from './args.ts';
 import { commands } from './commands.ts';
 import { resolveCommand } from './invocation.ts';
@@ -123,7 +124,10 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
     out: options['out'],
     json: options['json'] === true,
   };
-  if (command === 'render') raw['props'] = options['props'];
+  if (command === 'render') {
+    raw['props'] = options['props'];
+    raw['concurrency'] = options['concurrency'];
+  }
   if (command === 'frame') raw['frame'] = options['frame'];
   return { kind: 'args', value: raw };
 };
@@ -162,7 +166,7 @@ const abortedOutcome: CommandOutcome = { ok: false, aborted: true };
 type Decide = (outcome: CommandOutcome) => CommandOutcome;
 
 const rendererFailure = (
-  outcome: Extract<RenderOutcome<Renderer>, { ok: false }>,
+  outcome: Extract<RenderOutcome<unknown>, { ok: false }>,
 ): CommandOutcome =>
   'aborted' in outcome
     ? abortedOutcome
@@ -198,20 +202,38 @@ const isFile = (path: string): boolean => {
   }
 };
 
-const openRenderer = async (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
+const rendererOptions = (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
   const projectRoot = process.cwd();
-  const entryAbsolute = resolve(projectRoot, args.entry);
-  if (!isFile(entryAbsolute))
-    return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
-  const renderer = await createRenderer({
+  if (!isFile(resolve(projectRoot, args.entry))) return undefined;
+  return {
     projectRoot,
     entry: args.entry,
     ...(args.composition === undefined ? {} : { compositionId: args.composition }),
     ...('props' in args && args.props !== undefined ? { props: args.props } : {}),
     signal,
-  });
+  };
+};
+
+/** One frame needs one realm; a whole range is dealt across `--concurrency` of them. */
+const openRenderer = async (args: FrameArgs, signal: AbortSignal) => {
+  const options = rendererOptions(args, signal);
+  if (options === undefined)
+    return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
+  const renderer = await createRenderer(options);
   if (!renderer.ok) return { ok: false as const, outcome: rendererFailure(renderer) };
   return { ok: true as const, renderer: renderer.value };
+};
+
+const openPool = async (args: RenderArgs, signal: AbortSignal) => {
+  const options = rendererOptions(args, signal);
+  if (options === undefined)
+    return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
+  const pool = await createRendererPool({
+    ...options,
+    concurrency: args.concurrency ?? defaultConcurrency(),
+  });
+  if (!pool.ok) return { ok: false as const, outcome: rendererFailure(pool) };
+  return { ok: true as const, renderer: pool.value };
 };
 
 const runRender = async (
@@ -221,7 +243,7 @@ const runRender = async (
 ): Promise<CommandOutcome> => {
   // Checked before the browser exists, so a run cancelled while it started does no work.
   if (signal.aborted) return abortedOutcome;
-  const opened = await openRenderer(args, signal);
+  const opened = await openPool(args, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
@@ -281,7 +303,7 @@ const runRender = async (
     })) {
       if (!result.ok) return decide(frameFailure(result));
       const name = `frame-${String(result.value.frame).padStart(5, '0')}.png`;
-      writeFileSync(join(outAbsolute, name), result.value.png);
+      writeFileSync(join(outAbsolute, name), result.value.image);
       files.push(name);
       width = result.value.width;
       height = result.value.height;
@@ -341,7 +363,7 @@ const runFrame = async (
     const result = await renderer.renderFrame({ frame: args.frame, signal });
     if (!result.ok) return decide(frameFailure(result));
     const outAbsolute = resolve(process.cwd(), args.out);
-    writeFileSync(outAbsolute, result.value.png);
+    writeFileSync(outAbsolute, result.value.image);
     return decide({
       ok: true,
       diagnostics: [...result.value.diagnostics],
@@ -479,7 +501,7 @@ export const runCli = async (
   if (parsed.kind === 'help') return 0;
   if (parsed.kind === 'usage') {
     process.stdout.write(
-      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir)\n\nRun `motion-kit <command> --help` for command options.\n',
+      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),\n           with --concurrency <n> renderers capturing at once (default: half the cores)\n\nRun `motion-kit <command> --help` for command options.\n',
     );
     return 0;
   }

@@ -67,6 +67,7 @@ export default defineConfig({
           name: 'frame-transport',
           include: [
             'src/render/renderer.test.ts',
+            'src/render/pool.test.ts',
             'src/render/render-video.test.ts',
             'src/render/capture/**/*.test.ts',
             // Later contexts register reference Compositions as *.determinism.test.ts.

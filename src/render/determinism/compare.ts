@@ -10,6 +10,7 @@ export const requiredDeterminismModes = [
   'fresh-realm',
   'held-session',
   'fresh-renderer',
+  'concurrent',
 ] as const;
 
 export type RequiredDeterminismMode = (typeof requiredDeterminismModes)[number];

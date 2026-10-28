@@ -103,8 +103,8 @@ duration and a clean FFmpeg decode. `pnpm test` builds `dist/` first (`pretest`)
 is the thing under test.
 
 The determinism gate runs `defineDeterminismSuite` over `probe.tsx` — reached as a module path string,
-never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all seven traversal modes
-(sequential, random, reverse, repeated, fresh realm, held session, fresh renderer).
+never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all eight traversal modes
+(sequential, random, reverse, repeated, fresh realm, held session, fresh renderer, concurrent).
 
 ## Known limitations
 

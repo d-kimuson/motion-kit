@@ -98,7 +98,7 @@ describe('qualified Chromium PNG transport', () => {
           ].map(([x, y]) => [...context.getImageData(x ?? 0, y ?? 0, 1, 1).data]);
           return { width: bitmap.width, height: bitmap.height, samples };
         },
-        [...output.png],
+        [...output.image],
       );
     expect(pixels).toEqual({
       width: 64,
@@ -250,7 +250,7 @@ describe('qualified Chromium PNG transport', () => {
     const output = await frame(renderer, 2);
     expect(capture).toHaveBeenCalledTimes(2);
     expect(generations).toEqual([2, 2]);
-    expect(output.png.equals(discarded ?? Buffer.alloc(0))).toBe(false);
+    expect(output.image.equals(discarded ?? Buffer.alloc(0))).toBe(false);
   }, 60_000);
 
   it('queues renderer frames through screenshot completion and removes a canceled queued request', async () => {
@@ -283,6 +283,23 @@ describe('qualified Chromium PNG transport', () => {
     expect((await frame(renderer, 2)).diagnostics).toMatchObject([
       { code: 'seek.uncontrolled', severity: 'warning', location: { frame: 2 } },
     ]);
+  }, 60_000);
+
+  it('accepts JPEG quality 0 and 100 and rejects anything else before touching the page', async () => {
+    const renderer = await open();
+    for (const quality of [0, 100]) {
+      const result = await renderer.renderFrame({ frame: 2, format: { type: 'jpeg', quality } });
+      expect(result).toMatchObject({ ok: true, value: { format: 'jpeg' } });
+    }
+    for (const quality of [-1, 101, 50.5, Number.NaN]) {
+      const result = await renderer.renderFrame({ frame: 2, format: { type: 'jpeg', quality } });
+      expect(result).toEqual({
+        ok: false,
+        error: [expect.objectContaining({ code: 'cli.invalid-arguments' })],
+      });
+    }
+    // An invalid quality is the caller's mistake, not the realm's: the renderer stays usable.
+    expect((await frame(renderer, 3)).format).toBe('png');
   }, 60_000);
 
   it.each([NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1, -1, 6])(

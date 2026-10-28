@@ -315,6 +315,32 @@ describe('motion-kit CLI', () => {
       expect(existsSync(join(output, `frame-${String(frame).padStart(5, '0')}.png`))).toBe(true);
   }, 60_000);
 
+  it('writes the same frames from several renderers as from one', async () => {
+    const render = async (concurrency: string) => {
+      const output = join(outputRoot, `frames-${concurrency}`);
+      const result = await run([
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--concurrency',
+        concurrency,
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      return Array.from({ length: 6 }, (_, frame) =>
+        readFileSync(join(output, `frame-${String(frame).padStart(5, '0')}.png`)),
+      );
+    };
+    const single = await render('1');
+    const pooled = await render('3');
+    expect(pooled.map((png, frame) => png.equals(single[frame] ?? Buffer.alloc(0)))).toEqual(
+      Array.from({ length: 6 }, () => true),
+    );
+  }, 120_000);
+
   it('renders a Composition to an MP4 with the v1 mp4 render envelope', async () => {
     const output = join(outputRoot, 'video.mp4');
     const result = await run([
@@ -754,8 +780,19 @@ process.on('newListener', (event) => {
     const fake = mkdtempSync(join(tmpdir(), 'motion-kit-hangup-'));
     const encoderPid = standInEncoder(fake);
     const output = join(outputRoot, 'hangup.mp4');
+    // Two renderers, so the run owns two loading services and every one of them must go.
     const run = spawnRun(
-      ['render', 'entry.ts', '--composition', 'one', '--out', output, '--json'],
+      [
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--concurrency',
+        '2',
+        '--out',
+        output,
+        '--json',
+      ],
       {
         PATH: `${fake}:${process.env['PATH'] ?? ''}`,
       },
@@ -769,11 +806,11 @@ process.on('newListener', (event) => {
       );
       const owned = childrenOf(run.child.pid ?? 0);
       const encoder = Number(readFileSync(encoderPid, 'utf8'));
-      // The run owns the loading service and the encoder directly, and both are in flight here.
+      // The run owns the loading services and the encoder directly, and all are in flight here.
       const named = owned.filter(
         (pid) => pid === encoder || commandOf(pid).includes('loading/child.js'),
       );
-      expect(named).toHaveLength(2);
+      expect(named).toHaveLength(3);
 
       run.child.kill('SIGHUP');
       const ended = await run.exit;
@@ -1200,6 +1237,24 @@ export const compositions = defineCompositions([
     const envelope = assertValidEnvelope(result);
     expect(envelope.ok).toBe(false);
     expect(envelope.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+  });
+
+  it('rejects a --concurrency that is not a positive integer with exit 2', async () => {
+    for (const concurrency of ['0', '-2', '1.5', 'many']) {
+      const result = await run([
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--concurrency',
+        concurrency,
+        '--out',
+        join(outputRoot, 'x'),
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      expect(assertValidEnvelope(result).diagnostics[0]?.code).toBe('cli.invalid-arguments');
+    }
   });
 
   it('renders a composition when an unselected sibling requires a prop', async () => {

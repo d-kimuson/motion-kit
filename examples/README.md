@@ -84,4 +84,4 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
 - **`chart`'s committed datasets are synthetic**, shaped like an index so the example never waits on
   a data-source decision.
 - **Every full-length render is a local QA Check**, not a CI step. CI renders each `-ci` Composition
-  and runs each `-probe` Composition through the seven determinism modes.
+  and runs each `-probe` Composition through the eight determinism modes.

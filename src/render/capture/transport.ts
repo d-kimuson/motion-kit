@@ -10,6 +10,7 @@ import {
   type CaptureLease,
   type PendingAsset,
 } from '../../lib/frame-protocol.ts';
+import { type CaptureFormat } from './frame.ts';
 
 /** Internal driver seam. Every remote value is checked before host use. */
 export type FrameTransport = {
@@ -17,7 +18,7 @@ export type FrameTransport = {
   resettle: (lease: CaptureLease) => Promise<z.infer<typeof frameOutcomeSchema>>;
   validate: (lease: CaptureLease) => Promise<z.infer<typeof captureValidationSchema>>;
   complete: (lease: CaptureLease) => Promise<z.infer<typeof captureCompletionSchema>>;
-  capture: (width: number, height: number) => Promise<Buffer>;
+  capture: (width: number, height: number, format: CaptureFormat) => Promise<Buffer>;
   pendingAssets: (requestId: string) => Promise<PendingAsset[]>;
   warnings: () => Promise<Diagnostic[]>;
 };
@@ -42,9 +43,9 @@ export const pageTransport = (page: Page): FrameTransport => ({
     captureCompletionSchema.parse(
       await page.evaluate((value) => window.__motionKit?.completeCapture(value), lease),
     ),
-  capture: (width, height) =>
+  capture: (width, height, format) =>
     page.screenshot({
-      type: 'png',
+      ...format,
       clip: { x: 0, y: 0, width, height },
       scale: 'css',
       animations: 'allow',

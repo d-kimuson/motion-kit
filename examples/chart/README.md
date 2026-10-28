@@ -157,7 +157,7 @@ clean FFmpeg decode. `pnpm test` builds `dist/` first (`pretest`), so the shippe
 under test.
 
 The determinism gate runs `defineDeterminismSuite` over `probe.tsx` — reached as a module path string,
-never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all seven traversal modes.
+never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all eight traversal modes.
 
 ## The data, and its provenance
 

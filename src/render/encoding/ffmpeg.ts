@@ -12,7 +12,7 @@ import {
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { coverOnExit } from '../../lib/exit.ts';
 import { type Result } from '../../lib/result.ts';
-import { type FrameCaptureResult } from '../capture/frame.ts';
+import { type CaptureFormat, type FrameCaptureResult } from '../capture/frame.ts';
 import {
   audioChannelProbeArguments,
   audioInputArguments,
@@ -278,7 +278,18 @@ type PumpResult = {
   readonly diagnostics: readonly Diagnostic[];
 };
 
-/** Hands the PNG stream to the child and stops at the first failed frame, abort, or over-long stream. */
+/** FFmpeg's decoder for each capture encoding piped through `image2pipe`. */
+const inputCodec: Readonly<Record<CaptureFormat['type'], string>> = { png: 'png', jpeg: 'mjpeg' };
+
+/** mjpeg decodes to full-range `yuvj420p`, which `-pix_fmt` alone carries into the MP4 as
+ * full range; scaling to the limited range gives the same output format a PNG input gets.
+ */
+const inputFilter: Readonly<Record<CaptureFormat['type'], readonly string[]>> = {
+  png: [],
+  jpeg: ['-vf', `scale=out_range=tv,format=${PIXEL_FORMAT}`],
+};
+
+/** Hands the image stream to the child and stops at the first failed frame, abort, or over-long stream. */
 const pump = async (options: {
   readonly child: ChildProcess;
   readonly request: EncodeRequest;
@@ -298,9 +309,10 @@ const pump = async (options: {
   // A broken pipe is reported through the write callback; an unhandled 'error' would throw.
   stdin.on('error', () => {});
   const iterator = request.frames[Symbol.asyncIterator]();
-  const write = (png: Buffer): Promise<boolean> =>
+  const imageFormat = request.imageFormat ?? 'png';
+  const write = (image: Buffer): Promise<boolean> =>
     new Promise((resolve) => {
-      stdin.write(png, (error) => resolve(error === undefined || error === null));
+      stdin.write(image, (error) => resolve(error === undefined || error === null));
     });
   let encodedFrames = 0;
   let size: { width: number; height: number } | undefined;
@@ -355,8 +367,19 @@ const pump = async (options: {
       stop_ = 'capture-failure';
       break;
     }
+    if (frame.format !== imageFormat) {
+      // The child was started with one decoder; a frame in another encoding would corrupt it.
+      failure = [
+        encoderInvariantDiagnostic(
+          `Frame ${frame.frame} is ${frame.format}, but the encoder was asked for ${imageFormat}.`,
+          'Capture every frame of one encode in the format its request names; a mix is a bug.',
+        ),
+      ];
+      stop_ = 'capture-failure';
+      break;
+    }
     // A stalled reader must not swallow the abort: race the write against the same stop.
-    const wrote = await Promise.race<boolean | 'stop'>([write(frame.png), stop]);
+    const wrote = await Promise.race<boolean | 'stop'>([write(frame.image), stop]);
     if (wrote === 'stop') {
       stop_ = aborted() ? 'aborted' : 'child-gone';
       break;
@@ -439,12 +462,13 @@ const encodeWithFfmpeg = async (
     '-framerate',
     rateText,
     '-c:v',
-    'png',
+    inputCodec[request.imageFormat ?? 'png'],
     '-i',
     'pipe:0',
     ...audioInputArguments(tracks),
     '-c:v',
     REQUIRED_VIDEO_ENCODER,
+    ...inputFilter[request.imageFormat ?? 'png'],
     '-pix_fmt',
     PIXEL_FORMAT,
     '-r',

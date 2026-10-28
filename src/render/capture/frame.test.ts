@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createAssetRegistry } from '../../core/assets/registry.ts';
 import { type CaptureLease, type Ownership } from '../../lib/frame-protocol.ts';
-import { createFrameJob } from './frame.ts';
+import { createFrameJob, pngCapture } from './frame.ts';
 import { type FrameTransport } from './transport.ts';
 
 const lease: CaptureLease = {
@@ -23,6 +23,7 @@ const make = (frameTimeoutMs = 100, queueTimeoutMs = 1000) => {
   const job = createFrameJob({
     requestId: 'request',
     frame: 2,
+    format: pngCapture,
     receipt: {
       instance: 'instance',
       revision: 'revision',
@@ -68,7 +69,7 @@ describe('host frame lease', () => {
     expect(driver.capture).not.toHaveBeenCalled();
     ready.resolve();
     expect(await result).toMatchObject({ ok: true, value: { frame: 2 } });
-    expect(driver.capture).toHaveBeenCalledWith(32, 24);
+    expect(driver.capture).toHaveBeenCalledWith(32, 24, { type: 'png' });
     expect(driver.validate).toHaveBeenCalledOnce();
     expect(driver.complete).toHaveBeenCalledOnce();
     expect(vi.mocked(driver.validate).mock.invocationCallOrder[0]).toBeLessThan(
@@ -130,7 +131,10 @@ describe('host frame lease', () => {
       .mockResolvedValueOnce(Buffer.from('stale'))
       .mockResolvedValue(Buffer.from('current'));
     const result = await job.run(driver);
-    expect(result).toMatchObject({ ok: true, value: { png: Buffer.from('current') } });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { format: 'png', image: Buffer.from('current') },
+    });
     expect(driver.resettle).toHaveBeenCalledOnce();
   });
   it('re-settles changed versions before taking any screenshot', async () => {
