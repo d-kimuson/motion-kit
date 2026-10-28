@@ -154,7 +154,7 @@ vite.config.ts.timestamp-*
 docs/tmp
 
 # Lean (lake build output)
-.lake/
+.lake
 
 # scratch files for exploratory testing (docs/guidelines/quality-assurance/exploratory-testing.md)
 dev/
