@@ -4,9 +4,9 @@ A release is a version of `@kimuson/motion-kit` on npm. The version is built fro
 
 ## One-time setup (owner)
 
-The first version of a new package can only be published by hand, because npm offers the trusted-publisher form in the settings of a package that already exists. TASK-225 does this once.
+The first version of a new package can only be published by hand, because npm offers the trusted-publisher form in the settings of a package that already exists. `@kimuson/motion-kit` exists as `0.0.0`, published by hand; `0.0.1` is the first version `release.yml` publishes.
 
-1. **Publish `0.0.1` from a clean checkout.** Build and strip the development fields exactly as the workflow does, so the tarball is the one the workflow would produce:
+1. **Publish the first version from a clean checkout.** Build and strip the development fields exactly as the workflow does, so the tarball is the one the workflow would produce:
 
    ```bash
    git switch main && git pull
@@ -20,7 +20,7 @@ The first version of a new package can only be published by hand, because npm of
 
    This one publish carries no provenance attestation: npm generates it from the OIDC exchange, and a laptop has no OIDC identity. Every later release published by `release.yml` is attested.
 
-   Do not push a `v0.0.1` tag for this publish. The tag triggers the workflow, which would try to publish a version npm already has and fail. The first tagged release is the next version.
+   Do not push a tag for this publish. The tag triggers the workflow, which would try to publish a version npm already has and fail. The first tag names the next version (`v0.0.1` here).
 
 2. **Configure the trusted publisher** on [npmjs.com](https://www.npmjs.com) → `@kimuson/motion-kit` → Settings → Trusted publishing → GitHub Actions. Every field is case-sensitive and npm does not validate it on save, only when a publish arrives:
 
@@ -34,7 +34,7 @@ The first version of a new package can only be published by hand, because npm of
 
    `release.yml` is the filename only: the file is `.github/workflows/release.yml`, and `package.json#repository.url` is `git+https://github.com/d-kimuson/motion-kit.git` to match the repository npm sends with the publish. Renaming either breaks publishing until this form is updated.
 
-3. **Complete the first OIDC publish within 2 days.** A new trusted publisher configuration expires if it is not validated by a successful publish in that window, and an expired configuration cannot be edited — it has to be deleted and recreated. Cut the next release (a patch is enough) as soon as the configuration is saved.
+3. **Complete the first OIDC publish within 2 days.** A new trusted publisher configuration expires if it is not validated by a successful publish in that window, and an expired configuration cannot be edited — it has to be deleted and recreated. Cut the next release (a patch is enough) as soon as the configuration is saved: the `0.0.1` configuration must publish before 2026-10-30 17:53 UTC.
 
 4. **Restrict token publishing.** Settings → Publishing access → "Require two-factor authentication and disallow tokens". Trusted publishing keeps working; only traditional tokens stop, so a leaked token cannot publish.
 
@@ -97,7 +97,7 @@ npm view "@kimuson/motion-kit@$VERSION" dist.attestations dist.tarball
 npm audit signatures
 ```
 
-`dist.attestations` present and `npm audit signatures` reporting the version are the success condition. The manual `0.0.1` publish has no attestation, and its absence is expected there, not a failure.
+`dist.attestations` present and `npm audit signatures` reporting the version are the success condition. The manual `0.0.0` publish has no attestation, and its absence is expected there, not a failure.
 
 ## GitHub Release
 
@@ -122,4 +122,4 @@ gh release edit "$TAG" --notes-file "$NOTES_FILE" --draft=false
 | `ENEEDAUTH` or `Unable to authenticate`           | The workflow filename, repository or `repository.url` does not match the trusted publisher form on npmjs.com.                        |
 | `403`, or the publish is not authenticated at all | The configuration expired (no OIDC publish within 2 days) or `id-token: write` is missing. Recreate the configuration, then publish. |
 | `EPUBLISHCONFLICT` / `cannot publish over …`      | The version is already on npm. Never reuse the number; release the next version.                                                     |
-| No `dist.attestations` on a tagged release        | The publish did not go through OIDC (see `ENEEDAUTH`). A CI publish is attested; only the manual `0.0.1` has none.                   |
+| No `dist.attestations` on a tagged release        | The publish did not go through OIDC (see `ENEEDAUTH`). A CI publish is attested; only the manual `0.0.0` has none.                   |

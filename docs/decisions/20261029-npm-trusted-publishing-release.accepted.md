@@ -22,7 +22,7 @@ The forces:
 
 **Publishing is Trusted Publishing only, with no token anywhere.** `.github/workflows/release.yml` runs on `v*` tags with `permissions: { contents: read, id-token: write }`, installs from the frozen lockfile with `--ignore-scripts` as `check.yaml` does (a dependency's install script must not run inside the job that can mint the publishing identity), and publishes with `npm publish`. The npm CLI bundled with the Node in `.node-version` performs the OIDC exchange, so no `NPM_TOKEN` secret, no `.npmrc` token, and no `pnpm publish` (whose git and provenance handling is a second implementation of the step that must be npm's). GitHub-hosted runners only; self-hosted runners are not supported by npm.
 
-**The first publish is manual and the configuration has a deadline.** `@kimuson/motion-kit@0.0.1` is published by hand from a clean checkout of the release commit. The owner then configures the trusted publisher for `d-kimuson/motion-kit`, workflow `release.yml`, allowed action `npm publish`, and the next release must publish through the workflow within 2 days or the configuration expires. The steps are in [`docs/guidelines/release.md`](../guidelines/release.md).
+**The first publish is manual and the configuration has a deadline.** `@kimuson/motion-kit@0.0.0` is published by hand from a clean checkout of the release commit. The owner then configures the trusted publisher for `d-kimuson/motion-kit`, workflow `release.yml`, allowed action `npm publish`, and the next release (`0.0.1`) must publish through the workflow within 2 days or the configuration expires. The steps are in [`docs/guidelines/release.md`](../guidelines/release.md).
 
 **Provenance is npm's default, not an option.** `publishConfig` carries only `access: public`, and the workflow passes no `--provenance`: the package is public and the repository is public, so npm generates the attestation from the OIDC exchange the publish already performs. Leaving the flag off keeps one way to ask for an attestation rather than two. The manual first publish has none, because it is not an OIDC publish.
 
@@ -42,7 +42,7 @@ A release is a version bump, a signed tag and a workflow run — there is no tok
 
 The costs are explicit:
 
-- A CI release is attested and the manual `0.0.1` is not. The provenance statement binds a tarball to the workflow run and the commit that produced it; a version published from a laptop has nothing to bind, and stays unattested for good.
+- A CI release is attested and the manual `0.0.0` is not. The provenance statement binds a tarball to the workflow run and the commit that produced it; a version published from a laptop has nothing to bind, and stays unattested for good.
 - The first publish and the 2-day validation window cannot be automated away. A missed window means deleting and recreating the trusted publisher, not a retry.
 - The workflow filename and the repository identity are part of the publishing contract. Renaming `.github/workflows/release.yml`, moving the repository, or publishing from a fork fails with `ENEEDAUTH` until the npm configuration matches — and npm does not validate the configuration when it is saved, only when a publish arrives.
 - A published version is spent. `npm unpublish` is restricted, so a defect in a release is fixed by the next version, never by replacing the tarball. `@kimuson/motion-kit@<version>` stays resolvable and unchanged.
@@ -51,7 +51,7 @@ The costs are explicit:
 ## Alternatives
 
 - **An `NPM_TOKEN` repository secret with `pnpm publish`:** works from a fork and from a laptop, and needs no npm configuration, but it is a long-lived credential in a repository with one maintainer to rotate it, and it makes every workflow run a publishing run.
-- **Configure the trusted publisher and let the workflow publish `0.0.1` itself:** impossible — npm only offers the trusted-publisher form on a package that already exists.
+- **Configure the trusted publisher and let the workflow publish the first version itself:** impossible — npm only offers the trusted-publisher form on a package that already exists.
 - **Keep `private: true` and tell consumers to use the repository:** the README already has to explain a checkout, and a consumer cannot `npm install` a private workspace package; TASK-224 needs a registry.
 - **Commit `dist/` and publish without building in CI:** the tarball would be whatever the last committer built, and every review of a release would include build output.
 - **Publish `latest` for prereleases too:** a beta would become what every `npm install @kimuson/motion-kit` resolves to, and pulling it back is another release.
