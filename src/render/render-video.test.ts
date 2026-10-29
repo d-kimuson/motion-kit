@@ -240,6 +240,131 @@ const onsetsOf = (samples: Int16Array, threshold = 0.02): number[] => {
 };
 
 describe('renderVideo', () => {
+  it('captures only the source frames needed by a lower output rate', async () => {
+    const captured: number[] = [];
+    const result = await renderVideo({
+      composition: {
+        descriptor: () => ({
+          id: 'sample',
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 7,
+        }),
+        renderFrames: ({ from }) => {
+          captured.push(from);
+          return asyncIterableOf<FrameCaptureResult>([
+            {
+              ok: true,
+              value: {
+                frame: from,
+                width: 16,
+                height: 16,
+                format: 'jpeg',
+                image: Buffer.from('frame'),
+                diagnostics: [],
+              },
+            },
+          ]);
+        },
+      },
+      output: join(directory, 'sample.mp4'),
+      fps: { numerator: 24, denominator: 1 },
+      encoder: {
+        encode: async (request) => {
+          for await (const frame of request.frames)
+            if (!frame.ok) throw new Error('capture failed');
+          expect(request.frameCount).toBe(6);
+          return { ok: false, aborted: true };
+        },
+      },
+    });
+    expect(result).toEqual({ ok: false, aborted: true });
+    expect(captured).toEqual([0, 1, 2, 3, 5, 6]);
+  });
+
+  it.each([
+    { fps: { numerator: 24, denominator: 1 }, count: '6' },
+    { fps: { numerator: 30000, denominator: 1001 }, count: '7' },
+  ])(
+    'encodes a non-integral duration at $fps',
+    async ({ fps, count }) => {
+      const renderer = await open();
+      const composition = {
+        descriptor: () => ({
+          ...renderer.descriptor(),
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 7,
+        }),
+        renderFrames: renderer.renderFrames,
+      };
+      const output = join(directory, 'fraction.mp4');
+      const result = await renderVideo({ composition, output, fps });
+      expect(result.ok).toBe(true);
+      const stream = probe(output);
+      expect(stream['nb_frames']).toBe(count);
+      expect(Number(stream['duration'])).toBeCloseTo(7 / 30, 1);
+      const bytes = (await import('node:fs')).readFileSync(output);
+      expect(bytes.indexOf('moov')).toBeLessThan(bytes.indexOf('mdat'));
+    },
+    180_000,
+  );
+
+  it.each([false, true])(
+    'preserves all ceiling-counted frames with audio=%s',
+    async (audio) => {
+      const renderer = await open();
+      const clip = join(directory, 'short.wav');
+      if (audio) generateSine(clip, 0.015, 440);
+      const composition = {
+        descriptor: () => ({
+          ...renderer.descriptor(),
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 3,
+          ...(audio ? { audio: [{ src: clip }, { src: clip, startInFrames: 2 }] } : {}),
+        }),
+        renderFrames: renderer.renderFrames,
+      };
+      const output = join(directory, 'short.mp4');
+      const result = await renderVideo({
+        composition,
+        output,
+        fps: { numerator: 24, denominator: 1 },
+      });
+      expect(result).toMatchObject({ ok: true, value: { frameCount: 3, durationSeconds: 0.1 } });
+      expect(probe(output)).toMatchObject({
+        r_frame_rate: '24/1',
+        avg_frame_rate: '24/1',
+        nb_frames: '3',
+      });
+      if (audio) {
+        expect(Number(probeAudio(output)['duration'])).toBeCloseTo(0.1, 3);
+        const onsets = onsetsOf(pcmOf(output));
+        expect(onsets).toHaveLength(2);
+        expect(Math.abs(onsets[0] ?? NaN)).toBeLessThanOrEqual(0.005);
+        expect(Math.abs((onsets[1] ?? NaN) - 2 / 30)).toBeLessThanOrEqual(0.01);
+      }
+    },
+    180_000,
+  );
+
+  it('encodes a scaled lower-rate video', async () => {
+    const renderer = await open();
+    const output = join(directory, 'scaled.mp4');
+    const outcome = await renderVideo({
+      composition: renderer,
+      output,
+      fps: { numerator: 15, denominator: 1 },
+      resolution: { width: 80, height: 60 },
+    });
+    expect(outcome).toMatchObject({ ok: true, value: { frameCount: 30, width: 80, height: 60 } });
+    expect(probe(output)).toMatchObject({
+      width: 80,
+      height: 60,
+      r_frame_rate: '15/1',
+      nb_frames: '30',
+    });
+  }, 180_000);
   it('encodes a 2-second Composition to H.264 MP4 without a PNG directory', async () => {
     const renderer = await open();
     const descriptor = renderer.descriptor();
@@ -451,6 +576,37 @@ describe('renderVideo', () => {
     // Silence before the first clip and after the second: nothing is placed at zero by accident.
     expect(rmsIn(pcm, 0, 0.4)).toBeLessThan(0.005);
     expect(rmsIn(pcm, 2.2, 2.9)).toBeLessThan(0.005);
+  }, 180_000);
+
+  it('keeps audio timing and gain on the source timebase at a reduced output rate', async () => {
+    mkdirSync(join(directory, 'audio'));
+    const first = join(directory, 'audio', 'clip-1.wav');
+    const second = join(directory, 'audio', 'clip-2.wav');
+    generateSine(first, 0.5, 440);
+    generateSine(second, 0.5, 880);
+    const renderer = await open('audio', './encoding/fixtures/audio.tsx');
+    const composition = {
+      descriptor: () => ({ ...renderer.descriptor(), durationInFrames: 59 }),
+      renderFrames: renderer.renderFrames,
+    };
+    const output = join(directory, 'reduced-audio.mp4');
+    const result = await renderVideo({
+      composition,
+      output,
+      projectRoot: directory,
+      fps: { numerator: 12, denominator: 1 },
+    });
+    expect(result).toMatchObject({ ok: true, value: { frameCount: 36, durationSeconds: 2.95 } });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(2.95, 2);
+    const pcm = pcmOf(output);
+    const onsets = onsetsOf(pcm);
+    expect(onsets).toHaveLength(2);
+    expect(Math.abs((onsets[0] ?? NaN) - 0.5)).toBeLessThanOrEqual(1 / 12);
+    expect(Math.abs((onsets[1] ?? NaN) - 1.5)).toBeLessThanOrEqual(1 / 12);
+    expect(Math.abs(rmsIn(pcm, 0.6, 0.9) / rmsIn(pcmOf(first), 0.05, 0.45) - 1)).toBeLessThan(0.1);
+    expect(
+      Math.abs(rmsIn(pcm, 1.6, 1.9) / (0.5 * rmsIn(pcmOf(second), 0.05, 0.45)) - 1),
+    ).toBeLessThan(0.1);
   }, 180_000);
 
   it('renders a mono clip at the level of its own file, like a stereo one', async () => {

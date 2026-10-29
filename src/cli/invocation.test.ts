@@ -70,9 +70,15 @@ describe('resolveCommand', () => {
     expect([...valueTakingOptions].sort()).toEqual([
       '--composition',
       '--concurrency',
+      '--fps',
       '--frame',
       '--out',
+      '--project-root',
       '--props',
+      '--scale',
+      '--video-bitrate',
+      '--video-crf',
+      '--vite-config',
     ]);
   });
 

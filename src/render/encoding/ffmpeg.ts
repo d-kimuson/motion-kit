@@ -40,6 +40,8 @@ import {
 export const MINIMUM_FFMPEG_VERSION = '6.0';
 /** The only H.264 encoder Phase 1 accepts; a build without it cannot produce MP4. */
 export const REQUIRED_VIDEO_ENCODER = 'libx264';
+/** Default libx264 quality when no bitrate or CRF is requested. */
+export const DEFAULT_VIDEO_CRF = 28;
 /** Bounded probe/stderr output; FFmpeg logs are unbounded and never belong whole in a Diagnostic. */
 const STDERR_TAIL_LIMIT = 4096;
 /** Bounded escalation for a child that ignores SIGTERM. */
@@ -284,9 +286,14 @@ const inputCodec: Readonly<Record<CaptureFormat['type'], string>> = { png: 'png'
 /** mjpeg decodes to full-range `yuvj420p`, which `-pix_fmt` alone carries into the MP4 as
  * full range; scaling to the limited range gives the same output format a PNG input gets.
  */
-const inputFilter: Readonly<Record<CaptureFormat['type'], readonly string[]>> = {
-  png: [],
-  jpeg: ['-vf', `scale=out_range=tv,format=${PIXEL_FORMAT}`],
+const inputFilter = (request: EncodeRequest): readonly string[] => {
+  const filters = [
+    ...(request.imageFormat === 'jpeg' ? [`scale=out_range=tv,format=${PIXEL_FORMAT}`] : []),
+    ...(request.resolution === undefined
+      ? []
+      : [`scale=${request.resolution.width}:${request.resolution.height}:flags=lanczos`]),
+  ];
+  return filters.length === 0 ? [] : ['-vf', filters.join(',')];
 };
 
 /** Hands the image stream to the child and stops at the first failed frame, abort, or over-long stream. */
@@ -413,6 +420,38 @@ const encodeWithFfmpeg = async (
   request: EncodeRequest,
 ): Promise<EncodeOutcome> => {
   const { output, frameCount, signal } = request;
+  if (
+    (request.crf !== undefined &&
+      (!Number.isSafeInteger(request.crf) || request.crf < 0 || request.crf > 51)) ||
+    (request.videoBitrate !== undefined &&
+      (!Number.isSafeInteger(request.videoBitrate) || request.videoBitrate <= 0)) ||
+    (request.crf !== undefined && request.videoBitrate !== undefined) ||
+    (request.resolution !== undefined &&
+      ![request.resolution.width, request.resolution.height].every(
+        (n) => Number.isSafeInteger(n) && n > 0 && n % 2 === 0,
+      )) ||
+    (request.preset !== undefined &&
+      ![
+        'ultrafast',
+        'superfast',
+        'veryfast',
+        'faster',
+        'fast',
+        'medium',
+        'slow',
+        'slower',
+        'veryslow',
+      ].includes(request.preset))
+  )
+    return {
+      ok: false,
+      error: [
+        encoderInvariantDiagnostic(
+          'Invalid video encoding options.',
+          'Use CRF 0–51 or a positive bitrate, and positive even output dimensions.',
+        ),
+      ],
+    };
   // Zero is a legal frame count: decide from the request before anything is created.
   if (frameCount === 0)
     return { ok: false, error: [outputInvalidDiagnostic({ output, reason: 'no-frames' })] };
@@ -428,11 +467,13 @@ const encodeWithFfmpeg = async (
         ),
       ],
     };
+  const sourceRate = createFrameRate(request.sourceFps ?? request.fps);
+  if (!sourceRate.ok) return { ok: false, error: [sourceRate.error] };
   // Resolved before the sibling exists, so a missing file leaves no temporary file and no child.
   const audio = resolveAudioTracks({
     tracks: request.audio ?? [],
     projectRoot: request.projectRoot ?? process.cwd(),
-    rate: timebase.rate,
+    rate: sourceRate.value,
   });
   if (!audio.ok) return { ok: false, error: [audio.error] };
   // The channel counts decide the mono conversion; probed before the sibling for the same reason.
@@ -468,12 +509,21 @@ const encodeWithFfmpeg = async (
     ...audioInputArguments(tracks),
     '-c:v',
     REQUIRED_VIDEO_ENCODER,
-    ...inputFilter[request.imageFormat ?? 'png'],
+    ...inputFilter(request),
+    ...(request.videoBitrate === undefined
+      ? ['-crf', String(request.crf ?? DEFAULT_VIDEO_CRF)]
+      : []),
+    ...(request.videoBitrate === undefined ? [] : ['-b:v', `${String(request.videoBitrate)}k`]),
+    ...(request.preset === undefined ? [] : ['-preset', request.preset]),
+    '-movflags',
+    '+faststart',
     '-pix_fmt',
     PIXEL_FORMAT,
     '-r',
     rateText,
-    ...(tracks.length === 0 ? [] : audioOutputArguments(tracks, timebase.seconds)),
+    ...(tracks.length === 0
+      ? []
+      : audioOutputArguments(tracks, request.durationSeconds ?? timebase.seconds)),
     temporary,
   ];
 
@@ -604,10 +654,10 @@ const encodeWithFfmpeg = async (
   const receipt: EncodeReceipt = {
     output,
     frameCount,
-    width: written.size.width,
-    height: written.size.height,
+    width: request.resolution?.width ?? written.size.width,
+    height: request.resolution?.height ?? written.size.height,
     fps: request.fps,
-    durationSeconds: timebase.seconds,
+    durationSeconds: request.durationSeconds ?? timebase.seconds,
     diagnostics: written.diagnostics,
   };
   return { ok: true, value: receipt };

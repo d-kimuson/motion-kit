@@ -144,9 +144,13 @@ const channelGraph = (channels: number | undefined): string =>
 /**
  * The filter graph that trims, gains, normalizes, places and sums every track. `normalize=0`
  * keeps each declared gain as authored; FFmpeg's default would divide them by the track count.
- * `apad` fills the tail so the output `-t` (frame-derived) decides where the audio ends.
+ * Rebuild mixed timestamps from sample counts; amix can retain a short first input's end PTS.
+ * Finite `apad` fills the tail and the final `atrim` ends audio at the Composition duration.
  */
-export const audioFilterGraph = (tracks: readonly ResolvedAudioTrack[]): string => {
+export const audioFilterGraph = (
+  tracks: readonly ResolvedAudioTrack[],
+  durationSeconds: number,
+): string => {
   const chains = tracks.map((track, index) => {
     const trim =
       track.endSeconds === undefined
@@ -163,7 +167,7 @@ export const audioFilterGraph = (tracks: readonly ResolvedAudioTrack[]): string 
     return `[${String(index + 1)}:a]${chain}[a${String(index)}]`;
   });
   const mixed = tracks.map((_, index) => `[a${String(index)}]`).join('');
-  return `${chains.join(';')};${mixed}amix=inputs=${String(tracks.length)}:duration=longest:normalize=0,apad[aout]`;
+  return `${chains.join(';')};${mixed}amix=inputs=${String(tracks.length)}:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=${secondsText(durationSeconds)},atrim=end=${secondsText(durationSeconds)}[aout]`;
 };
 
 /** Output-side arguments: the graph, both maps, AAC stereo, and the exact output duration. */
@@ -172,7 +176,7 @@ export const audioOutputArguments = (
   durationSeconds: number,
 ): string[] => [
   '-filter_complex',
-  audioFilterGraph(tracks),
+  audioFilterGraph(tracks, durationSeconds),
   '-map',
   '0:v:0',
   '-map',
@@ -183,7 +187,4 @@ export const audioOutputArguments = (
   AUDIO_BITRATE,
   '-ar',
   String(AUDIO_SAMPLE_RATE),
-  // The Composition's exclusive end, from frameCount and fps: never a second duration source.
-  '-t',
-  secondsText(durationSeconds),
 ];

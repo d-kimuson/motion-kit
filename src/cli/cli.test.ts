@@ -91,7 +91,7 @@ type RunResult = {
  */
 const run = async (
   args: readonly string[],
-  env?: Record<string, string>,
+  env?: Record<string, string | undefined>,
   options: { readonly envelope?: false } = {},
 ): Promise<RunResult> => {
   let stdout = '';
@@ -277,6 +277,256 @@ const docsTopicRows = [
 ] as const;
 
 describe('motion-kit CLI', () => {
+  it('captures ordered noncontiguous stills with one loading service', async () => {
+    const directory = join(outputRoot, 'batch');
+    const marker = join(outputRoot, 'batch-config-marker');
+    writeFileSync(
+      join(projectRoot, 'batch.config.ts'),
+      `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'loaded\\n'); export default {};`,
+    );
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '5,0',
+      '--frame',
+      '2',
+      '--out',
+      directory,
+      '--props',
+      '{"mode":"normal"}',
+      '--vite-config',
+      'batch.config.ts',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope.data).toMatchObject({
+      format: 'png-sequence',
+      output: directory,
+      frames: [{ frame: 0 }, { frame: 2 }, { frame: 5 }],
+    });
+    expect(readdirSync(directory).sort()).toEqual([
+      'frame-00000.png',
+      'frame-00002.png',
+      'frame-00005.png',
+    ]);
+    expect(
+      readFileSync(join(directory, 'frame-00000.png')).equals(
+        readFileSync(join(directory, 'frame-00002.png')),
+      ),
+    ).toBe(false);
+    expect(readFileSync(marker, 'utf8').trim().split('\n')).toHaveLength(1);
+  }, 60_000);
+
+  it.each(['0,0', '1.5', '-1'])('rejects invalid frame values %s', async (value) => {
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--frame',
+      value,
+      '--out',
+      join(outputRoot, 'bad'),
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+    expect(envelope.diagnostics[0]?.hint).toContain(value === '0,0' ? '0' : value);
+  });
+
+  it('rejects file targets and malformed props', async () => {
+    const file = join(outputRoot, 'existing-file');
+    writeFileSync(file, 'existing');
+    for (const out of [file, join(outputRoot, 'batch.png')]) {
+      const result = await run(['frame', 'entry.ts', '--frame', '0,1', '--out', out, '--json']);
+      expect(result.code).toBe(2);
+      expect(assertValidEnvelope(result).diagnostics[0]?.hint).toContain('directory');
+    }
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--frame',
+      '0',
+      '--out',
+      file,
+      '--props',
+      '{',
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    expect(assertValidEnvelope(result).diagnostics[0]?.hint).toContain('--props');
+  });
+
+  it('creates a single parent and retains earlier frames when a later frame is out of range', async () => {
+    const single = join(outputRoot, 'nested', 'single.png');
+    const first = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      single,
+      '--json',
+    ]);
+    expect(first.code).toBe(0);
+    expect(existsSync(single)).toBe(true);
+    const directory = join(outputRoot, 'partial');
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0,6',
+      '--out',
+      directory,
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    expect(assertValidEnvelope(result).diagnostics[0]).toMatchObject({
+      code: 'composition.props-invalid',
+      location: { frame: 6 },
+    });
+    expect(readdirSync(directory)).toEqual(['frame-00000.png']);
+  }, 60_000);
+  it.each([
+    ['--video-crf', '52'],
+    ['--video-bitrate', '0'],
+    ['--fps', '1/0'],
+    ['--scale', '31x32'],
+    ['--video-crf', '24', '--video-bitrate', '400'],
+  ])(
+    'rejects invalid video options %s',
+    async (...flags) => {
+      const result = await run([
+        'render',
+        'entry-required.tsx',
+        '--composition',
+        'one',
+        '--out',
+        join(outputRoot, 'bad.mp4'),
+        ...flags,
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      expect(result.envelope?.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+    },
+    120_000,
+  );
+
+  it('rejects video options for frames output', async () => {
+    const result = await run([
+      'render',
+      'entry-required.tsx',
+      '--out',
+      join(outputRoot, 'frames'),
+      '--video-crf',
+      '28',
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    expect(result.envelope?.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+  });
+  it.each([
+    { flags: ['--project-root', 'missing'], env: {}, hint: '--project-root' },
+    { flags: ['--vite-config', 'missing'], env: {}, hint: '--vite-config' },
+    { flags: [], env: { MOTION_KIT_SOFTWARE_WEBGL: 'yes' }, hint: 'MOTION_KIT_SOFTWARE_WEBGL' },
+    { flags: [], env: { MOTION_KIT_PROJECT_ROOT: 'missing' }, hint: 'MOTION_KIT_PROJECT_ROOT' },
+  ])('reports invalid renderer configuration: $hint', async ({ flags, env, hint }) => {
+    const result = await run(
+      [
+        'frame',
+        'entry.ts',
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, 'invalid.png'),
+        ...flags,
+        '--json',
+      ],
+      env,
+    );
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      command: 'frame',
+      ok: false,
+      diagnostics: [{ code: 'cli.invalid-arguments' }],
+    });
+    expect(envelope.diagnostics[0]?.hint).toContain(hint);
+  });
+
+  it('uses the environment root and allows flags to override invalid environment settings', async () => {
+    const result = await run(
+      [
+        'frame',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, 'configured.png'),
+        '--project-root',
+        projectRoot,
+        '--software-webgl',
+        '--json',
+      ],
+      {
+        MOTION_KIT_PROJECT_ROOT: 'missing',
+        MOTION_KIT_SOFTWARE_WEBGL: 'invalid',
+      },
+    );
+    expect(result.code).toBe(0);
+    expect(assertValidEnvelope(result).ok).toBe(true);
+    const alias = join(outputRoot, 'environment-project');
+    symlinkSync(projectRoot, alias);
+    const applied = await run(
+      [
+        'frame',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, 'env-configured.png'),
+        '--json',
+      ],
+      { MOTION_KIT_PROJECT_ROOT: alias, MOTION_KIT_SOFTWARE_WEBGL: 'true' },
+    );
+    expect(applied.code).toBe(0);
+    expect(assertValidEnvelope(applied).ok).toBe(true);
+  }, 60_000);
+
+  it('loads the explicit Vite config in every pooled renderer', async () => {
+    const marker = join(outputRoot, 'vite-config-marker');
+    writeFileSync(
+      join(projectRoot, 'chosen.config.ts'),
+      `import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(marker)}, 'loaded\\n');\nexport default {};`,
+    );
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      join(outputRoot, 'configured-frames'),
+      '--concurrency',
+      '2',
+      '--vite-config',
+      'chosen.config.ts',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    expect(assertValidEnvelope(result).ok).toBe(true);
+    expect(readFileSync(marker, 'utf8').trim().split('\n')).toHaveLength(2);
+  }, 120_000);
   it('prints docs/index.md verbatim when no topic is given', async () => {
     const result = await run(['docs']);
     expect(result.code).toBe(0);

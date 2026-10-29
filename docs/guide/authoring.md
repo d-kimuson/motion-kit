@@ -66,7 +66,7 @@ frame, with two restrictions that come from how they cross into the page:
   `__proto__` (React consumes or copies them), which is also `composition.props-invalid`.
 
 `--props '{"title":"Ship it"}'` on the CLI overrides them for one run; fields you omit fall back to
-their schema defaults. `frame` has no `--props`, so a still always renders the defaults.
+their schema defaults. `frame` accepts the same `--props` object for stills.
 
 ## Time
 

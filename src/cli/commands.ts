@@ -12,6 +12,14 @@ const renderCommand = new Command('render')
   .requiredOption('--out <file-or-dir>')
   .option('--props <json>')
   .option('--concurrency <n>')
+  .option('--video-crf <n>')
+  .option('--video-bitrate <kbps>')
+  .option('--scale <factor-or-WxH>')
+  .option('--fps <rational-or-decimal>')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--software-webgl')
+  .option('--disable-sandbox')
   .option('--json')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
@@ -19,8 +27,18 @@ const renderCommand = new Command('render')
 const frameCommand = new Command('frame')
   .argument('<entry>')
   .option('--composition <id>')
-  .requiredOption('--frame <n>')
-  .requiredOption('--out <png>')
+  .requiredOption(
+    '--frame <n>',
+    'frame indices, repeatable or comma-separated',
+    (value: string, previous: string[]) => [...previous, value],
+    [],
+  )
+  .requiredOption('--out <file-or-dir>')
+  .option('--props <json>')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--software-webgl')
+  .option('--disable-sandbox')
   .option('--json')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
@@ -47,7 +65,7 @@ const valueTakingLongs = (command: Command): string[] =>
 /**
  * The options that consume the following argv token as their value, derived from the declarations
  * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`,
- * `--concurrency` and `--frame` today, while `--json` and `--help` take none.
+ * `--concurrency`, `--frame`, `--project-root` and `--vite-config` today, while boolean flags take none.
  *
  * Only long names are collected: `--opt <value>` is the form the resolver skips. A value-taking
  * option declared with a short alias (`-o <value>`) would slip past it, so none has one today, and

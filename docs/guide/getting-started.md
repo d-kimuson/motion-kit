@@ -184,8 +184,8 @@ pnpm exec motion-kit render entry.tsx --props '{"title":"Ship it"}' --out out.mp
 
 The value must be a JSON **object** string — `--props '{"title":"Ship it"}'`, not `--props 'ship'` —
 and it is validated by the Composition's schema before the first frame, so a wrong shape fails with
-`composition.props-invalid`, the failing path in `details.issues`, and no output file. `frame` has no
-`--props` flag: a still draws the schema's defaults.
+`composition.props-invalid`, the failing path in `details.issues`, and no output file. `frame` accepts
+the same `--props` flag; without it, a still draws the schema's defaults.
 
 ## Write frames instead of video
 

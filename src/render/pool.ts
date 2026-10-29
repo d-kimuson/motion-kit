@@ -17,10 +17,16 @@ export type RendererPoolOptions = RendererOptions & {
   /** How many renderers capture at once, each in its own realm. A positive integer; the pool
    * opens no more renderers than the Composition has frames.
    *
-   * Each renderer holds one frame queued behind the one it captures, and `queueTimeoutMs` runs
-   * while it waits, so a queue budget shorter than one frame's capture aborts that frame.
+   * With multiple renderers, each holds one frame queued behind the one it captures, and
+   * `queueTimeoutMs` runs while it waits. A single renderer submits frames sequentially.
    */
   readonly concurrency: number;
+};
+
+export type RenderFrameListOptions = {
+  readonly frames: Iterable<number>;
+  readonly signal?: AbortSignal;
+  readonly format?: RenderFramesOptions['format'];
 };
 
 /** Several renderers of one Composition behind the frame-stream surface `renderVideo` reads. */
@@ -33,6 +39,8 @@ export type RendererPool = {
    * when it stops run to completion and are discarded, so the pool stays usable afterwards.
    */
   readonly renderFrames: (options: RenderFramesOptions) => AsyncIterable<FrameCaptureResult>;
+  /** Requested frames in list order, dealt round-robin with the same bounded window. */
+  readonly renderFrameList: (options: RenderFrameListOptions) => AsyncIterable<FrameCaptureResult>;
   readonly dispose: () => Promise<Result<undefined>>;
 };
 
@@ -51,47 +59,48 @@ const invalidConcurrency: Diagnostic = {
 
 /**
  * Deals frames round-robin and yields them in frame order. Each renderer serialises its own
- * requests, so at most two frames per renderer are in flight: enough to keep every realm busy
- * while the oldest is consumed, and a queued frame waits behind one capture at most (the
- * `queueTimeoutMs` caveat on `RendererPoolOptions.concurrency`).
+ * requests, so at most two frames per renderer are in flight when there are multiple renderers.
+ * A single renderer submits frames sequentially, without spending queue budget on prefetch.
  */
 const renderInterleaved = async function* (
   renderers: readonly Renderer[],
-  { from, to, signal, format }: RenderFramesOptions,
+  { frames, signal, format }: RenderFrameListOptions,
   dispose: () => Promise<Result<undefined>>,
 ): AsyncGenerator<FrameCaptureResult> {
-  const descriptor = renderers[0]?.descriptor();
-  const invalid =
-    descriptor === undefined
-      ? undefined
-      : frameRangeDiagnostic(from, to, descriptor.durationInFrames);
-  if (invalid !== undefined) {
-    await dispose();
-    yield { ok: false, error: [invalid] };
-    return;
-  }
-  const window = renderers.length * 2;
-  const pending: Promise<FrameCaptureResult>[] = [];
-  let next = from;
+  const window = renderers.length === 1 ? 1 : renderers.length * 2;
+  const pending: { frame: number; result: Promise<FrameCaptureResult> }[] = [];
+  const iterator = frames[Symbol.iterator]();
+  let next = 0;
   const dispatch = () => {
-    while (next < to && pending.length < window) {
-      const frame = next;
+    while (pending.length < window) {
+      const item = iterator.next();
+      if (item.done === true) break;
+      const frame = item.value;
+      const renderer = renderers[next % renderers.length];
       next += 1;
-      const renderer = renderers[(frame - from) % renderers.length];
       if (renderer === undefined) throw new Error('A pool renderer index is out of range.');
-      pending.push(
-        renderer.renderFrame({
+      pending.push({
+        frame,
+        result: renderer.renderFrame({
           frame,
           ...(signal === undefined ? {} : { signal }),
           ...(format === undefined ? {} : { format }),
         }),
-      );
+      });
     }
   };
   try {
     dispatch();
     for (let oldest = pending.shift(); oldest !== undefined; oldest = pending.shift()) {
-      const result = await oldest;
+      const result = await oldest.result;
+      const descriptor = renderers[0]?.descriptor();
+      if (
+        !result.ok &&
+        descriptor !== undefined &&
+        frameRangeDiagnostic(oldest.frame, oldest.frame + 1, descriptor.durationInFrames) !==
+          undefined
+      )
+        await dispose();
       yield result;
       if (!result.ok) return;
       dispatch();
@@ -101,7 +110,11 @@ const renderInterleaved = async function* (
     // rather than cancel them: a cancelled frame job recycles its realm, which would leave the
     // pool unusable. At most two frames per renderer remain, and the caller's signal still
     // cancels them.
-    await Promise.allSettled(pending);
+    try {
+      iterator.return?.();
+    } finally {
+      await Promise.allSettled(pending.map(({ result }) => result));
+    }
   }
 };
 
@@ -140,10 +153,27 @@ export const createRendererPool = async (
       concurrency: renderers.length,
       descriptor: () => first.descriptor(),
       dispose,
-      renderFrames: (framesOptions) =>
-        renderers.length === 1
-          ? first.renderFrames(framesOptions)
-          : renderInterleaved(renderers, framesOptions, dispose),
+      renderFrameList: (listOptions) => renderInterleaved(renderers, listOptions, dispose),
+      renderFrames: async function* (framesOptions) {
+        const { from, to, signal, format } = framesOptions;
+        const invalid = frameRangeDiagnostic(from, to, first.descriptor().durationInFrames);
+        if (invalid !== undefined) {
+          await dispose();
+          yield { ok: false, error: [invalid] };
+          return;
+        }
+        yield* renderInterleaved(
+          renderers,
+          {
+            frames: (function* () {
+              for (let frame = from; frame < to; frame++) yield frame;
+            })(),
+            signal,
+            format,
+          },
+          dispose,
+        );
+      },
     },
   };
 };

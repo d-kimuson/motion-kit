@@ -20,6 +20,7 @@ import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
 import { CliArgsSchema, type DocsArgs, type FrameArgs, type RenderArgs } from './args.ts';
 import { commands } from './commands.ts';
+import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
 
@@ -127,9 +128,17 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         command,
         entry: parsable.processedArgs[0],
         composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
         out: options['out'],
         props: options['props'],
         concurrency: options['concurrency'],
+        videoCrf: options['videoCrf'],
+        videoBitrate: options['videoBitrate'],
+        scale: options['scale'],
+        fps: options['fps'],
         json,
       },
     };
@@ -140,8 +149,13 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         command,
         entry: parsable.processedArgs[0],
         composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
         out: options['out'],
         frame: options['frame'],
+        props: options['props'],
         json,
       },
     };
@@ -261,7 +275,9 @@ const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() ===
 const abortedLine = (args: RenderArgs | FrameArgs): string =>
   args.command === 'render' && !isVideoOutput(args.out)
     ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
-    : `${args.command} aborted; no output was produced`;
+    : args.command === 'frame' && args.frame.length > 1
+      ? `frame aborted; any PNG frames already written remain in ${args.out}`
+      : `${args.command} aborted; no output was produced`;
 
 const isFile = (path: string): boolean => {
   try {
@@ -271,11 +287,15 @@ const isFile = (path: string): boolean => {
   }
 };
 
-const rendererOptions = (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
-  const projectRoot = process.cwd();
+const rendererOptions = (
+  args: RenderArgs | FrameArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+) => {
+  const { projectRoot } = config;
   if (!isFile(resolve(projectRoot, args.entry))) return undefined;
   return {
-    projectRoot,
+    ...config,
     entry: args.entry,
     ...(args.composition === undefined ? {} : { compositionId: args.composition }),
     ...('props' in args && args.props !== undefined ? { props: args.props } : {}),
@@ -284,8 +304,8 @@ const rendererOptions = (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
 };
 
 /** One frame needs one realm; a whole range is dealt across `--concurrency` of them. */
-const openRenderer = async (args: FrameArgs, signal: AbortSignal) => {
-  const options = rendererOptions(args, signal);
+const openRenderer = async (args: FrameArgs, config: RendererConfig, signal: AbortSignal) => {
+  const options = rendererOptions(args, config, signal);
   if (options === undefined)
     return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
   const renderer = await createRenderer(options);
@@ -293,8 +313,8 @@ const openRenderer = async (args: FrameArgs, signal: AbortSignal) => {
   return { ok: true as const, renderer: renderer.value };
 };
 
-const openPool = async (args: RenderArgs, signal: AbortSignal) => {
-  const options = rendererOptions(args, signal);
+const openPool = async (args: RenderArgs, config: RendererConfig, signal: AbortSignal) => {
+  const options = rendererOptions(args, config, signal);
   if (options === undefined)
     return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
   const pool = await createRendererPool({
@@ -307,12 +327,20 @@ const openPool = async (args: RenderArgs, signal: AbortSignal) => {
 
 const runRender = async (
   args: RenderArgs,
+  config: RendererConfig,
   signal: AbortSignal,
   decide: Decide,
 ): Promise<CommandOutcome> => {
   // Checked before the browser exists, so a run cancelled while it started does no work.
   if (signal.aborted) return abortedOutcome;
-  const opened = await openPool(args, signal);
+  if (args.videoCrf !== undefined && args.videoBitrate !== undefined)
+    return failure([invalidArguments('Use either --video-crf or --video-bitrate, not both.')]);
+  if (
+    !isVideoOutput(args.out) &&
+    [args.videoCrf, args.videoBitrate, args.scale, args.fps].some((value) => value !== undefined)
+  )
+    return failure([invalidArguments('Video options require an .mp4 output path.')]);
+  const opened = await openPool(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
@@ -323,6 +351,52 @@ const runRender = async (
     // The target's extension selects the format: an `.mp4` file is encoded video, and any
     // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
     if (isVideoOutput(outAbsolute)) {
+      let fps: { numerator: number; denominator: number } | undefined;
+      if (args.fps !== undefined) {
+        const parts = args.fps.split('/');
+        const decimal = parts[0] ?? '';
+        const digits = decimal.split('.')[1]?.length ?? 0;
+        fps =
+          parts.length === 2
+            ? { numerator: Number(parts[0]), denominator: Number(parts[1]) }
+            : { numerator: Number(decimal.replace('.', '')), denominator: 10 ** digits };
+        const parsedRate = createFrameRate(fps);
+        if (
+          !parsedRate.ok ||
+          parsedRate.value.numerator * rate.value.denominator >
+            rate.value.numerator * parsedRate.value.denominator
+        )
+          return decide(
+            failure([
+              invalidArguments(
+                'Use a positive --fps no greater than the Composition fps, for example 30000/1001.',
+              ),
+            ]),
+          );
+      }
+      let resolution: { width: number; height: number } | undefined;
+      if (args.scale !== undefined) {
+        const parts = args.scale.split('x');
+        resolution =
+          parts.length === 2
+            ? { width: Number(parts[0]), height: Number(parts[1]) }
+            : {
+                width: Math.round(descriptor.width * Number(args.scale)),
+                height: Math.round(descriptor.height * Number(args.scale)),
+              };
+        if (
+          ![resolution.width, resolution.height].every(
+            (value) => Number.isSafeInteger(value) && value > 0 && value % 2 === 0,
+          )
+        )
+          return decide(
+            failure([
+              invalidArguments(
+                'Use --scale yielding positive even dimensions, for example 1280x720 or 0.5.',
+              ),
+            ]),
+          );
+      }
       mkdirSync(dirname(outAbsolute), { recursive: true });
       // The same signal reaches the encoder, which kills its child and removes the sibling.
       // Audio is the Composition's own declaration, so it resolves against this project root;
@@ -330,7 +404,11 @@ const runRender = async (
       const encoded = await renderVideo({
         composition: renderer,
         output: outAbsolute,
-        projectRoot: process.cwd(),
+        projectRoot: config.projectRoot,
+        ...(fps === undefined ? {} : { fps }),
+        ...(resolution === undefined ? {} : { resolution }),
+        ...(args.videoCrf === undefined ? {} : { crf: args.videoCrf }),
+        ...(args.videoBitrate === undefined ? {} : { videoBitrate: args.videoBitrate }),
         signal,
       });
       if (!encoded.ok)
@@ -418,32 +496,57 @@ const runRender = async (
 
 const runFrame = async (
   args: FrameArgs,
+  config: RendererConfig,
   signal: AbortSignal,
   decide: Decide,
 ): Promise<CommandOutcome> => {
   if (signal.aborted) return abortedOutcome;
-  const opened = await openRenderer(args, signal);
+  const outAbsolute = resolve(process.cwd(), args.out);
+  const multiple = args.frame.length > 1;
+  if (multiple && (extname(outAbsolute).toLowerCase() === '.png' || isFile(outAbsolute)))
+    return decide(
+      failure([invalidArguments('Pass a directory to --out when capturing multiple frames.')]),
+    );
+  const opened = await openRenderer(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
     if (!rate.ok) return decide(failure([rate.error]));
-    const result = await renderer.renderFrame({ frame: args.frame, signal });
-    if (!result.ok) return decide(frameFailure(result));
-    const outAbsolute = resolve(process.cwd(), args.out);
-    writeFileSync(outAbsolute, result.value.image);
-    return decide({
-      ok: true,
-      diagnostics: [...result.value.diagnostics],
-      data: {
-        output: outAbsolute,
-        format: 'png',
+    mkdirSync(multiple ? outAbsolute : dirname(outAbsolute), { recursive: true });
+    const frames: {
+      output: string;
+      frame: number;
+      timeSeconds: number;
+      width: number;
+      height: number;
+    }[] = [];
+    const diagnostics: Diagnostic[] = [];
+    for (const frame of args.frame) {
+      const result = await renderer.renderFrame({ frame, signal });
+      if (!result.ok) return decide(frameFailure(result));
+      const output = multiple
+        ? join(outAbsolute, `frame-${String(frame).padStart(5, '0')}.png`)
+        : outAbsolute;
+      writeFileSync(output, result.value.image);
+      frames.push({
+        output,
         frame: result.value.frame,
-        timeSeconds: toSeconds(frameToTime(BigInt(result.value.frame), rate.value)),
+        timeSeconds: toSeconds(frameToTime(BigInt(frame), rate.value)),
         width: result.value.width,
         height: result.value.height,
-      },
+      });
+      diagnostics.push(...result.value.diagnostics);
+    }
+    const first = frames[0];
+    if (first === undefined) return decide(failure([internalUnexpected()]));
+    return decide({
+      ok: true,
+      diagnostics,
+      data: multiple
+        ? { output: outAbsolute, format: 'png-sequence', frames }
+        : { ...first, format: 'png' },
     });
   } finally {
     await renderer.dispose();
@@ -480,8 +583,12 @@ const summarize = (envelope: Envelope): string => {
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
       return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
     }
-    if (envelope.command === 'frame')
-      return `captured frame ${envelope.data.frame} to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
+    if (envelope.command === 'frame') {
+      const data = envelope.data;
+      return data.format === 'png'
+        ? `captured frame ${data.frame} to ${data.output} (${data.width}x${data.height})`
+        : `captured ${data.frames.length} frames to ${data.output}`;
+    }
   }
   return `${envelope.command ?? 'motion-kit'} failed`;
 };
@@ -563,7 +670,7 @@ const usageText = `${[
   '',
   'Commands:',
   '  docs [topic]  print a shipped guide; --list names the topics',
-  '  frame         capture one frame to a PNG',
+  '  frame         capture one or more frames to PNG',
   '  render        render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),',
   '                with --concurrency <n> renderers capturing at once (default: half the cores)',
   '',
@@ -626,6 +733,9 @@ export const runCli = async (
   }
 
   const args = checked.data;
+  const config = resolveRendererConfig(args, process.env, process.cwd());
+  if (!config.ok)
+    return emit(buildEnvelope(args.command, failure([config.error]), durationMs()), args.json);
   let outcome: CommandOutcome;
   // A cancelled run's line is written below, but a library that exits the process from its own
   // signal handler can end the run before that line is reached; this cover is the last chance to
@@ -648,8 +758,8 @@ export const runCli = async (
     try {
       outcome =
         args.command === 'render'
-          ? await runRender(args, signal, decide)
-          : await runFrame(args, signal, decide);
+          ? await runRender(args, config.value, signal, decide)
+          : await runFrame(args, config.value, signal, decide);
     } catch (error) {
       if (error instanceof Error && error.stack !== undefined)
         process.stderr.write(`${error.stack}\n`);

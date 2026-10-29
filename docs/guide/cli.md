@@ -8,8 +8,8 @@ as text, and with it exactly one versioned JSON envelope on stdout.
 motion-kit <command> [args]
 ```
 
-For `render` and `frame`, the first argument is an entry file relative to the directory you run the
-command in: a `.tsx`/`.ts` module that exports `compositions` (see
+For `render` and `frame`, the first argument is an entry file relative to the project root (the
+directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions` (see
 [authoring](authoring.md#the-registry)).
 
 ## Commands
@@ -19,8 +19,8 @@ command in: a `.tsx`/`.ts` module that exports `compositions` (see
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> \
   [--props <json>] [--concurrency <n>] [--json]
 
-# One frame as a PNG.
-motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
+# One frame as a PNG, or several stills in a directory.
+motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
 
 # The guide, or one topic, printed verbatim.
 motion-kit docs [topic] [--list] [--json]
@@ -38,6 +38,27 @@ command is `pnpm exec motion-kit …`, with npm `npx motion-kit …`, and with y
 Both that form and `node dist/cli.js …` appear below: the second is the same CLI run out of a
 checkout of this repository, after `pnpm build`, which is how the commands in the `examples/`
 directory of the repository are written.
+
+## Renderer configuration
+
+Both `render` and `frame` accept these options:
+
+| Flag                   | Environment override         | Meaning                                                                                           |
+| ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `--project-root <dir>` | `MOTION_KIT_PROJECT_ROOT`    | Project root for entry loading and relative MP4 audio sources; defaults to the working directory. |
+| `--vite-config <path>` | `MOTION_KIT_VITE_CONFIG`     | Explicit Vite config file; otherwise Vite discovers a config in the project root.                 |
+| `--software-webgl`     | `MOTION_KIT_SOFTWARE_WEBGL`  | Opt into software WebGL; default off.                                                             |
+| `--disable-sandbox`    | `MOTION_KIT_DISABLE_SANDBOX` | Explicitly disable the Chromium sandbox; default off.                                             |
+
+Flags override environment values, which override defaults. Boolean environment values accept `1` or `true`, and `0`, `false` or empty; other values are `cli.invalid-arguments`. Relative configuration paths resolve against the working directory; the project root must exist as a directory and the Vite config as a file. The sandbox is never disabled automatically, including in containers.
+
+```bash
+MOTION_KIT_PROJECT_ROOT=./video MOTION_KIT_VITE_CONFIG=./ci/vite.config.ts \
+  MOTION_KIT_SOFTWARE_WEBGL=1 MOTION_KIT_DISABLE_SANDBOX=1 \
+  motion-kit render entry.tsx --out out.mp4 --json
+```
+
+Only disable the sandbox when the CI environment requires that explicit security trade-off.
 
 ## `render`
 
@@ -71,6 +92,27 @@ A frame's bytes do not depend on which renderer captured it, so `--concurrency` 
 output. It defaults to half the machine's cores; raise it for a long video, lower it when memory or
 GPU contention is the limit.
 
+### MP4 size, quality and frame rate
+
+These options apply only to `.mp4` output; using them with a frames directory is `cli.invalid-arguments` (exit 2).
+
+- `--video-crf <n>` selects constant quality, an integer from 0 to 51, default 28. Lower values generally mean higher quality and larger files.
+- `--video-bitrate <kbps>` requests a positive integer video bitrate in kilobits per second, instead of CRF. It cannot be combined with `--video-crf`.
+- `--scale <factor|WxH>` resizes the encoded image, defaulting to the Composition dimensions. A factor such as `0.5` multiplies each viewport dimension and rounds it to the nearest integer; explicit dimensions use e.g. `1280x720`. Both resulting dimensions must be positive even integers. Lanczos scaling does not re-layout the Composition.
+- `--fps <decimal|numerator/denominator>` selects a positive output rate no greater than the Composition rate, defaulting to that rate. For example, use `24`, `29.97`, or `30000/1001`.
+
+Invalid values or combinations are `cli.invalid-arguments` (exit 2). For a reduced rate, each output frame samples the source frame containing its presentation time, rounded down. The output frame count is the ceiling of source duration times output rate; the last frame interval may cross the Composition's end. MP4 uses faststart for playback before the whole file is downloaded.
+
+CRF controls quality, not target size; there is no hard target-size mode. To estimate size, multiply video bitrate by duration, add 192 kbps for audio when present, and allow for container overhead. Single-pass bitrate and overhead vary, so leave margin and check the resulting file.
+
+For example, suppose a 60-second, 1920×1080 Composition with audio needs a roughly 10 MB Slack-sized deliverable (10,000,000 bytes). The total budget is `10,000,000 × 8 / 60 / 1000 ≈ 1,333 kbps`. Subtract `192 kbps` audio to get about `1,141 kbps` for video and overhead; choose `900 kbps` for margin. Scale to 720p:
+
+```bash
+motion-kit render entry.tsx --out video.mp4 --scale 1280x720 --video-bitrate 900
+```
+
+The estimate is `(900 + 192) × 1000 × 60 / 8 = 8,190,000 bytes`, plus container overhead. It is not a size guarantee; check the file against the recipient's actual limit.
+
 ### `--props`
 
 ```bash
@@ -82,12 +124,12 @@ The value must be a JSON object string. It is parsed, then validated and normali
 Composition's schema — defaults apply to fields you omit — and the resulting values are the
 component's props. A non-object string is `cli.invalid-arguments` (exit 2); valid JSON that fails the
 schema is `composition.props-invalid` (exit 1), with `details.issues` carrying the Zod issues and
-their paths, and nothing is rendered. `frame` has no `--props`.
+their paths, and nothing is rendered. `frame` accepts the same `--props` object.
 
 ### Audio has no flag
 
 The `.mp4` route muxes whatever the Composition declares in `audio`, resolving each `src` against the
-directory you run the command in. There is no `--audio`, `--mute` or gain option:
+project root. There is no `--audio`, `--mute` or gain option:
 [audio is Composition data](authoring.md#audio). A declared file that is missing, is not a regular
 file, or cannot be opened for reading is `asset.load-failed`, reported before any frame is encoded
 and with no output written.
@@ -97,8 +139,9 @@ and with no output written.
 | Option               | Meaning                                                                       |
 | -------------------- | ----------------------------------------------------------------------------- |
 | `--composition <id>` | Which Composition to capture. Required when the registry holds more than one. |
-| `--frame <n>`        | Global frame index to capture. Nonnegative integer, below the frame count.    |
-| `--out <png>`        | File to write. Required.                                                      |
+| `--frame <n>`        | Global frame indices, repeatable or comma-separated. Required.                |
+| `--out <path>`       | PNG file for one frame; directory for multiple frames. Required.              |
+| `--props <json>`     | JSON object validated by the Composition's schema.                            |
 | `--json`             | Print the envelope instead of the one-line summary.                           |
 
 ```bash
@@ -106,10 +149,13 @@ motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/kaito/hello-video/out/still.png (1920x1080) in 962.6ms
 ```
 
-`frame` opens one renderer, captures one frame and writes one PNG. It has no `--props`, needs no
-FFmpeg, and creates no directory — a missing parent is `internal.unexpected` (exit 3), so
-`mkdir -p out` first. A frame index outside the Composition is `composition.props-invalid` (exit 1,
-`location.frame` naming the request) — the Time Module's own rejection of an unproducible frame.
+`frame` needs no FFmpeg and creates output directories as needed. For several stills, pass
+`--frame 300,0 --frame 120 --out out/stills`; one renderer captures them in ascending order as
+`frame-00000.png`, `frame-00120.png`, and `frame-00300.png`. A multiple-frame target must be a
+directory, not an existing file or a `.png` path. Duplicate, negative, or non-integer indices are
+`cli.invalid-arguments` (exit 2). A frame index outside the Composition is
+`composition.props-invalid` (exit 1, `location.frame` naming the request). Capture stops at the
+first failure; PNGs already written remain.
 
 ## The JSON envelope
 
@@ -152,7 +198,7 @@ human-facing logs to stderr. Every document has these fields:
 }
 ```
 
-`frame`'s `data` is flat:
+`frame`'s single-frame `data` is flat:
 
 ```json
 {
@@ -164,6 +210,9 @@ human-facing logs to stderr. Every document has these fields:
   "height": 1080
 }
 ```
+
+For multiple frames, `frame` reports `format: "png-sequence"`, an absolute directory `output`,
+and `frames` containing the same per-frame fields except `format`, in ascending order.
 
 `docs`'s `data` is a union on `format`. A topic carries the file's text verbatim:
 
@@ -187,8 +236,9 @@ human-facing logs to stderr. Every document has these fields:
 }
 ```
 
-FPS is always a rational, including integer rates. `durationSeconds` is the Time Module's
-`frameCount / fps`, not a separately declared number. A successful render is `ok: true` and may still
+FPS is always a rational, including integer rates. `durationSeconds` is the Composition duration
+from the Time Module, not a separately declared number. At a reduced MP4 output rate, `frameCount`
+is the ceiling of that duration times the output FPS, so `frameCount / fps` can be longer. A successful render is `ok: true` and may still
 carry warnings; `ok: true` with warnings is a success, so branch on `ok`, not on an empty
 `diagnostics`.
 

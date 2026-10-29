@@ -24,7 +24,7 @@ import {
   type EncodeProgress,
   type Encoder,
 } from './encoder.ts';
-import { createFfmpegEncoder } from './ffmpeg.ts';
+import { createFfmpegEncoder, DEFAULT_VIDEO_CRF } from './ffmpeg.ts';
 
 let directory: string;
 beforeEach(() => {
@@ -356,6 +356,155 @@ describe('createFfmpegEncoder probe', () => {
 });
 
 describe('FfmpegEncoder.encode', () => {
+  it('pins the default CRF', () => {
+    expect(DEFAULT_VIDEO_CRF).toBe(28);
+  });
+
+  it.each(['png', 'jpeg'] as const)('pins %s input with and without scaling', async (format) => {
+    const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
+    const data = [Buffer.from('frame')];
+    for (const scaled of [false, true]) {
+      const result = await encoder.encode({
+        ...request({
+          frames: asyncIterableOf([frameOf(data, 0, undefined, format)]),
+          frameCount: 1,
+          imageFormat: format,
+        }),
+        ...(scaled ? { resolution: { width: 32, height: 32 } } : {}),
+      });
+      expect(result.ok).toBe(true);
+      const filter = format === 'jpeg' ? 'scale=out_range=tv,format=yuv420p' : '';
+      const scale = scaled ? 'scale=32:32:flags=lanczos' : '';
+      const filters = [filter, scale].filter(Boolean).join(',');
+      expect(encodeArgv()).toEqual([
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-f',
+        'image2pipe',
+        '-framerate',
+        '10/1',
+        '-c:v',
+        format === 'jpeg' ? 'mjpeg' : 'png',
+        '-i',
+        'pipe:0',
+        '-c:v',
+        'libx264',
+        ...(filters ? ['-vf', filters] : []),
+        '-crf',
+        '28',
+        '-movflags',
+        '+faststart',
+        '-pix_fmt',
+        'yuv420p',
+        '-r',
+        '10/1',
+        expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
+      ]);
+    }
+  });
+
+  it.each(['crf', 'bitrate', 'scale', 'fps'] as const)(
+    'pins %s arguments with and without audio',
+    async (option) => {
+      const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
+      const source = join(directory, 'clip.wav');
+      writeFileSync(source, 'RIFF');
+      for (const audio of [false, true]) {
+        if (audio) fakeFfprobe(2);
+        const extra =
+          option === 'crf'
+            ? { crf: 21 }
+            : option === 'bitrate'
+              ? { videoBitrate: 500 }
+              : option === 'scale'
+                ? { resolution: { width: 32, height: 32 } }
+                : {
+                    fps: { numerator: 5, denominator: 1 },
+                    sourceFps: { numerator: 10, denominator: 1 },
+                    durationSeconds: 0.3,
+                  };
+        const result = await encoder.encode({
+          ...request({ frames: streamOf([Buffer.from('frame')]), frameCount: 1 }),
+          ...extra,
+          ...(audio ? { audio: [{ src: source, startInFrames: 1, volume: 0.5 }] } : {}),
+        });
+        expect(result.ok).toBe(true);
+        const rate = option === 'fps' ? '5/1' : '10/1';
+        const graph = `[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=100:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=${option === 'fps' ? '0.300000' : '0.100000'},atrim=end=${option === 'fps' ? '0.300000' : '0.100000'}[aout]`;
+        expect(encodeArgv()).toEqual([
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-f',
+          'image2pipe',
+          '-framerate',
+          rate,
+          '-c:v',
+          'png',
+          '-i',
+          'pipe:0',
+          ...(audio ? ['-i', source] : []),
+          '-c:v',
+          'libx264',
+          ...(option === 'scale' ? ['-vf', 'scale=32:32:flags=lanczos'] : []),
+          ...(option === 'bitrate' ? ['-b:v', '500k'] : ['-crf', option === 'crf' ? '21' : '28']),
+          '-movflags',
+          '+faststart',
+          '-pix_fmt',
+          'yuv420p',
+          '-r',
+          rate,
+          ...(audio
+            ? [
+                '-filter_complex',
+                graph,
+                '-map',
+                '0:v:0',
+                '-map',
+                '[aout]',
+                '-c:a',
+                'aac',
+                '-b:a',
+                '192k',
+                '-ar',
+                '48000',
+              ]
+            : []),
+          expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
+        ]);
+      }
+    },
+  );
+  it('validates options and constructs quality and scale arguments', async () => {
+    const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
+    const base = request({ frames: streamOf(pngFrames(2)), frameCount: 2 });
+    for (const options of [
+      { crf: 52 },
+      { crf: 20, videoBitrate: 500 },
+      { videoBitrate: 0 },
+      { resolution: { width: 63, height: 64 } },
+    ]) {
+      expect(errorsOf(await encoder.encode({ ...base, ...options }))[0]?.code).toBe(
+        'internal.unexpected',
+      );
+    }
+    expect(
+      (
+        await encoder.encode({
+          ...base,
+          videoBitrate: 500,
+          resolution: { width: 32, height: 32 },
+          preset: 'slow',
+        })
+      ).ok,
+    ).toBe(true);
+    expect(encodeArgv().join(' ')).toContain(
+      '-vf scale=32:32:flags=lanczos -b:v 500k -preset slow -movflags +faststart',
+    );
+  });
   it('writes an H.264 file and reports a receipt for the whole range', async () => {
     const pngs = pngFrames(10);
     const progress: EncodeProgress[] = [];
@@ -500,6 +649,10 @@ describe('FfmpegEncoder.encode', () => {
       'pipe:0',
       '-c:v',
       'libx264',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
       '-pix_fmt',
       'yuv420p',
       '-r',
@@ -792,6 +945,10 @@ describe('declared audio', () => {
       'pipe:0',
       '-c:v',
       'libx264',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
       '-pix_fmt',
       'yuv420p',
       '-r',
@@ -830,7 +987,7 @@ describe('declared audio', () => {
     const graph = [
       '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=500:all=1[a0]',
       '[2:a]atrim=start=1.000000:end=2.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=1500:all=1[a1]',
-      '[a0][a1]amix=inputs=2:duration=longest:normalize=0,apad[aout]',
+      '[a0][a1]amix=inputs=2:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=3.000000,atrim=end=3.000000[aout]',
     ].join(';');
     expect(encodeArgv()).toEqual([
       '-y',
@@ -851,6 +1008,10 @@ describe('declared audio', () => {
       second,
       '-c:v',
       'libx264',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
       '-pix_fmt',
       'yuv420p',
       '-r',
@@ -867,8 +1028,6 @@ describe('declared audio', () => {
       '192k',
       '-ar',
       '48000',
-      '-t',
-      '3.000000',
       expect.stringMatching(/\/\.audio\.[0-9a-f-]{36}\.part\.mp4$/u),
     ]);
     // One channel probe per track, in declaration order: the count is what the graph depends on.
@@ -896,7 +1055,7 @@ describe('declared audio', () => {
     // the same file render 3.01 dB quieter as mono than as stereo; `pan` keeps every sample.
     const graph = encodeArgv()[encodeArgv().indexOf('-filter_complex') + 1] ?? '';
     expect(graph).toBe(
-      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=0:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,apad[aout]',
+      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=0:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=0.400000,atrim=end=0.400000[aout]',
     );
     expect(graph).not.toContain('channel_layouts=stereo');
   });

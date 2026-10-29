@@ -118,14 +118,24 @@ pnpm exec playwright install chromium      # or: npx playwright install chromium
 If the browser is installed and still will not launch:
 
 - **Linux containers and CI runners** restrict unprivileged user namespaces. Chromium's sandbox needs
-  them; turning the sandbox off is a renderer option (`createRenderer({ disableSandbox: true })`), not
-  a CLI flag, and it is a last resort rather than the default.
+  them; turning the sandbox off with `--disable-sandbox` or `createRenderer({ disableSandbox: true })`
+  is a last resort rather than the default.
 - **No GPU** is handled by Chromium's software rasteriser; the WebGL-forcing option
-  (`softwareWebGL: true` on `createRenderer`) is likewise an explicit choice, not something a render
-  needs for ordinary DOM/SVG/Canvas work.
+  (`--software-webgl` or `softwareWebGL: true` on `createRenderer`) is likewise an explicit choice,
+  not something a render needs for ordinary DOM/SVG/Canvas work.
 - **A Linux machine without Chromium's system libraries** needs the dependency step instead:
   `pnpm exec playwright install --with-deps chromium` (it installs packages, so it needs `sudo`).
   The launch error names the missing library.
+
+### Automatic fallback to software WebGL has been deprecated
+
+This Chromium page-console message, forwarded to stderr, indicates a SwiftShader-backed WebGL
+context, but does not identify which canvas created it. Inspect each relevant context: get
+`gl.getExtension('WEBGL_debug_renderer_info')` and, if available, read
+`gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)`. Software rendering can materially affect throughput.
+Adding `--enable-unsafe-swiftshader` to Chromium opts trusted content into lower security guarantees
+and suppresses the warning; it does not select a GPU. This release has no GPU-selection option. See
+the [investigation](../contexts/agent/knowledge/20261029-swiftshader-warning.md).
 
 ### The render hangs, then reports a timeout
 
@@ -147,7 +157,7 @@ name the source as it was written, redacted:
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A font or image that exists in the project fails     | `source` must be a **root-relative URL** (`/assets/logo.png`), not a filesystem path and not a JavaScript import.                                                                                                                                                                 |
 | Nothing found under `examples/<name>/assets.local`   | The example's placeholders were never generated: run `node examples/slideshow/fetch-assets.ts` or `node examples/explainer/fetch-assets.ts --placeholders`.                                                                                                                       |
-| An audio clip fails before the first frame           | `audio[].src` is resolved against the directory you run the CLI in; a missing, non-file or unreadable path is reported with no output written.                                                                                                                                    |
+| An audio clip fails before the first frame           | `audio[].src` is resolved against the project root (the working directory by default); a missing, non-file or unreadable path is reported with no output written.                                                                                                                 |
 | `--props '{"assets":"final"}'` fails on the examples | `final` reads media a clone does not have: `slideshow` reads `assets/` (nothing is committed there yet) and `explainer` reads `assets.local/portraits/` and `assets.local/voice/`, which only step 2 of its `fetch-assets.ts` writes. Render the default (`placeholder`) instead. |
 
 ## `render.page-error`
@@ -195,8 +205,6 @@ The hint says which of those applies. Without `--json` the same text goes to std
 A bug or an unconverted exception; exit code `3` and the stack trace on stderr. Two cases are known
 and avoidable rather than real bugs:
 
-- `frame --out out/still.png` when `out/` does not exist: `frame` writes only the file it was given.
-  Run `mkdir -p out` first, or use `render`, which creates its directories.
 - `--out` naming an existing directory for an `.mp4` target: the encoder cannot rename its temporary
   file onto a directory. Point `--out` at a file path.
 
