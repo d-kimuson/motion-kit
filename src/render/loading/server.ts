@@ -20,7 +20,12 @@ import { namedPlugins } from './plugins.ts';
 import { loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
 
 const input = z
-  .object({ projectRoot: z.string(), entry: z.string(), workspace: z.string() })
+  .object({
+    projectRoot: z.string(),
+    entry: z.string(),
+    workspace: z.string(),
+    viteConfig: z.string().optional(),
+  })
   .parse(JSON.parse(process.argv[2] ?? '{}'));
 const entry = resolve(input.projectRoot, input.entry);
 // Only React membership is owned; keep each environment's project policy/order.
@@ -34,9 +39,11 @@ const withReactDedupe = (dedupe: readonly string[]) => [
 ];
 // Diagnostic location before evaluation; discovery/evaluation still belongs to Vite.
 let configPath =
+  input.viteConfig ??
   ['js', 'mjs', 'ts', 'cjs', 'mts', 'cts']
     .map((extension) => join(input.projectRoot, `vite.config.${extension}`))
-    .find(existsSync) ?? join(input.projectRoot, 'vite.config.ts');
+    .find(existsSync) ??
+  join(input.projectRoot, 'vite.config.ts');
 const adapter = installBundledVite(input.workspace);
 const send = (message: unknown, callback?: (error: Error | null) => void) =>
   callback === undefined ? process.send?.(message) : process.send?.(message, callback);
@@ -100,7 +107,7 @@ try {
   });
   const loaded = await vite.loadConfigFromFile(
     { command: 'serve', mode: 'development' },
-    undefined,
+    input.viteConfig,
     input.projectRoot,
     'silent',
     logger,

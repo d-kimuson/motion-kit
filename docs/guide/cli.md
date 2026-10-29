@@ -8,8 +8,8 @@ as text, and with it exactly one versioned JSON envelope on stdout.
 motion-kit <command> [args]
 ```
 
-For `render` and `frame`, the first argument is an entry file relative to the directory you run the
-command in: a `.tsx`/`.ts` module that exports `compositions` (see
+For `render` and `frame`, the first argument is an entry file relative to the project root (the
+directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions` (see
 [authoring](authoring.md#the-registry)).
 
 ## Commands
@@ -38,6 +38,27 @@ command is `pnpm exec motion-kit …`, with npm `npx motion-kit …`, and with y
 Both that form and `node dist/cli.js …` appear below: the second is the same CLI run out of a
 checkout of this repository, after `pnpm build`, which is how the commands in the `examples/`
 directory of the repository are written.
+
+## Renderer configuration
+
+Both `render` and `frame` accept these options:
+
+| Flag                   | Environment override         | Meaning                                                                                           |
+| ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `--project-root <dir>` | `MOTION_KIT_PROJECT_ROOT`    | Project root for entry loading and relative MP4 audio sources; defaults to the working directory. |
+| `--vite-config <path>` | `MOTION_KIT_VITE_CONFIG`     | Explicit Vite config file; otherwise Vite discovers a config in the project root.                 |
+| `--software-webgl`     | `MOTION_KIT_SOFTWARE_WEBGL`  | Opt into software WebGL; default off.                                                             |
+| `--disable-sandbox`    | `MOTION_KIT_DISABLE_SANDBOX` | Explicitly disable the Chromium sandbox; default off.                                             |
+
+Flags override environment values, which override defaults. Boolean environment values accept `1` or `true`, and `0`, `false` or empty; other values are `cli.invalid-arguments`. Relative configuration paths resolve against the working directory; the project root must exist as a directory and the Vite config as a file. The sandbox is never disabled automatically, including in containers.
+
+```bash
+MOTION_KIT_PROJECT_ROOT=./video MOTION_KIT_VITE_CONFIG=./ci/vite.config.ts \
+  MOTION_KIT_SOFTWARE_WEBGL=1 MOTION_KIT_DISABLE_SANDBOX=1 \
+  motion-kit render entry.tsx --out out.mp4 --json
+```
+
+Only disable the sandbox when the CI environment requires that explicit security trade-off.
 
 ## `render`
 
@@ -87,7 +108,7 @@ their paths, and nothing is rendered. `frame` has no `--props`.
 ### Audio has no flag
 
 The `.mp4` route muxes whatever the Composition declares in `audio`, resolving each `src` against the
-directory you run the command in. There is no `--audio`, `--mute` or gain option:
+project root. There is no `--audio`, `--mute` or gain option:
 [audio is Composition data](authoring.md#audio). A declared file that is missing, is not a regular
 file, or cannot be opened for reading is `asset.load-failed`, reported before any frame is encoded
 and with no output written.

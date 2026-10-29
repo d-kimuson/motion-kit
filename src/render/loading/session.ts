@@ -24,6 +24,8 @@ import { loadingFailure } from './diagnostics.ts';
 export type LoadingSessionOptions = BrowserOptions & {
   projectRoot: string;
   entry: string;
+  /** Explicit Vite config file; omit to discover it under projectRoot. */
+  viteConfig?: string;
   loadingTimeoutMs?: number;
   signal?: AbortSignal;
   frameTimeoutMs?: number;
@@ -245,6 +247,9 @@ export const openLoadingSession = async (
           JSON.stringify({
             projectRoot: resolve(options.projectRoot),
             entry: resolve(options.projectRoot, options.entry),
+            ...(options.viteConfig === undefined
+              ? {}
+              : { viteConfig: resolve(options.viteConfig) }),
             workspace,
           }),
         ],

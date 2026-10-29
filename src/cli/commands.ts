@@ -12,6 +12,10 @@ const renderCommand = new Command('render')
   .requiredOption('--out <file-or-dir>')
   .option('--props <json>')
   .option('--concurrency <n>')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--software-webgl')
+  .option('--disable-sandbox')
   .option('--json')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
@@ -21,6 +25,10 @@ const frameCommand = new Command('frame')
   .option('--composition <id>')
   .requiredOption('--frame <n>')
   .requiredOption('--out <png>')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--software-webgl')
+  .option('--disable-sandbox')
   .option('--json')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
@@ -47,7 +55,7 @@ const valueTakingLongs = (command: Command): string[] =>
 /**
  * The options that consume the following argv token as their value, derived from the declarations
  * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`,
- * `--concurrency` and `--frame` today, while `--json` and `--help` take none.
+ * `--concurrency`, `--frame`, `--project-root` and `--vite-config` today, while boolean flags take none.
  *
  * Only long names are collected: `--opt <value>` is the form the resolver skips. A value-taking
  * option declared with a short alias (`-o <value>`) would slip past it, so none has one today, and

@@ -72,7 +72,9 @@ describe('resolveCommand', () => {
       '--concurrency',
       '--frame',
       '--out',
+      '--project-root',
       '--props',
+      '--vite-config',
     ]);
   });
 

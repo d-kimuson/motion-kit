@@ -91,7 +91,7 @@ type RunResult = {
  */
 const run = async (
   args: readonly string[],
-  env?: Record<string, string>,
+  env?: Record<string, string | undefined>,
   options: { readonly envelope?: false } = {},
 ): Promise<RunResult> => {
   let stdout = '';
@@ -277,6 +277,101 @@ const docsTopicRows = [
 ] as const;
 
 describe('motion-kit CLI', () => {
+  it.each([
+    { flags: ['--project-root', 'missing'], env: {}, hint: '--project-root' },
+    { flags: ['--vite-config', 'missing'], env: {}, hint: '--vite-config' },
+    { flags: [], env: { MOTION_KIT_SOFTWARE_WEBGL: 'yes' }, hint: 'MOTION_KIT_SOFTWARE_WEBGL' },
+    { flags: [], env: { MOTION_KIT_PROJECT_ROOT: 'missing' }, hint: 'MOTION_KIT_PROJECT_ROOT' },
+  ])('reports invalid renderer configuration: $hint', async ({ flags, env, hint }) => {
+    const result = await run(
+      [
+        'frame',
+        'entry.ts',
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, 'invalid.png'),
+        ...flags,
+        '--json',
+      ],
+      env,
+    );
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      command: 'frame',
+      ok: false,
+      diagnostics: [{ code: 'cli.invalid-arguments' }],
+    });
+    expect(envelope.diagnostics[0]?.hint).toContain(hint);
+  });
+
+  it('uses the environment root and allows flags to override invalid environment settings', async () => {
+    const result = await run(
+      [
+        'frame',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, 'configured.png'),
+        '--project-root',
+        projectRoot,
+        '--software-webgl',
+        '--json',
+      ],
+      {
+        MOTION_KIT_PROJECT_ROOT: 'missing',
+        MOTION_KIT_SOFTWARE_WEBGL: 'invalid',
+      },
+    );
+    expect(result.code).toBe(0);
+    expect(assertValidEnvelope(result).ok).toBe(true);
+    const alias = join(outputRoot, 'environment-project');
+    symlinkSync(projectRoot, alias);
+    const applied = await run(
+      [
+        'frame',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, 'env-configured.png'),
+        '--json',
+      ],
+      { MOTION_KIT_PROJECT_ROOT: alias, MOTION_KIT_SOFTWARE_WEBGL: 'true' },
+    );
+    expect(applied.code).toBe(0);
+    expect(assertValidEnvelope(applied).ok).toBe(true);
+  }, 60_000);
+
+  it('loads the explicit Vite config in every pooled renderer', async () => {
+    const marker = join(outputRoot, 'vite-config-marker');
+    writeFileSync(
+      join(projectRoot, 'chosen.config.ts'),
+      `import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(marker)}, 'loaded\\n');\nexport default {};`,
+    );
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      join(outputRoot, 'configured-frames'),
+      '--concurrency',
+      '2',
+      '--vite-config',
+      'chosen.config.ts',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    expect(assertValidEnvelope(result).ok).toBe(true);
+    expect(readFileSync(marker, 'utf8').trim().split('\n')).toHaveLength(2);
+  }, 120_000);
   it('prints docs/index.md verbatim when no topic is given', async () => {
     const result = await run(['docs']);
     expect(result.code).toBe(0);

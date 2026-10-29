@@ -20,6 +20,7 @@ import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
 import { CliArgsSchema, type DocsArgs, type FrameArgs, type RenderArgs } from './args.ts';
 import { commands } from './commands.ts';
+import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
 
@@ -127,6 +128,10 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         command,
         entry: parsable.processedArgs[0],
         composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
         out: options['out'],
         props: options['props'],
         concurrency: options['concurrency'],
@@ -140,6 +145,10 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         command,
         entry: parsable.processedArgs[0],
         composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
         out: options['out'],
         frame: options['frame'],
         json,
@@ -271,11 +280,15 @@ const isFile = (path: string): boolean => {
   }
 };
 
-const rendererOptions = (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
-  const projectRoot = process.cwd();
+const rendererOptions = (
+  args: RenderArgs | FrameArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+) => {
+  const { projectRoot } = config;
   if (!isFile(resolve(projectRoot, args.entry))) return undefined;
   return {
-    projectRoot,
+    ...config,
     entry: args.entry,
     ...(args.composition === undefined ? {} : { compositionId: args.composition }),
     ...('props' in args && args.props !== undefined ? { props: args.props } : {}),
@@ -284,8 +297,8 @@ const rendererOptions = (args: RenderArgs | FrameArgs, signal: AbortSignal) => {
 };
 
 /** One frame needs one realm; a whole range is dealt across `--concurrency` of them. */
-const openRenderer = async (args: FrameArgs, signal: AbortSignal) => {
-  const options = rendererOptions(args, signal);
+const openRenderer = async (args: FrameArgs, config: RendererConfig, signal: AbortSignal) => {
+  const options = rendererOptions(args, config, signal);
   if (options === undefined)
     return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
   const renderer = await createRenderer(options);
@@ -293,8 +306,8 @@ const openRenderer = async (args: FrameArgs, signal: AbortSignal) => {
   return { ok: true as const, renderer: renderer.value };
 };
 
-const openPool = async (args: RenderArgs, signal: AbortSignal) => {
-  const options = rendererOptions(args, signal);
+const openPool = async (args: RenderArgs, config: RendererConfig, signal: AbortSignal) => {
+  const options = rendererOptions(args, config, signal);
   if (options === undefined)
     return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
   const pool = await createRendererPool({
@@ -307,12 +320,13 @@ const openPool = async (args: RenderArgs, signal: AbortSignal) => {
 
 const runRender = async (
   args: RenderArgs,
+  config: RendererConfig,
   signal: AbortSignal,
   decide: Decide,
 ): Promise<CommandOutcome> => {
   // Checked before the browser exists, so a run cancelled while it started does no work.
   if (signal.aborted) return abortedOutcome;
-  const opened = await openPool(args, signal);
+  const opened = await openPool(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
@@ -330,7 +344,7 @@ const runRender = async (
       const encoded = await renderVideo({
         composition: renderer,
         output: outAbsolute,
-        projectRoot: process.cwd(),
+        projectRoot: config.projectRoot,
         signal,
       });
       if (!encoded.ok)
@@ -418,11 +432,12 @@ const runRender = async (
 
 const runFrame = async (
   args: FrameArgs,
+  config: RendererConfig,
   signal: AbortSignal,
   decide: Decide,
 ): Promise<CommandOutcome> => {
   if (signal.aborted) return abortedOutcome;
-  const opened = await openRenderer(args, signal);
+  const opened = await openRenderer(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
@@ -626,6 +641,9 @@ export const runCli = async (
   }
 
   const args = checked.data;
+  const config = resolveRendererConfig(args, process.env, process.cwd());
+  if (!config.ok)
+    return emit(buildEnvelope(args.command, failure([config.error]), durationMs()), args.json);
   let outcome: CommandOutcome;
   // A cancelled run's line is written below, but a library that exits the process from its own
   // signal handler can end the run before that line is reached; this cover is the last chance to
@@ -648,8 +666,8 @@ export const runCli = async (
     try {
       outcome =
         args.command === 'render'
-          ? await runRender(args, signal, decide)
-          : await runFrame(args, signal, decide);
+          ? await runRender(args, config.value, signal, decide)
+          : await runFrame(args, config.value, signal, decide);
     } catch (error) {
       if (error instanceof Error && error.stack !== undefined)
         process.stderr.write(`${error.stack}\n`);

@@ -25,9 +25,16 @@ const entry = z.string().min(1);
 const composition = z.string().min(1).optional();
 const out = z.string().min(1);
 const json = z.boolean();
+const rendererConfig = {
+  projectRoot: z.string().optional(),
+  viteConfig: z.string().optional(),
+  softwareWebgl: z.boolean().optional(),
+  disableSandbox: z.boolean().optional(),
+};
 
 export const RenderArgsSchema = z.strictObject({
   command: z.literal('render'),
+  ...rendererConfig,
   entry,
   composition,
   out,
@@ -39,6 +46,7 @@ export const RenderArgsSchema = z.strictObject({
 
 export const FrameArgsSchema = z.strictObject({
   command: z.literal('frame'),
+  ...rendererConfig,
   entry,
   composition,
   out,
