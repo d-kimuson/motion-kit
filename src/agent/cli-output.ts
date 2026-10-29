@@ -30,13 +30,21 @@ export const RenderDataSchema = z.discriminatedUnion('format', [
   }),
 ]);
 
-export const FrameDataSchema = z.strictObject({
+const frameShape = {
   output: outputPath,
-  format: z.literal('png'),
   frame: z.int().nonnegative(),
   timeSeconds: z.number().nonnegative(),
   ...dimensions,
-});
+};
+
+export const FrameDataSchema = z.discriminatedUnion('format', [
+  z.strictObject({ ...frameShape, format: z.literal('png') }),
+  z.strictObject({
+    output: outputPath,
+    format: z.literal('png-sequence'),
+    frames: z.array(z.strictObject(frameShape)),
+  }),
+]);
 
 // The shipped guides, addressed by file stem. `index` is `docs/index.md`; every other id is
 // `docs/guide/<id>.md`. The order is the one `docs --list` prints and the error hint repeats.

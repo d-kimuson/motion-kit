@@ -50,7 +50,30 @@ export const FrameArgsSchema = z.strictObject({
   entry,
   composition,
   out,
-  frame: z.coerce.number().int().nonnegative(),
+  frame: z
+    .array(z.string())
+    .min(1)
+    .transform((values, context) => {
+      const frames: number[] = [];
+      for (const value of values.flatMap((item) => item.split(','))) {
+        const number = Number(value);
+        if (!/^-?\d+$/u.test(value) || !Number.isSafeInteger(number)) {
+          context.addIssue({
+            code: 'custom',
+            message: `Frame ${JSON.stringify(value)} must be a safe integer.`,
+          });
+        } else if (number < 0) {
+          context.addIssue({ code: 'custom', message: `Frame ${value} must not be negative.` });
+        } else if (frames.includes(number)) {
+          context.addIssue({
+            code: 'custom',
+            message: `Duplicate frame ${value}; pass each frame once.`,
+          });
+        } else frames.push(number);
+      }
+      return frames.sort((a, b) => a - b);
+    }),
+  props: propsText.optional(),
   json,
 });
 

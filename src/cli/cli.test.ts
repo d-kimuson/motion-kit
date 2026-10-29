@@ -277,6 +277,123 @@ const docsTopicRows = [
 ] as const;
 
 describe('motion-kit CLI', () => {
+  it('captures ordered noncontiguous stills with one loading service', async () => {
+    const directory = join(outputRoot, 'batch');
+    const marker = join(outputRoot, 'batch-config-marker');
+    writeFileSync(
+      join(projectRoot, 'batch.config.ts'),
+      `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'loaded\\n'); export default {};`,
+    );
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '5,0',
+      '--frame',
+      '2',
+      '--out',
+      directory,
+      '--props',
+      '{"mode":"normal"}',
+      '--vite-config',
+      'batch.config.ts',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope.data).toMatchObject({
+      format: 'png-sequence',
+      output: directory,
+      frames: [{ frame: 0 }, { frame: 2 }, { frame: 5 }],
+    });
+    expect(readdirSync(directory).sort()).toEqual([
+      'frame-00000.png',
+      'frame-00002.png',
+      'frame-00005.png',
+    ]);
+    expect(
+      readFileSync(join(directory, 'frame-00000.png')).equals(
+        readFileSync(join(directory, 'frame-00002.png')),
+      ),
+    ).toBe(false);
+    expect(readFileSync(marker, 'utf8').trim().split('\n')).toHaveLength(1);
+  }, 60_000);
+
+  it.each(['0,0', '1.5', '-1'])('rejects invalid frame values %s', async (value) => {
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--frame',
+      value,
+      '--out',
+      join(outputRoot, 'bad'),
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+    expect(envelope.diagnostics[0]?.hint).toContain(value === '0,0' ? '0' : value);
+  });
+
+  it('rejects file targets and malformed props', async () => {
+    const file = join(outputRoot, 'existing-file');
+    writeFileSync(file, 'existing');
+    for (const out of [file, join(outputRoot, 'batch.png')]) {
+      const result = await run(['frame', 'entry.ts', '--frame', '0,1', '--out', out, '--json']);
+      expect(result.code).toBe(2);
+      expect(assertValidEnvelope(result).diagnostics[0]?.hint).toContain('directory');
+    }
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--frame',
+      '0',
+      '--out',
+      file,
+      '--props',
+      '{',
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    expect(assertValidEnvelope(result).diagnostics[0]?.hint).toContain('--props');
+  });
+
+  it('creates a single parent and retains earlier frames when a later frame is out of range', async () => {
+    const single = join(outputRoot, 'nested', 'single.png');
+    const first = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      single,
+      '--json',
+    ]);
+    expect(first.code).toBe(0);
+    expect(existsSync(single)).toBe(true);
+    const directory = join(outputRoot, 'partial');
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0,6',
+      '--out',
+      directory,
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    expect(assertValidEnvelope(result).diagnostics[0]).toMatchObject({
+      code: 'composition.props-invalid',
+      location: { frame: 6 },
+    });
+    expect(readdirSync(directory)).toEqual(['frame-00000.png']);
+  }, 60_000);
   it.each([
     { flags: ['--project-root', 'missing'], env: {}, hint: '--project-root' },
     { flags: ['--vite-config', 'missing'], env: {}, hint: '--vite-config' },

@@ -21,6 +21,10 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 - Include known location information in each Diagnostic according to the accepted CLI output contract.
 - The [accepted CLI output contract](adr/20261024-cli-output-contract.accepted.md) fixes the JSON envelope, severity semantics, exit codes, and versioning policy.
 
+## Batch stills
+
+`frame` accepts repeated or comma-separated frame indices and captures them in ascending order with one renderer. One frame writes a PNG file; multiple frames write numbered PNGs to a directory. The command accepts Composition props, creates directories, and leaves already-written PNGs on failure or cancellation.
+
 ## Renderer configuration
 
 `render` and `frame` resolve renderer options once per invocation: flags override `MOTION_KIT_*` environment values, which override defaults. The project root controls entry loading and relative MP4 audio sources; an explicit Vite config replaces discovery. Software WebGL and sandbox disabling are explicit opt-ins. Paths and environment booleans are validated before opening a renderer. The [renderer configuration ADR](adr/20261029-cli-renderer-configuration.accepted.md) fixes the names and precedence.

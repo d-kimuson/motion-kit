@@ -19,8 +19,8 @@ directory you run the command in by default): a `.tsx`/`.ts` module that exports
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> \
   [--props <json>] [--concurrency <n>] [--json]
 
-# One frame as a PNG.
-motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
+# One frame as a PNG, or several stills in a directory.
+motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
 
 # The guide, or one topic, printed verbatim.
 motion-kit docs [topic] [--list] [--json]
@@ -103,7 +103,7 @@ The value must be a JSON object string. It is parsed, then validated and normali
 Composition's schema — defaults apply to fields you omit — and the resulting values are the
 component's props. A non-object string is `cli.invalid-arguments` (exit 2); valid JSON that fails the
 schema is `composition.props-invalid` (exit 1), with `details.issues` carrying the Zod issues and
-their paths, and nothing is rendered. `frame` has no `--props`.
+their paths, and nothing is rendered. `frame` accepts the same `--props` object.
 
 ### Audio has no flag
 
@@ -118,8 +118,9 @@ and with no output written.
 | Option               | Meaning                                                                       |
 | -------------------- | ----------------------------------------------------------------------------- |
 | `--composition <id>` | Which Composition to capture. Required when the registry holds more than one. |
-| `--frame <n>`        | Global frame index to capture. Nonnegative integer, below the frame count.    |
-| `--out <png>`        | File to write. Required.                                                      |
+| `--frame <n>`        | Global frame indices, repeatable or comma-separated. Required.                |
+| `--out <path>`       | PNG file for one frame; directory for multiple frames. Required.              |
+| `--props <json>`     | JSON object validated by the Composition's schema.                            |
 | `--json`             | Print the envelope instead of the one-line summary.                           |
 
 ```bash
@@ -127,10 +128,13 @@ motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/kaito/hello-video/out/still.png (1920x1080) in 962.6ms
 ```
 
-`frame` opens one renderer, captures one frame and writes one PNG. It has no `--props`, needs no
-FFmpeg, and creates no directory — a missing parent is `internal.unexpected` (exit 3), so
-`mkdir -p out` first. A frame index outside the Composition is `composition.props-invalid` (exit 1,
-`location.frame` naming the request) — the Time Module's own rejection of an unproducible frame.
+`frame` needs no FFmpeg and creates output directories as needed. For several stills, pass
+`--frame 300,0 --frame 120 --out out/stills`; one renderer captures them in ascending order as
+`frame-00000.png`, `frame-00120.png`, and `frame-00300.png`. A multiple-frame target must be a
+directory, not an existing file or a `.png` path. Duplicate, negative, or non-integer indices are
+`cli.invalid-arguments` (exit 2). A frame index outside the Composition is
+`composition.props-invalid` (exit 1, `location.frame` naming the request). Capture stops at the
+first failure; PNGs already written remain.
 
 ## The JSON envelope
 
@@ -173,7 +177,7 @@ human-facing logs to stderr. Every document has these fields:
 }
 ```
 
-`frame`'s `data` is flat:
+`frame`'s single-frame `data` is flat:
 
 ```json
 {
@@ -185,6 +189,9 @@ human-facing logs to stderr. Every document has these fields:
   "height": 1080
 }
 ```
+
+For multiple frames, `frame` reports `format: "png-sequence"`, an absolute directory `output`,
+and `frames` containing the same per-frame fields except `format`, in ascending order.
 
 `docs`'s `data` is a union on `format`. A topic carries the file's text verbatim:
 

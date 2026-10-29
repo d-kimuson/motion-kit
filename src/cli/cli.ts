@@ -151,6 +151,7 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         disableSandbox: options['disableSandbox'],
         out: options['out'],
         frame: options['frame'],
+        props: options['props'],
         json,
       },
     };
@@ -270,7 +271,9 @@ const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() ===
 const abortedLine = (args: RenderArgs | FrameArgs): string =>
   args.command === 'render' && !isVideoOutput(args.out)
     ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
-    : `${args.command} aborted; no output was produced`;
+    : args.command === 'frame' && args.frame.length > 1
+      ? `frame aborted; any PNG frames already written remain in ${args.out}`
+      : `${args.command} aborted; no output was produced`;
 
 const isFile = (path: string): boolean => {
   try {
@@ -437,6 +440,12 @@ const runFrame = async (
   decide: Decide,
 ): Promise<CommandOutcome> => {
   if (signal.aborted) return abortedOutcome;
+  const outAbsolute = resolve(process.cwd(), args.out);
+  const multiple = args.frame.length > 1;
+  if (multiple && (extname(outAbsolute).toLowerCase() === '.png' || isFile(outAbsolute)))
+    return decide(
+      failure([invalidArguments('Pass a directory to --out when capturing multiple frames.')]),
+    );
   const opened = await openRenderer(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
@@ -444,21 +453,39 @@ const runFrame = async (
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
     if (!rate.ok) return decide(failure([rate.error]));
-    const result = await renderer.renderFrame({ frame: args.frame, signal });
-    if (!result.ok) return decide(frameFailure(result));
-    const outAbsolute = resolve(process.cwd(), args.out);
-    writeFileSync(outAbsolute, result.value.image);
-    return decide({
-      ok: true,
-      diagnostics: [...result.value.diagnostics],
-      data: {
-        output: outAbsolute,
-        format: 'png',
+    mkdirSync(multiple ? outAbsolute : dirname(outAbsolute), { recursive: true });
+    const frames: {
+      output: string;
+      frame: number;
+      timeSeconds: number;
+      width: number;
+      height: number;
+    }[] = [];
+    const diagnostics: Diagnostic[] = [];
+    for (const frame of args.frame) {
+      const result = await renderer.renderFrame({ frame, signal });
+      if (!result.ok) return decide(frameFailure(result));
+      const output = multiple
+        ? join(outAbsolute, `frame-${String(frame).padStart(5, '0')}.png`)
+        : outAbsolute;
+      writeFileSync(output, result.value.image);
+      frames.push({
+        output,
         frame: result.value.frame,
-        timeSeconds: toSeconds(frameToTime(BigInt(result.value.frame), rate.value)),
+        timeSeconds: toSeconds(frameToTime(BigInt(frame), rate.value)),
         width: result.value.width,
         height: result.value.height,
-      },
+      });
+      diagnostics.push(...result.value.diagnostics);
+    }
+    const first = frames[0];
+    if (first === undefined) return decide(failure([internalUnexpected()]));
+    return decide({
+      ok: true,
+      diagnostics,
+      data: multiple
+        ? { output: outAbsolute, format: 'png-sequence', frames }
+        : { ...first, format: 'png' },
     });
   } finally {
     await renderer.dispose();
@@ -495,8 +522,12 @@ const summarize = (envelope: Envelope): string => {
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
       return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
     }
-    if (envelope.command === 'frame')
-      return `captured frame ${envelope.data.frame} to ${envelope.data.output} (${envelope.data.width}x${envelope.data.height})`;
+    if (envelope.command === 'frame') {
+      const data = envelope.data;
+      return data.format === 'png'
+        ? `captured frame ${data.frame} to ${data.output} (${data.width}x${data.height})`
+        : `captured ${data.frames.length} frames to ${data.output}`;
+    }
   }
   return `${envelope.command ?? 'motion-kit'} failed`;
 };
@@ -578,7 +609,7 @@ const usageText = `${[
   '',
   'Commands:',
   '  docs [topic]  print a shipped guide; --list names the topics',
-  '  frame         capture one frame to a PNG',
+  '  frame         capture one or more frames to PNG',
   '  render        render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),',
   '                with --concurrency <n> renderers capturing at once (default: half the cores)',
   '',

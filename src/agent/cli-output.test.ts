@@ -36,6 +36,19 @@ const frameData = {
   width: 1920,
   height: 1080,
 };
+const sequenceData = {
+  output: '/tmp/stills',
+  format: 'png-sequence',
+  frames: [
+    {
+      output: '/tmp/stills/frame-00150.png',
+      frame: 150,
+      timeSeconds: 5,
+      width: 1920,
+      height: 1080,
+    },
+  ],
+};
 const docsData = {
   format: 'markdown',
   topic: 'cli',
@@ -75,6 +88,7 @@ describe('CLI output v1', () => {
   it.each([
     ['render', renderData],
     ['frame', frameData],
+    ['frame', sequenceData],
     ['docs', docsData],
     ['docs', docsList],
     ['inspect', {}],
@@ -156,6 +170,11 @@ describe('CLI output v1', () => {
     { ...base, data: { ...renderData, output: 'C:relative.mp4' } },
     { ...base, command: 'frame', data: { ...frameData, frame: 1.5 } },
     { ...base, command: 'frame', data: { ...frameData, format: 'jpeg' } },
+    {
+      ...base,
+      command: 'frame',
+      data: { ...sequenceData, frames: [{ ...sequenceData.frames[0], frame: -1 }] },
+    },
     { ...base, diagnostics: [{ ...error, severity: 'warning', hint: undefined }] },
     { ...base, ok: false, diagnostics: [{ ...error, hint: undefined }] },
     { ...base, ok: false, diagnostics: [{ ...error, code: 'asset.load_failed' }] },

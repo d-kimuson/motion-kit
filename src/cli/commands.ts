@@ -23,8 +23,14 @@ const renderCommand = new Command('render')
 const frameCommand = new Command('frame')
   .argument('<entry>')
   .option('--composition <id>')
-  .requiredOption('--frame <n>')
-  .requiredOption('--out <png>')
+  .requiredOption(
+    '--frame <n>',
+    'frame indices, repeatable or comma-separated',
+    (value: string, previous: string[]) => [...previous, value],
+    [],
+  )
+  .requiredOption('--out <file-or-dir>')
+  .option('--props <json>')
   .option('--project-root <dir>')
   .option('--vite-config <path>')
   .option('--software-webgl')
