@@ -92,6 +92,27 @@ A frame's bytes do not depend on which renderer captured it, so `--concurrency` 
 output. It defaults to half the machine's cores; raise it for a long video, lower it when memory or
 GPU contention is the limit.
 
+### MP4 size, quality and frame rate
+
+These options apply only to `.mp4` output; using them with a frames directory is `cli.invalid-arguments` (exit 2).
+
+- `--video-crf <n>` selects constant quality, an integer from 0 to 51, default 28. Lower values generally mean higher quality and larger files.
+- `--video-bitrate <kbps>` requests a positive integer video bitrate in kilobits per second, instead of CRF. It cannot be combined with `--video-crf`.
+- `--scale <factor|WxH>` resizes the encoded image, defaulting to the Composition dimensions. A factor such as `0.5` multiplies each viewport dimension and rounds it to the nearest integer; explicit dimensions use e.g. `1280x720`. Both resulting dimensions must be positive even integers. Lanczos scaling does not re-layout the Composition.
+- `--fps <decimal|numerator/denominator>` selects a positive output rate no greater than the Composition rate, defaulting to that rate. For example, use `24`, `29.97`, or `30000/1001`.
+
+Invalid values or combinations are `cli.invalid-arguments` (exit 2). For a reduced rate, each output frame samples the source frame containing its presentation time, rounded down. The output frame count is the ceiling of source duration times output rate; the last frame interval may cross the Composition's end. MP4 uses faststart for playback before the whole file is downloaded.
+
+CRF controls quality, not target size; there is no hard target-size mode. To estimate size, multiply video bitrate by duration, add 192 kbps for audio when present, and allow for container overhead. Single-pass bitrate and overhead vary, so leave margin and check the resulting file.
+
+For example, suppose a 60-second, 1920×1080 Composition with audio needs a roughly 10 MB Slack-sized deliverable (10,000,000 bytes). The total budget is `10,000,000 × 8 / 60 / 1000 ≈ 1,333 kbps`. Subtract `192 kbps` audio to get about `1,141 kbps` for video and overhead; choose `900 kbps` for margin. Scale to 720p:
+
+```bash
+motion-kit render entry.tsx --out video.mp4 --scale 1280x720 --video-bitrate 900
+```
+
+The estimate is `(900 + 192) × 1000 × 60 / 8 = 8,190,000 bytes`, plus container overhead. It is not a size guarantee; check the file against the recipient's actual limit.
+
 ### `--props`
 
 ```bash
