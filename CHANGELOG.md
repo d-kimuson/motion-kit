@@ -4,7 +4,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
-## Unreleased
+## 0.2.0 — 2026-10-29
 
 ### Added
 
