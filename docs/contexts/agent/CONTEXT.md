@@ -1,12 +1,13 @@
 # agent
 
-What a coding agent operates. agent provides the CLI and diagnostics: render, frame, inspect, validate first, with JSON output so an agent can act on the result without a GUI.
+What a coding agent operates. agent provides the CLI and diagnostics: render, frame and docs today, inspect and validate later, with JSON output so an agent can act on the result without a GUI.
 
 ## Ubiquitous Language
 
 | Term              | Code                   | Definition                                                                                                                                                                 |
 | ----------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CLI               | `motion-kit <command>` | The command-line entry; every command supports JSON output.                                                                                                                |
+| Docs              | `docs`                 | Printing a guide that ships with the package, or listing the guides. `motion-kit docs [topic]` prints one verbatim; `--list` names all topics.                             |
 | Diagnostic        | `Diagnostic`           | A structured finding defined by [`DiagnosticSchema`](../../../src/lib/diagnostic.ts) and the [accepted CLI output contract](adr/20261024-cli-output-contract.accepted.md). |
 | Inspect           | `inspect`              | Reporting a Composition's structure, time ranges, assets, seekability tiers, and diagnostics without rendering video.                                                      |
 | Validate          | `validate`             | Checking a Composition against schemas and rules and returning diagnostics.                                                                                                |
@@ -16,7 +17,7 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 ## Invariants
 
 - Every failure the CLI reports is a Diagnostic; stack traces are never included in JSON; an internal-failure stack goes to stderr only.
-- An invocation the CLI cannot run still emits one envelope under `--json`: `command` names the known subcommand the first positional argument is (`render`/`frame` even when written after a flag, `inspect`/`validate` as not implemented yet) or is `null` (never a sentinel member) when argv names none, always with a `cli.invalid-arguments` hint that says what to do next; a reserved subcommand's message says it is not implemented rather than blaming the arguments. Without `--json` it stays a stderr message and exit code 2. A deliberate help request is the one exemption, in exactly two forms: `--help`, `-h` or `help` as the leading token, or `--help`/`-h` among the arguments of a leading `render`/`frame`. Those print usage text on stdout and exit 0, with or without `--json`, and emit no envelope; any other argv (`--json --help`, `--json render entry.tsx --help`) gets the envelope.
+- An invocation the CLI cannot run still emits one envelope under `--json`: `command` names the known subcommand the first positional argument is (`render`/`frame`/`docs` even when written after a flag, `inspect`/`validate` as not implemented yet) or is `null` (never a sentinel member) when argv names none, always with a `cli.invalid-arguments` hint that says what to do next; a reserved subcommand's message says it is not implemented rather than blaming the arguments. Without `--json` it stays a stderr message and exit code 2. A deliberate help request is the one exemption, in exactly two forms: `--help`, `-h` or `help` as the leading token, or `--help`/`-h` among the arguments of a leading `render`/`frame`/`docs`. Those print usage text on stdout and exit 0, with or without `--json`, and emit no envelope; any other argv (`--json --help`, `--json render entry.tsx --help`) gets the envelope.
 - Include known location information in each Diagnostic according to the accepted CLI output contract.
 - The [accepted CLI output contract](adr/20261024-cli-output-contract.accepted.md) fixes the JSON envelope, severity semantics, exit codes, and versioning policy.
 

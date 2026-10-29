@@ -170,6 +170,66 @@ describe('built package layout', () => {
     expect(readFileSync(output).length).toBeGreaterThan(0);
   }, 120_000);
 
+  it('reads the shipped docs through dist/cli.js', async () => {
+    const result = await run(['docs', '--json']);
+    expect(result.code).toBe(0);
+    const envelope = EnvelopeSchema.parse(JSON.parse(result.stdout.trim()));
+    expect(validateJson(envelope)).toBe(true);
+    expect(envelope).toMatchObject({
+      command: 'docs',
+      ok: true,
+      data: {
+        format: 'markdown',
+        topic: 'index',
+        content: readFileSync(new URL('../../docs/index.md', import.meta.url), 'utf8'),
+      },
+    });
+  }, 60_000);
+
+  it('reads docs from the packed tarball, not from the checkout', async () => {
+    const packRoot = mkdtempSync(join(tmpdir(), 'motion-kit-pack-'));
+    const installRoot = mkdtempSync(join(tmpdir(), 'motion-kit-packed-'));
+    try {
+      const packed = await execFileAsync(
+        'npm',
+        ['pack', '--json', '--ignore-scripts', '--pack-destination', packRoot],
+        {
+          cwd: new URL('../../', import.meta.url).pathname,
+          timeout: 120_000,
+          maxBuffer: 64 * 1024 * 1024,
+        },
+      );
+      const [artifact] = z
+        .array(z.object({ filename: z.string() }))
+        .parse(JSON.parse(packed.stdout));
+      if (artifact === undefined) throw new Error('npm pack named no artifact');
+      await execFileAsync('tar', ['-xzf', join(packRoot, artifact.filename), '-C', installRoot], {
+        timeout: 120_000,
+      });
+      const packagedRoot = join(installRoot, 'package');
+      const packagedCli = join(packagedRoot, 'dist', 'cli.js');
+      expect(existsSync(packagedCli)).toBe(true);
+      const result = await execFileAsync(process.execPath, [packagedCli, 'docs', 'cli', '--json'], {
+        cwd: projectRoot,
+        timeout: 120_000,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const envelope = EnvelopeSchema.parse(JSON.parse(result.stdout.trim()));
+      expect(envelope).toMatchObject({
+        command: 'docs',
+        ok: true,
+        data: {
+          format: 'markdown',
+          topic: 'cli',
+          content: readFileSync(join(packagedRoot, 'docs', 'guide', 'cli.md'), 'utf8'),
+        },
+      });
+    } finally {
+      rmSync(packRoot, { recursive: true, force: true });
+      rmSync(installRoot, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it('renders one frame through the built renderer imported from dist/render.js', async () => {
     expect(existsSync(distRender)).toBe(true);
     const driver = join(outputRoot, 'render-built.mjs');

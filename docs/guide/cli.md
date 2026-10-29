@@ -1,15 +1,16 @@
 # CLI
 
-`motion-kit` renders Compositions out of an entry file. It ships two commands today, `render` and
-`frame`, and both speak the same output contract: without `--json` they print a one-line human
-summary, and with it they print exactly one versioned JSON envelope on stdout.
+`motion-kit` renders Compositions out of an entry file. It ships three commands today, `render`,
+`frame` and `docs`, and all speak the same output contract: without `--json` they print their result
+as text, and with it exactly one versioned JSON envelope on stdout.
 
 ```text
-motion-kit <command> <entry> [options]
+motion-kit <command> [args]
 ```
 
-`<entry>` is an entry file relative to the directory you run the command in: a `.tsx`/`.ts` module
-that exports `compositions` (see [authoring](authoring.md#the-registry)).
+For `render` and `frame`, the first argument is an entry file relative to the directory you run the
+command in: a `.tsx`/`.ts` module that exports `compositions` (see
+[authoring](authoring.md#the-registry)).
 
 ## Commands
 
@@ -20,7 +21,17 @@ motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> \
 
 # One frame as a PNG.
 motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
+
+# The guide, or one topic, printed verbatim.
+motion-kit docs [topic] [--list] [--json]
 ```
+
+`motion-kit docs` reads the guides that ship in the package, so an installed copy works without the
+repository or a network. With no topic it prints `docs/index.md`; with a topic it prints that file
+verbatim, without a pager, colour or reformatting. `--list` prints one topic per line, id and
+summary. The topics and their order are `index`, `getting-started`, `cli`, `authoring`,
+`determinism`, `examples`, `troubleshooting`; an unknown topic, or `--list` with a topic, is
+`cli.invalid-arguments` (exit 2) with the topics in the hint.
 
 `motion-kit` is the bin the package installs (`bin.motion-kit` → `dist/cli.js`), so with pnpm a
 command is `pnpm exec motion-kit …`, with npm `npx motion-kit …`, and with yarn `yarn motion-kit …`.
@@ -105,14 +116,14 @@ FFmpeg, and creates no directory — a missing parent is `internal.unexpected` (
 `--json` writes exactly one JSON document to stdout, for successes and failures alike, and moves
 human-facing logs to stderr. Every document has these fields:
 
-| Field           | Type             | Meaning                                                                                              |
-| --------------- | ---------------- | ---------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                  |
-| `command`       | string, nullable | `render`, `frame`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
-| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                              |
-| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                            |
-| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                   |
-| `durationMs`    | number           | Wall time of the command in milliseconds.                                                            |
+| Field           | Type             | Meaning                                                                                                      |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                          |
+| `command`       | string, nullable | `render`, `frame`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
+| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                      |
+| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                    |
+| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                           |
+| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                    |
 
 `render`'s `data` is a union on `format`:
 
@@ -151,6 +162,28 @@ human-facing logs to stderr. Every document has these fields:
   "timeSeconds": 2,
   "width": 1920,
   "height": 1080
+}
+```
+
+`docs`'s `data` is a union on `format`. A topic carries the file's text verbatim:
+
+```json
+{
+  "format": "markdown",
+  "topic": "cli",
+  "content": "# CLI\n\n`motion-kit` renders…"
+}
+```
+
+`--list` carries every topic in the documented order:
+
+```json
+{
+  "format": "list",
+  "topics": [
+    { "id": "index", "summary": "Overview, requirements, quickstart, and the guide map." },
+    { "id": "getting-started", "summary": "Install, write a first entry, and render it." }
+  ]
 }
 ```
 

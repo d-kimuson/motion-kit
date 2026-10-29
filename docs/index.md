@@ -152,12 +152,14 @@ Four things are worth knowing before the guides:
 A Composition's `audio[].src`, its `--out` path and `useAsset({ source })` URLs all resolve against
 the directory you run the command in, and `render` creates the directories its output needs.
 
+`motion-kit docs` prints the guide that ships with the package; `motion-kit docs <topic>` prints one topic (`--list` names them).
+
 ## The guides
 
 - [Getting started](guide/getting-started.md) — requirements, install, a first entry and render,
   props overrides, and the frames output.
-- [CLI](guide/cli.md) — `render` and `frame`, every flag, the `--json` envelope, diagnostic codes,
-  exit codes and cancellation.
+- [CLI](guide/cli.md) — `render`, `frame` and `docs`, every flag, the `--json` envelope, diagnostic
+  codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
 - [Determinism](guide/determinism.md) — what "a frame is a pure function of time" guarantees, what

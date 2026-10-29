@@ -152,7 +152,7 @@ are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
 
 ## CLI
 
-The `motion-kit` bin renders Compositions from a registry entry file. Both commands accept `--json`,
+The `motion-kit` bin renders Compositions from a registry entry file. The commands accept `--json`,
 which writes exactly one versioned envelope (`schemaVersion: 1`) to stdout; without it, the same data
 is printed as a short human summary.
 
@@ -163,6 +163,8 @@ motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
 # Render a whole Composition: an .mp4 target is encoded video, any other target is PNG frames.
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--concurrency <n>] [--json]
 ```
+
+`motion-kit docs` prints the guide that ships with the package; `motion-kit docs <topic>` prints one topic (`--list` names them).
 
 `--composition` may be omitted only when the registry exports exactly one Composition; otherwise the
 command fails with `cli.invalid-arguments` naming the available ids. `--props` is a JSON object string

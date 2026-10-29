@@ -38,6 +38,31 @@ export const FrameDataSchema = z.strictObject({
   ...dimensions,
 });
 
+// The shipped guides, addressed by file stem. `index` is `docs/index.md`; every other id is
+// `docs/guide/<id>.md`. The order is the one `docs --list` prints and the error hint repeats.
+export const DocsTopicSchema = z.enum([
+  'index',
+  'getting-started',
+  'cli',
+  'authoring',
+  'determinism',
+  'examples',
+  'troubleshooting',
+]);
+export type DocsTopic = z.infer<typeof DocsTopicSchema>;
+
+export const DocsDataSchema = z.discriminatedUnion('format', [
+  z.strictObject({
+    format: z.literal('markdown'),
+    topic: DocsTopicSchema,
+    content: z.string(),
+  }),
+  z.strictObject({
+    format: z.literal('list'),
+    topics: z.array(z.strictObject({ id: DocsTopicSchema, summary: z.string().min(1) })),
+  }),
+]);
+
 const common = {
   schemaVersion: z.literal(1),
   ok: z.boolean(),
@@ -49,7 +74,7 @@ const common = {
 const deferredData = z.record(z.string(), z.json());
 
 /** The known subcommands. `command` is this enum or null, never a sentinel member. */
-export const CommandSchema = z.enum(['render', 'frame', 'inspect', 'validate']);
+export const CommandSchema = z.enum(['render', 'frame', 'docs', 'inspect', 'validate']);
 export type Command = z.infer<typeof CommandSchema>;
 
 /** The envelope's own reading of `command`: a known subcommand, or null when argv named none. */
@@ -59,6 +84,7 @@ export const EnvelopeSchema = z
   .discriminatedUnion('command', [
     z.strictObject({ ...common, command: z.literal('render'), data: RenderDataSchema.nullable() }),
     z.strictObject({ ...common, command: z.literal('frame'), data: FrameDataSchema.nullable() }),
+    z.strictObject({ ...common, command: z.literal('docs'), data: DocsDataSchema.nullable() }),
     z.strictObject({ ...common, command: z.literal('inspect'), data: deferredData.nullable() }),
     z.strictObject({ ...common, command: z.literal('validate'), data: deferredData.nullable() }),
     // No subcommand could be identified from argv (`motion-kit --json`, `motion-kit unknown --json`).
@@ -88,4 +114,5 @@ export const EnvelopeSchema = z
 
 export type RenderData = z.infer<typeof RenderDataSchema>;
 export type FrameData = z.infer<typeof FrameDataSchema>;
+export type DocsData = z.infer<typeof DocsDataSchema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;

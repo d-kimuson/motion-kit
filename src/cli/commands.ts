@@ -25,9 +25,17 @@ const frameCommand = new Command('frame')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-export const commands: Readonly<Record<'render' | 'frame', Command>> = {
+const docsCommand = new Command('docs')
+  .argument('[topic]')
+  .option('--list')
+  .option('--json')
+  .exitOverride()
+  .configureOutput({ outputError: () => {} });
+
+export const commands: Readonly<Record<'render' | 'frame' | 'docs', Command>> = {
   render: renderCommand,
   frame: frameCommand,
+  docs: docsCommand,
 };
 
 /** The long names of the options `command` declares as taking a value (`--opt <value>`). */

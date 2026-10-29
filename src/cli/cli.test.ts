@@ -260,7 +260,123 @@ const childrenOf = (pid: number): readonly number[] => {
   return children;
 };
 
+const docsTopicRows = [
+  { id: 'index', summary: 'Overview, requirements, quickstart, and the guide map.' },
+  { id: 'getting-started', summary: 'Install, write a first entry, and render it.' },
+  { id: 'cli', summary: 'Commands, flags, the JSON envelope, diagnostics, and exit codes.' },
+  {
+    id: 'authoring',
+    summary: 'Compositions, props, time hooks, sequences, transitions, assets, and audio.',
+  },
+  { id: 'determinism', summary: 'What a pure function of time guarantees and what breaks it.' },
+  {
+    id: 'examples',
+    summary: 'The reference videos, their commands, placeholders, and asset policy.',
+  },
+  { id: 'troubleshooting', summary: 'What to do for each diagnostic code.' },
+] as const;
+
 describe('motion-kit CLI', () => {
+  it('prints docs/index.md verbatim when no topic is given', async () => {
+    const result = await run(['docs']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      readFileSync(new URL('../../docs/index.md', import.meta.url), 'utf8'),
+    );
+  });
+
+  it('prints docs/guide/<topic>.md verbatim for a topic', async () => {
+    const result = await run(['docs', 'cli']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      readFileSync(new URL('../../docs/guide/cli.md', import.meta.url), 'utf8'),
+    );
+  });
+
+  it('lists every topic in the documented order with its summary', async () => {
+    const result = await run(['docs', '--list']);
+    expect(result.code).toBe(0);
+    expect(
+      result.stdout
+        .trimEnd()
+        .split('\n')
+        .map((line) => {
+          const [id, summary] = line.split('\t');
+          return { id, summary };
+        }),
+    ).toEqual(docsTopicRows.map((row) => ({ ...row })));
+  });
+
+  it('emits the documented docs data for a topic and for --list under --json', async () => {
+    const topic = await run(['docs', 'getting-started', '--json']);
+    expect(topic.code).toBe(0);
+    const topicEnvelope = assertValidEnvelope(topic);
+    expect(topicEnvelope).toMatchObject({
+      command: 'docs',
+      ok: true,
+      data: {
+        format: 'markdown',
+        topic: 'getting-started',
+        content: readFileSync(
+          new URL('../../docs/guide/getting-started.md', import.meta.url),
+          'utf8',
+        ),
+      },
+    });
+
+    const list = await run(['docs', '--list', '--json']);
+    expect(list.code).toBe(0);
+    const listEnvelope = assertValidEnvelope(list);
+    expect(listEnvelope).toMatchObject({
+      command: 'docs',
+      ok: true,
+      data: { format: 'list', topics: docsTopicRows.map((row) => ({ ...row })) },
+    });
+  });
+
+  it('rejects an unknown docs topic as one cli.invalid-arguments envelope with the topics in the hint', async () => {
+    const result = await run(['docs', 'missing', '--json']);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ command: 'docs', ok: false, data: null });
+    expect(envelope.diagnostics[0]).toMatchObject({
+      code: 'cli.invalid-arguments',
+    });
+    for (const topic of docsTopicRows) expect(envelope.diagnostics[0]?.hint).toContain(topic.id);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+  });
+
+  it('rejects --list with a topic as one cli.invalid-arguments envelope', async () => {
+    const result = await run(['docs', 'cli', '--list', '--json']);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ command: 'docs', ok: false, data: null });
+    expect(envelope.diagnostics[0]).toMatchObject({ code: 'cli.invalid-arguments' });
+    expect(envelope.diagnostics[0]?.hint).toContain('--list takes no topic');
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+  });
+
+  it('reports an unknown docs topic on stderr without --json', async () => {
+    const result = await run(['docs', 'missing']);
+    expect(result.code).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('cli.invalid-arguments');
+    for (const topic of docsTopicRows) expect(result.stderr).toContain(topic.id);
+  });
+
+  it('lists docs in the leading help and exits 0 for docs --help', async () => {
+    const leading = await run(['--help'], undefined, { envelope: false });
+    expect(leading.code).toBe(0);
+    expect(leading.stdout).toContain('docs [topic]');
+    expect(leading.stdout).toContain('motion-kit docs getting-started');
+    expect(leading.stdout).toContain('motion-kit docs` to print the guide');
+
+    const own = await run(['docs', '--help', '--json'], undefined, { envelope: false });
+    expect(own.code).toBe(0);
+    expect(own.stdout).toContain('Usage: ');
+    expect(own.stdout).not.toContain('"schemaVersion"');
+  });
+
   it('captures one frame to a PNG with the v1 frame envelope', async () => {
     const output = join(outputRoot, 'frame.png');
     const result = await run([
@@ -1006,6 +1122,8 @@ export const compositions = defineCompositions([
     { argv: ['render', '-h', '--json'] },
     { argv: ['render', 'entry.tsx', '--help'] },
     { argv: ['frame', '--json', '-h'] },
+    { argv: ['docs', '--help', '--json'] },
+    { argv: ['docs', '-h', '--json'] },
   ])('prints usage and exits 0 for $argv', async ({ argv }) => {
     const result = await run(argv, undefined, { envelope: false });
     expect(result.code).toBe(0);
@@ -1028,25 +1146,25 @@ export const compositions = defineCompositions([
       argv: ['--json'],
       command: null,
       message: 'Command-line arguments are invalid.',
-      hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+      hint: 'Pass one of the known subcommands: render, frame, docs, inspect, validate.',
     },
     {
       argv: ['unknown', '--json'],
       command: null,
       message: 'Command-line arguments are invalid.',
-      hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+      hint: 'Pass one of the known subcommands: render, frame, docs, inspect, validate.',
     },
     {
       argv: ['inspect', '--json'],
       command: 'inspect',
       message: 'The inspect subcommand is not implemented yet.',
-      hint: 'inspect is not implemented yet; use render or frame.',
+      hint: 'inspect is not implemented yet; use render, frame or docs.',
     },
     {
       argv: ['validate', '--json'],
       command: 'validate',
       message: 'The validate subcommand is not implemented yet.',
-      hint: 'validate is not implemented yet; use render or frame.',
+      hint: 'validate is not implemented yet; use render, frame or docs.',
     },
     {
       argv: ['render', '--bogus', '--json'],
