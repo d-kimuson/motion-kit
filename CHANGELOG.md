@@ -4,6 +4,17 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## 0.0.2 — 2026-10-29
+
+A patch release with no API or behaviour change.
+
+### Fixed
+
+- **`bin` target.** The manifest names the CLI as `dist/cli.js` instead of `./dist/cli.js`. npm
+  normalises the leading `./` at publish time and reports the result as
+  `"bin[motion-kit]" script name dist/cli.js was invalid and removed`, which reads like the bin was
+  dropped; the published entry point is the same either way.
+
 ## 0.0.1 — 2026-10-29
 
 The first public release. Everything below is new: no earlier release exists, so nothing here

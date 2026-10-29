@@ -58,6 +58,8 @@ git config --get tag.gpgsign                # true
 npm version <argument> -m "chore: release v%s"
 ```
 
+Write the `## <version>` entry in `CHANGELOG.md` and commit it before `npm version` runs: the release commit only writes `package.json#version`, and the changelog is not part of the tarball, so it cannot be fixed by the workflow afterwards.
+
 `npm version` runs the `preversion` script first (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`), then writes `package.json#version`, the signed commit `chore: release v<version>` and the signed annotated tag `v<version>`. If a check fails, nothing is committed or tagged; fix it in a normal commit and run `npm version` again. If the push fails after the commit and tag exist, fix the cause and push again — do not rerun `npm version`.
 
 A prerelease (`0.1.1-beta.0`) publishes under the dist-tag of its identifier (`beta`), so `@latest` only ever resolves to a release and a beta is installed with `@kimuson/motion-kit@beta`.
