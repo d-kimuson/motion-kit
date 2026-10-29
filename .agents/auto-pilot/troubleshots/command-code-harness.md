@@ -11,7 +11,8 @@ available:
   Claude Code's hosted Personal MCP Portal
   (`mcp__claude_ai_Personal_MCP_Portal__*`); `~/.commandcode/mcp.json` has no
   equivalent server, and the portal is a claude.ai connector with no local
-  endpoint or token to reuse. `cmd mcp auth` has nothing to authenticate.
+  endpoint or token to reuse. The portal is reachable as the `kimuson` server
+  once it is authenticated; see The `kimuson` portal needs an interactive login.
 - No `subagent` tool, no workflow-script worktree isolation, no `compact` tool.
   The harness offers the `agent` tool (`general` / `explore` / `plan`
   subagents), `cron_create`, `sleep`, and `schedule_wakeup`.
@@ -21,14 +22,14 @@ available:
 Keep the auto-pilot loop, with these substitutions until the integrations are
 available:
 
-| Guideline mechanism   | Command Code form                                                                                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backlog (taskroom)    | Local mirror `.agents/auto-pilot/backlog.md`, reconstructed from `context.md`. Treat it as the board; do not invent task ids that the mirror does not record.                               |
-| Team channel (Slack)  | Ask the user in the session reply. Record the question in `context.md` under "Questions to the user" and keep working on other items.                                                       |
-| Independent Agent     | `agent({ subagent_type: "general", run_in_background: true })`; tell it to create a persistent `git worktree` under `/Users/kaito/repos/worktrees/motion-kit/<name>` and commit/push early. |
-| SubAgent (review/QA)  | `agent({ subagent_type: "general" })` with the verbatim instruction from `docs/guidelines/delegate.md`.                                                                                     |
-| Wait                  | `cron_create` with a one-shot prompt, or `sleep` for the interval.                                                                                                                          |
-| `compact` at clean-up | End the turn; the next turn starts from `docs/guidelines/auto-pilot.md` and `.agents/auto-pilot/context.md`.                                                                                |
+| Guideline mechanism   | Command Code form                                                                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backlog (taskroom)    | The `kimuson` MCP server's `taskroom_*` tools, once that server is authenticated (see below). Until then keep findings in `.agents/auto-pilot/findings.md` and never invent a `TASK-<n>` the tools do not return. |
+| Team channel (Slack)  | Ask the user in the session reply. Record the question in `context.md` under "Questions to the user" and keep working on other items.                                                                             |
+| Independent Agent     | `agent({ subagent_type: "general", run_in_background: true })`; tell it to create a persistent `git worktree` under `/Users/kaito/repos/worktrees/motion-kit/<name>` and commit/push early.                       |
+| SubAgent (review/QA)  | `agent({ subagent_type: "general" })` with the verbatim instruction from `docs/guidelines/delegate.md`.                                                                                                           |
+| Wait                  | `cron_create` with a one-shot prompt, or `sleep` for the interval.                                                                                                                                                |
+| `compact` at clean-up | End the turn; the next turn starts from `docs/guidelines/auto-pilot.md` and `.agents/auto-pilot/context.md`.                                                                                                      |
 
 A finished `agent` run keeps nothing: whatever lives in its worktree persists on
 disk, so a second round is a new run pointed at the same worktree path.
@@ -48,12 +49,26 @@ executed line by line: the heredoc body ran as commands instead of becoming one
 argument. Use `--body-file <path>` (with a unique scratchpad path) for
 `gh pr create`, `gh pr edit`, and any other long multi-line argument.
 
+## The `kimuson` portal needs an interactive login
+
+`cmd mcp list` shows a `kimuson` HTTP server (`https://mcp.kimuson.dev/mcp`) as
+enabled, but it is not connected in this session:
+
+```
+$ curl -sS -o /dev/null -w '%{http_code}' https://mcp.kimuson.dev/mcp   # 401
+$ cmd mcp auth kimuson --status                                          # No authentication stored
+```
+
+`cmd mcp auth kimuson` (without `--status`) starts an interactive OAuth flow and
+does not return in a non-interactive shell. The user completed it on 2026-10-26;
+`taskroom_*` and `slack_*` tools then loaded and the local mirror was
+reconciled into taskroom and deleted. If the tools are missing again, check
+`cmd mcp auth kimuson --status` first and ask the user to re-authenticate.
+
 ## Why Not Fixed
 
-The missing MCP servers are an external-tool limitation: the portal is hosted by
-Claude and its credentials are not reachable from Command Code. The guideline
-itself is updated for the Command Code form (see the Independent Agent section);
-the Backlog and team-channel substitution stays a workaround so the repository is
-not taught to depend on a mirror that can drift from taskroom. When taskroom and
-Slack become available again, drop the mirror, re-read the board, and reconcile
-`.agents/auto-pilot/backlog.md` into it.
+The portal login is the user's own browser action, so it cannot be completed from
+an agent shell; once it was done, the MCP tools loaded without further changes.
+The remaining substitutions (the `agent` tool instead of `subagent`/`compact`,
+per-task worktrees, `cron_create`/`sleep` for waits) are harness differences, not
+failures, and are reflected in `docs/guidelines/auto-pilot.md`.
