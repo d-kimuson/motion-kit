@@ -18,6 +18,14 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   pass is evidence only for the sampled frames, settings and environment. `checkComposition` exports
   the same engine from `@kimuson/motion-kit/render`. The [determinism guide](docs/guide/determinism.md#check-your-own-composition)
   documents the workflow, the layout-measurement failure it detects, and its limits.
+- **Renderer configuration from the CLI.** `render`, `frame` and `check` accept `--project-root`,
+  `--vite-config`, `--software-webgl` and `--disable-sandbox` (or the `MOTION_KIT_*` environment
+  variables), so a project can be rendered without relying on the working directory.
+- **Several stills in one invocation.** `frame --frame 1,30,60 --out out/stills` writes one PNG per
+  frame and reports a `png-sequence` payload instead of a single `png` one.
+- **MP4 size controls.** `render --out out.mp4` accepts `--scale <factor-or-WxH>` and
+  `--fps <rational-or-decimal>` to downscale or resample the encoded output, alongside
+  `--video-crf` and `--video-bitrate`.
 
 ## 0.1.0 — 2026-10-29
 
