@@ -1,5 +1,5 @@
 import { CommanderError } from 'commander';
-import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 
 import {
@@ -303,6 +303,40 @@ const frameFailure = (result: Extract<FrameCaptureResult, { ok: false }>): Comma
 const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() === '.mp4';
 
 /**
+ * Invalidates the previous completion receipt before this run can write its first PNG. The
+ * schemaVersion/format pair is the identifying header this route writes; anything without both
+ * fields is user-owned, so it survives both this cleanup and the final manifest write.
+ */
+const prepareFramesManifest = (outAbsolute: string): boolean => {
+  const manifestPath = join(outAbsolute, 'manifest.json');
+  let source: string;
+  try {
+    source = readFileSync(manifestPath, 'utf8');
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+      return true;
+    throw error;
+  }
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(source);
+  } catch {
+    return false;
+  }
+  if (
+    typeof manifest !== 'object' ||
+    manifest === null ||
+    !('schemaVersion' in manifest) ||
+    manifest.schemaVersion !== 1 ||
+    !('format' in manifest) ||
+    manifest.format !== 'frames'
+  )
+    return false;
+  unlinkSync(manifestPath);
+  return true;
+};
+
+/**
  * The aborted line is the caller's only signal, so it says what the route actually left behind
  * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
  * as it arrived, while the mp4 route removes its temporary sibling and leaves no target.
@@ -476,6 +510,7 @@ const runRender = async (
       });
     }
     mkdirSync(outAbsolute, { recursive: true });
+    const writeManifest = prepareFramesManifest(outAbsolute);
     const files: string[] = [];
     const diagnostics: Diagnostic[] = [];
     let width = descriptor.width;
@@ -494,23 +529,24 @@ const runRender = async (
       diagnostics.push(...result.value.diagnostics);
     }
     const manifestPath = join(outAbsolute, 'manifest.json');
-    writeFileSync(
-      manifestPath,
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          format: 'frames',
-          composition: descriptor.id,
-          width,
-          height,
-          fps: descriptor.fps,
-          frameCount: descriptor.durationInFrames,
-          files,
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    if (writeManifest)
+      writeFileSync(
+        manifestPath,
+        `${JSON.stringify(
+          {
+            schemaVersion: 1,
+            format: 'frames',
+            composition: descriptor.id,
+            width,
+            height,
+            fps: descriptor.fps,
+            frameCount: descriptor.durationInFrames,
+            files,
+          },
+          null,
+          2,
+        )}\n`,
+      );
     return decide({
       ok: true,
       diagnostics,
