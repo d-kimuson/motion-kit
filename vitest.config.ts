@@ -71,6 +71,7 @@ export default defineConfig({
             'src/render/pool-scheduling.test.ts',
             'src/render/render-video.test.ts',
             'src/render/capture/**/*.test.ts',
+            'src/render/check/**/*.test.ts',
             // Later contexts register reference Compositions as *.determinism.test.ts.
             'src/**/*.determinism.test.ts',
           ],

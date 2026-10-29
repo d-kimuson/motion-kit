@@ -26,7 +26,7 @@ const invocationEnvelope = (argv: readonly string[]): Envelope =>
         code: 'cli.invalid-arguments',
         severity: 'error',
         message: 'Command-line arguments are invalid.',
-        hint: 'Pass one of the known subcommands: render, frame, docs, inspect, validate.',
+        hint: 'Pass one of the known subcommands: render, frame, docs, check, inspect, validate.',
       },
     ],
     durationMs: 1,
@@ -41,11 +41,13 @@ describe('resolveCommand', () => {
     // the contract's.
     { argv: ['docs', '--json'], command: 'docs' },
     { argv: ['docs', 'cli'], command: 'docs' },
+    { argv: ['check', 'entry.tsx', '--frame', '1', '--json'], command: 'check' },
     { argv: ['inspect', '--json'], command: 'inspect' },
     { argv: ['validate', '--json'], command: 'validate' },
     // A value-taking option's value is not a positional argument, so it cannot take the slot or
     // become the command: the subcommand written after it is the candidate.
     { argv: ['--out', '/tmp/a.png', 'render', 'entry.tsx', '--json'], command: 'render' },
+    { argv: ['--out', 'x.mp4', 'check', 'entry.tsx', '--json'], command: 'check' },
     { argv: ['--composition', 'frame', 'render', 'entry.tsx', '--json'], command: 'render' },
     { argv: ['--props', '{"text":"frame"}', 'render', 'entry.tsx'], command: 'render' },
     { argv: ['--frame', '3', 'frame', 'entry.tsx'], command: 'frame' },
@@ -61,18 +63,29 @@ describe('resolveCommand', () => {
   });
 
   it('knows the contract enum and nothing else, so no sentinel member is possible', () => {
-    expect(CommandSchema.options).toEqual(['render', 'frame', 'docs', 'inspect', 'validate']);
+    expect(CommandSchema.options).toEqual([
+      'render',
+      'frame',
+      'docs',
+      'check',
+      'inspect',
+      'validate',
+    ]);
     expect(resolveCommand(['unknown'])).toBeNull();
     expect(resolveCommand([])).toBeNull();
   });
 
   it('takes its value-taking options from the CLI declarations, so it cannot fall behind', () => {
     expect([...valueTakingOptions].sort()).toEqual([
+      '--changed-ratio',
+      '--channel-tolerance',
       '--composition',
       '--concurrency',
       '--fps',
       '--frame',
+      '--history',
       '--out',
+      '--predecessor',
       '--project-root',
       '--props',
       '--scale',

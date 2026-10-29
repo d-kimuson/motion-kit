@@ -1,16 +1,16 @@
 # CLI
 
-`motion-kit` renders Compositions out of an entry file. It ships three commands today, `render`,
-`frame` and `docs`, and all speak the same output contract: without `--json` they print their result
-as text, and with it exactly one versioned JSON envelope on stdout.
+`motion-kit` renders Compositions out of an entry file. It ships four commands today, `render`,
+`frame`, `check` and `docs`, and all speak the same output contract: without `--json` they print their
+result as text, and with it exactly one versioned JSON envelope on stdout.
 
 ```text
 motion-kit <command> [args]
 ```
 
-For `render` and `frame`, the first argument is an entry file relative to the project root (the
-directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions` (see
-[authoring](authoring.md#the-registry)).
+For `render`, `frame` and `check`, the first argument is an entry file relative to the project root
+(the directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions`
+(see [authoring](authoring.md#the-registry)).
 
 ## Commands
 
@@ -21,6 +21,11 @@ motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> \
 
 # One frame as a PNG, or several stills in a directory.
 motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
+
+# Sample frames after different capture histories and compare them.
+motion-kit check <entry> [--composition <id>] --frame <n[,n...]> \
+  [--predecessor <n[,n...]>] [--history <name[,name...]>] [--exact] \
+  [--channel-tolerance <0-255>] [--changed-ratio <0..1>] [--props <json>] [--json]
 
 # The guide, or one topic, printed verbatim.
 motion-kit docs [topic] [--list] [--json]
@@ -41,7 +46,7 @@ directory of the repository are written.
 
 ## Renderer configuration
 
-Both `render` and `frame` accept these options:
+`render`, `frame` and `check` accept these options:
 
 | Flag                   | Environment override         | Meaning                                                                                           |
 | ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -157,19 +162,149 @@ directory, not an existing file or a `.png` path. Duplicate, negative, or non-in
 `composition.props-invalid` (exit 1, `location.frame` naming the request). Capture stops at the
 first failure; PNGs already written remain.
 
+## `check`
+
+`check` captures sampled frames after different capture histories and compares each warm capture
+against a cold reference. It writes no artifact: the evidence is the envelope, and a passing run
+exits `0` only when no capture differs. It uses the same entry loading, readiness barrier, props and
+renderer configuration as `render` and `frame`.
+
+| Option                        | Meaning                                                                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--frame <n>`                 | Global sample frame indices, repeatable or comma-separated. Required.                                                                           |
+| `--predecessor <n>`           | Predecessor frames, repeatable or comma-separated. Replaces the default `f - 1`/`f + 1` list for every sample.                                  |
+| `--history <name>`            | Capture histories: `cold`, `after-earlier`, `after-later`, `pool`, repeatable or comma-separated. Defaults to every history the inputs support. |
+| `--exact`                     | Compare PNG bytes instead of decoded pixels. Conflicts with `--channel-tolerance` and `--changed-ratio`.                                        |
+| `--channel-tolerance <0-255>` | Per-channel tolerance in pixels mode; a channel changed only when its absolute difference is greater. Default `32`.                             |
+| `--changed-ratio <0..1>`      | Maximum changed-pixel ratio still within tolerance, inclusive. Default `0.002`.                                                                 |
+| `--composition <id>`          | Which Composition to check. Required when the registry holds more than one.                                                                     |
+| `--props <json>`              | JSON object validated by the Composition's schema.                                                                                              |
+| `--json`                      | Print the envelope instead of the one-line summary.                                                                                             |
+
+`cold` opens a fresh Renderer and captures the sample as its first frame; it is the reference every
+other history is compared against. `after-earlier` and `after-later` each open a dedicated Renderer,
+capture their predecessor, then the sample. `pool` captures the ascending window around the sample
+through the run's single two-Renderer pool; its reported `predecessor` is the frame that pool
+Renderer actually captured immediately before the sample (`null` when the sample was its first
+capture), not necessarily the requested one. The default predecessors are `f - 1` and `f + 1`, kept
+only when inside `[0, durationInFrames)`. A sample at frame `0` or at the last frame therefore has no
+history on one side; requesting that history explicitly is `check.history-not-run` (exit `1`), not a
+silent pass. Out-of-range sample or predecessor frames are reported once the frame count is known as
+`composition.props-invalid` (exit `1`, `location.frame` naming the request).
+
+The [determinism guide](determinism.md#check-your-own-composition) explains why these histories are
+different evidence from two identical renders, and gives a long-video sampling recipe.
+
+```bash
+motion-kit check entry.tsx --composition traversal-fixed --frame 2,6
+# checked 2 of 12 frames (2, 6) across 4 histories: passed in 8968.6ms
+```
+
+A failure writes the diagnostics and the summary to stderr. The same sampling of the dependent
+fixture prints:
+
+```text
+error: check.frame-differs: A warm capture of frame 2 differs from its cold reference. — Make the frame a pure function of its time; a warm realm must not carry state into later frames.
+error: check.frame-differs: A warm capture of frame 6 differs from its cold reference. — Make the frame a pure function of its time; a warm realm must not carry state into later frames.
+checked 2 of 12 frames (2, 6) across 4 histories: frame 2 differs in after-earlier (8.3% of pixels) in 8780.8ms
+```
+
+`check`'s `data` is a strict `format: "check"` object. It carries the Composition id and descriptor,
+the `comparison` actually used, and `samples` containing each sampled frame, its cold reference
+dimensions and one entry per history (predecessor, dimensions, status and difference):
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "check",
+  "ok": true,
+  "data": {
+    "format": "check",
+    "composition": "traversal-fixed",
+    "width": 160,
+    "height": 90,
+    "fps": { "numerator": 30, "denominator": 1 },
+    "frameCount": 12,
+    "comparison": {
+      "mode": "pixels",
+      "channelTolerance": 32,
+      "maxChangedRatio": 0.002,
+      "alpha": "ignore"
+    },
+    "samples": [
+      {
+        "frame": 2,
+        "width": 160,
+        "height": 90,
+        "histories": [
+          {
+            "history": "cold",
+            "predecessor": null,
+            "width": 160,
+            "height": 90,
+            "status": "reference",
+            "difference": null
+          },
+          {
+            "history": "after-earlier",
+            "predecessor": 1,
+            "width": 160,
+            "height": 90,
+            "status": "identical",
+            "difference": {
+              "mode": "pixels",
+              "totalPixels": 14400,
+              "changedPixels": 0,
+              "changedRatio": 0,
+              "maxChannelDelta": 0
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "diagnostics": [],
+  "durationMs": 9183.8
+}
+```
+
+A history's `status` is `reference` for `cold`, or `identical`, `within-tolerance` or `differs` for a
+warm capture. In pixels mode `identical` means no compared pixel exceeded `channelTolerance`,
+`within-tolerance` means some pixel did but `changedRatio` stayed within `maxChangedRatio`, and
+`differs` means the tolerance was exceeded; a pixel-mode `identical` is therefore not byte identity.
+In exact mode `identical` means the PNG bytes are equal. A history's `difference` is `null` only for
+the reference; otherwise it is a union on `mode`:
+`exact` (`differentBytes`, `referenceBytes`, `actualBytes`), `pixels` (`totalPixels`, `changedPixels`,
+`changedRatio`, `maxChannelDelta`) or `dimensions`. Exact byte equality and tolerance-based equality
+are different claims, and `comparison.mode` names the one that was used. There is no `passed` field:
+a check passes iff the envelope is `ok: true`, and a failing check retains `data` so the caller can
+read which sample and histories differed. `--exact` reports compressed-byte differences, not
+perceptual ones; the default pixel comparison decodes both PNGs first.
+
+The run costs one Renderer per cold sample, one per warm predecessor pair and two for the pool.
+Sample a handful of frames rather than a whole video.
+
+The three diagnostics `check` adds are errors:
+
+| Code                      | Meaning                                                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `check.frame-differs`     | A warm capture differs from its cold reference. `location.frame` and `details.histories` name the sample, histories and difference. |
+| `check.history-not-run`   | A requested history could not run, or the sample had no comparable capture. `details` carries `frame`, `history` and `reason`.      |
+| `check.uncontrolled-time` | A capture emitted `seek.uncontrolled`, so the check refuses to certify it; the forwarded warning stays in `diagnostics`.            |
+
 ## The JSON envelope
 
 `--json` writes exactly one JSON document to stdout, for successes and failures alike, and moves
 human-facing logs to stderr. Every document has these fields:
 
-| Field           | Type             | Meaning                                                                                                      |
-| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                          |
-| `command`       | string, nullable | `render`, `frame`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
-| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                      |
-| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                    |
-| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                           |
-| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                    |
+| Field           | Type             | Meaning                                                                                                               |
+| --------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                   |
+| `command`       | string, nullable | `render`, `frame`, `check`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
+| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                               |
+| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                             |
+| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                    |
+| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                             |
 
 `render`'s `data` is a union on `format`:
 
@@ -278,6 +413,7 @@ report today:
 | `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error`                             |
 | `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid` |
 | `seek`        | `seek.uncontrolled` (a warning, emitted by an integration with uncontrolled time)                       |
+| `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                               |
 | `internal`    | `internal.unexpected`                                                                                   |
 
 `layout.*` (`layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`,
@@ -289,7 +425,7 @@ in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes th
 | Code  | Meaning                                                                                                      |
 | ----- | ------------------------------------------------------------------------------------------------------------ |
 | `0`   | Success; warnings and infos allowed.                                                                         |
-| `1`   | Domain failure: invalid props, an asset or page failure, a render or encode failure.                         |
+| `1`   | Domain failure: invalid props, an asset or page failure, a render or encode failure, a differing check.      |
 | `2`   | Invocation error: unknown flag, missing argument, entry not found, unknown Composition, no known subcommand. |
 | `3`   | Internal failure: a bug or an unconverted exception. The stack goes to stderr, never into JSON.              |
 | `130` | Cancelled by `SIGINT`.                                                                                       |

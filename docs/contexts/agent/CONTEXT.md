@@ -1,6 +1,6 @@
 # agent
 
-What a coding agent operates. agent provides the CLI and diagnostics: render, frame and docs today, inspect and validate later, with JSON output so an agent can act on the result without a GUI.
+What a coding agent operates. agent provides the CLI and diagnostics: render, frame, docs and check today, inspect and validate later, with JSON output so an agent can act on the result without a GUI.
 
 ## Ubiquitous Language
 
@@ -28,6 +28,20 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 ## Renderer configuration
 
 `render` and `frame` resolve renderer options once per invocation: flags override `MOTION_KIT_*` environment values, which override defaults. The project root controls entry loading and relative MP4 audio sources; an explicit Vite config replaces discovery. Software WebGL and sandbox disabling are explicit opt-ins. Paths and environment booleans are validated before opening a renderer. The [renderer configuration ADR](adr/20261029-cli-renderer-configuration.accepted.md) fixes the names and precedence.
+
+## Check
+
+`check` samples frames across capture histories to look for nondeterminism. It is evidence only for
+the frames, histories, comparison settings and environment actually sampled; a pass is not a claim
+about other frames, another machine, another GPU or WebGL. The command writes no artifact. The render
+library (`checkComposition` from `@kimuson/motion-kit/render`) produces every diagnostic, including
+`check.frame-differs`, `check.history-not-run` and `check.uncontrolled-time`; the CLI only maps the
+result to the envelope, retains `data` on a failing check, and sets `ok` from whether the report has
+an error diagnostic. A caller can rely on the report naming every sampled frame, its cold reference
+dimensions and each history's predecessor, status and difference, and on the `comparison` recording
+whether exact byte identity or the pixel tolerance was used. Cancellation emits no envelope, like
+every other command. The [determinism guide](../../guide/determinism.md#check-your-own-composition)
+has the workflow, the comparison boundaries and the limits.
 
 ## Cancellation
 

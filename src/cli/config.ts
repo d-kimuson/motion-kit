@@ -3,10 +3,10 @@ import { resolve } from 'node:path';
 
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type Result } from '../lib/result.ts';
-import { type FrameArgs, type RenderArgs } from './args.ts';
+import { type CheckArgs, type FrameArgs, type RenderArgs } from './args.ts';
 
 type Flags = Pick<
-  FrameArgs | RenderArgs,
+  FrameArgs | RenderArgs | CheckArgs,
   'projectRoot' | 'viteConfig' | 'softwareWebgl' | 'disableSandbox'
 >;
 export type RendererConfig = {

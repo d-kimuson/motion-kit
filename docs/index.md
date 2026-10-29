@@ -158,8 +158,8 @@ the directory you run the command in, and `render` creates the directories its o
 
 - [Getting started](guide/getting-started.md) — requirements, install, a first entry and render,
   props overrides, and the frames output.
-- [CLI](guide/cli.md) — `render`, `frame` and `docs`, every flag, the `--json` envelope, diagnostic
-  codes, exit codes and cancellation.
+- [CLI](guide/cli.md) — `render`, `frame`, `check` and `docs`, every flag, the `--json` envelope,
+  diagnostic codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
 - [Determinism](guide/determinism.md) — what "a frame is a pure function of time" guarantees, what
@@ -181,7 +181,8 @@ Only three subpaths are exported in 0.0.1:
   timeline hooks (`useFrame`, `useTime`, `useSequence`, `useTimeline`), `Sequence`,
   `TransitionSeries`/`TransitionScene`/`Transition`/`useTransitionProgress`, `useAsset`, the Time
   Module functions and the Diagnostic types.
-- `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool` and their types; Node only.
+- `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their
+  types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
 
 Not in 0.0.1: the preview UI, preview audio, audio-reactive visuals, video assets, the `/motion`,

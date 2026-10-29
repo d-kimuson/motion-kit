@@ -71,6 +71,12 @@ export const compositions = defineCompositions([
   defineComposition({ id: 'long', schema: z.object({}), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 120 }),
 ]);`,
   );
+  writeFileSync(
+    join(projectRoot, 'entry-references.tsx'),
+    `export {compositions} from ${JSON.stringify(
+      new URL('../render/determinism/fixtures/references.tsx', import.meta.url).pathname,
+    )};`,
+  );
 });
 
 afterAll(() => {
@@ -143,6 +149,32 @@ const assertValidEnvelope = (result: RunResult): Envelope => {
   if (envelope === undefined) throw new Error('Envelope missing');
   expect(validateJson(envelope)).toBe(true);
   return envelope;
+};
+
+/** Runs `runCli` in-process while capturing the one document and the human diagnostics. */
+const runDirect = async (argv: readonly string[]): Promise<RunResult> => {
+  let stdout = '';
+  let stderr = '';
+  const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    stdout += String(chunk);
+    return true;
+  });
+  const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    stderr += String(chunk);
+    return true;
+  });
+  try {
+    const code = await runCli(argv);
+    const trimmed = stdout.trim();
+    const envelope =
+      argv.includes('--json') && trimmed !== ''
+        ? EnvelopeSchema.parse(JSON.parse(trimmed))
+        : undefined;
+    return { code, envelope, stdout, stderr };
+  } finally {
+    out.mockRestore();
+    err.mockRestore();
+  }
 };
 
 /**
@@ -394,6 +426,195 @@ describe('motion-kit CLI', () => {
     });
     expect(readdirSync(directory)).toEqual(['frame-00000.png']);
   }, 60_000);
+
+  it('checks sampled frames through runCli and emits the v1 check envelope', async () => {
+    const result = await runDirect([
+      'check',
+      'entry-references.tsx',
+      '--project-root',
+      projectRoot,
+      '--composition',
+      'css-transform',
+      '--frame',
+      '1,4',
+      '--history',
+      'pool',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      schemaVersion: 1,
+      command: 'check',
+      ok: true,
+      diagnostics: [],
+    });
+    if (envelope.command !== 'check' || envelope.data === null)
+      throw new Error('expected check data');
+    expect(envelope.data).toMatchObject({
+      format: 'check',
+      composition: 'css-transform',
+      width: 64,
+      height: 64,
+      frameCount: 6,
+      comparison: {
+        mode: 'pixels',
+        channelTolerance: 32,
+        maxChangedRatio: 0.002,
+        alpha: 'ignore',
+      },
+    });
+    expect(envelope.data.samples.map((sample) => sample.frame)).toEqual([1, 4]);
+    for (const sample of envelope.data.samples) {
+      expect(sample.histories.map((history) => history.history)).toEqual(['cold', 'pool']);
+      expect(sample.histories[0]).toMatchObject({
+        predecessor: null,
+        status: 'reference',
+        difference: null,
+      });
+    }
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+  }, 120_000);
+
+  it('retains check data and reports the differing history through the shipped bin', async () => {
+    const result = await run([
+      'check',
+      'entry-references.tsx',
+      '--composition',
+      'nondeterministic',
+      '--frame',
+      '2',
+      '--predecessor',
+      '1',
+      '--history',
+      'after-earlier',
+      '--exact',
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({ command: 'check', ok: false });
+    expect(envelope.data).not.toBeNull();
+    const diagnostic = envelope.diagnostics.find((item) => item.code === 'check.frame-differs');
+    expect(diagnostic).toMatchObject({ severity: 'error', location: { frame: 2 } });
+    const details = diagnostic?.details as
+      | { histories?: readonly { history?: string; difference?: { mode?: string } }[] }
+      | undefined;
+    expect(details?.histories).toHaveLength(1);
+    expect(details?.histories?.[0]).toMatchObject({
+      history: 'after-earlier',
+      difference: { mode: 'exact' },
+    });
+    if (envelope.command !== 'check' || envelope.data === null)
+      throw new Error('expected retained check data');
+    expect(envelope.data.samples.map((sample) => sample.frame)).toEqual([2]);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+  }, 120_000);
+
+  it('prints the check summary on stdout and diagnostics on stderr without --json', async () => {
+    const passing = await runDirect([
+      'check',
+      'entry-references.tsx',
+      '--project-root',
+      projectRoot,
+      '--composition',
+      'css-transform',
+      '--frame',
+      '1',
+      '--history',
+      'pool',
+    ]);
+    expect(passing.code).toBe(0);
+    expect(passing.stdout).not.toContain('schemaVersion');
+    expect(passing.stdout.trim().split('\n')).toHaveLength(1);
+    expect(passing.stdout).toContain('passed');
+    expect(passing.stderr).not.toContain('check.frame-differs');
+    expect(passing.stderr).not.toContain('check.history-not-run');
+
+    const failing = await runDirect([
+      'check',
+      'entry-references.tsx',
+      '--project-root',
+      projectRoot,
+      '--composition',
+      'nondeterministic',
+      '--frame',
+      '1',
+      '--predecessor',
+      '0',
+      '--history',
+      'after-earlier',
+      '--exact',
+    ]);
+    expect(failing.code).toBe(1);
+    expect(failing.stdout).toBe('');
+    expect(failing.stderr).toContain('check.frame-differs');
+    expect(failing.stderr).toContain('differs in after-earlier');
+  }, 120_000);
+
+  it.each([
+    {
+      name: '--exact with --channel-tolerance',
+      flags: ['--exact', '--channel-tolerance', '3'],
+      hint: '--exact or a pixel tolerance',
+    },
+    {
+      name: 'an unknown history',
+      flags: ['--history', 'yesterday'],
+      hint: 'Unknown history',
+    },
+    {
+      name: 'a duplicate frame',
+      flags: ['--frame', '1'],
+      hint: 'Duplicate frame',
+    },
+  ])('exits 2 with cli.invalid-arguments for $name', async ({ flags, hint }) => {
+    const result = await runDirect([
+      'check',
+      'entry-references.tsx',
+      '--project-root',
+      projectRoot,
+      '--frame',
+      '1',
+      ...flags,
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      command: 'check',
+      ok: false,
+      data: null,
+      diagnostics: [{ code: 'cli.invalid-arguments' }],
+    });
+    expect(envelope.diagnostics[0]?.hint).toContain(hint);
+  });
+
+  it('exits 1 with composition.props-invalid for a check frame outside the composition', async () => {
+    const result = await runDirect([
+      'check',
+      'entry-references.tsx',
+      '--project-root',
+      projectRoot,
+      '--composition',
+      'css-transform',
+      '--frame',
+      '99',
+      '--history',
+      'pool',
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      command: 'check',
+      ok: false,
+      data: null,
+      diagnostics: [{ code: 'composition.props-invalid' }],
+    });
+    expect(envelope.diagnostics[0]?.location?.frame).toBe(99);
+  }, 120_000);
+
   it.each([
     ['--video-crf', '52'],
     ['--video-bitrate', '0'],
@@ -1397,25 +1618,25 @@ export const compositions = defineCompositions([
       argv: ['--json'],
       command: null,
       message: 'Command-line arguments are invalid.',
-      hint: 'Pass one of the known subcommands: render, frame, docs, inspect, validate.',
+      hint: 'Pass one of the known subcommands: render, frame, docs, check, inspect, validate.',
     },
     {
       argv: ['unknown', '--json'],
       command: null,
       message: 'Command-line arguments are invalid.',
-      hint: 'Pass one of the known subcommands: render, frame, docs, inspect, validate.',
+      hint: 'Pass one of the known subcommands: render, frame, docs, check, inspect, validate.',
     },
     {
       argv: ['inspect', '--json'],
       command: 'inspect',
       message: 'The inspect subcommand is not implemented yet.',
-      hint: 'inspect is not implemented yet; use render, frame or docs.',
+      hint: 'inspect is not implemented yet; use render, frame, docs or check.',
     },
     {
       argv: ['validate', '--json'],
       command: 'validate',
       message: 'The validate subcommand is not implemented yet.',
-      hint: 'validate is not implemented yet; use render, frame or docs.',
+      hint: 'validate is not implemented yet; use render, frame, docs or check.',
     },
     {
       argv: ['render', '--bogus', '--json'],

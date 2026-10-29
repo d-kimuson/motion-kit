@@ -12,6 +12,10 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 | Capture Format    | `CaptureFormat`      | The image encoding of a captured frame: `{ type: 'png' }` (the default) or `{ type: 'jpeg', quality }`.                                                            |
 | Renderer Pool     | `createRendererPool` | Several Renderers of one Composition, each in its own loading session, dealt frames round-robin and read back in frame order.                                      |
 | Encoder           | `Encoder`            | The port that turns the captured frame stream into an MP4 file; see the [system FFmpeg ADR](adr/20261025-system-ffmpeg-encoder.accepted.md).                       |
+| Composition Check | `checkComposition`   | Captures sampled frames after cold and warm histories and compares each warm capture against the cold reference.                                                   |
+| Check History     | `CheckHistory`       | The closed set `cold`, `after-earlier`, `after-later`, `pool`; `cold` is the reference and the others replay a predecessor.                                        |
+| Reference Capture | `reference`          | The cold capture of a sample frame whose pixels and dimensions every warm history is compared against.                                                             |
+| Check Comparison  | `CheckComparison`    | Exact PNG byte identity or a bounded comparison of decoded pixels (`channelTolerance`, `maxChangedRatio`, alpha ignored).                                          |
 | Audio Track       | `AudioTrack`         | One clip a Composition declares as data (`src`, `startInFrames`, optional `endInFrames`/`offsetInFrames`/`volume`); the encoder muxes it by frame-derived seconds. |
 
 TASK-157 implements supervised loading, frame transport and PNG capture over core's shared registry/provider/coordinator. Encoding and the asset acquisition API remain separate tasks.
@@ -54,6 +58,36 @@ Source lives in `src/`; `pnpm build` (tsdown) emits the published ESM and `.d.ts
 - The version-1 promise RPC uses `settleFrame`, `validateCapture`, `resettle`, `completeCapture`, `cancel`, and disposal. `page.exposeFunction` carries validated ownership grants before navigation. Host and page check mode, instance, revision, generation, rational time, frame and resource versions; ready is not release.
 - A responsive coordinator's current required-asset inventory at deadline produces `asset.not-ready` with every pending asset and `timeoutMs`. Other deadline expiry, including unresponsive GPU/RPC/capture, produces `render.frame-timeout`; the post-expiry inventory probe is bounded to 100 ms and never authorizes publication. Asset failures preserve `asset.load-failed`. A failed settlement, validation, or completion publishes every diagnostic on `error`; the host does not keep only the first or merge codes. Caller/queue cancellation returns aborted without a Diagnostic or frame. Integration-provided inventory is a neutral TASK-158 cooperation hook, not automatic asset discovery.
 - Detected Tier C registrations emit `seek.uncontrolled`; arbitrary hidden clocks are not detected. Exact-byte evidence applies only to supported paths in the tested fixed environment, not every React component or GPU.
+
+## Composition check
+
+`checkComposition` (exported from `src/render/index.ts`) is the public checker entry point; the CLI
+`check` command maps its report to the envelope and adds no diagnostics of its own. It opens every
+Renderer it uses and disposes all of them in `finally`, including on the abort path: one fresh
+Renderer per cold capture, one Renderer per warm predecessor pair, and one shared two-Renderer pool
+for the run.
+
+Invariants:
+
+- The cold capture is always the reference; every warm status (`identical`, `within-tolerance`,
+  `differs`) is relative to it. A sample with only the reference is `check.history-not-run`, because
+  it proves nothing.
+- A requested history that cannot run is a `check.history-not-run` error, never a silent absence. An
+  unrequested history the frame cannot support is absent from the sample.
+- A pass is evidence only for the sampled frames, histories, comparison settings and environment
+  actually used. There is no cross-machine, cross-GPU or WebGL claim, and the checker does not
+  promise to detect every authoring error.
+- The internal determinism suite's byte tolerance and this checker's pixel tolerance are different
+  claims. The suite stays byte-exact against its sequential baseline; `checkComposition` reports
+  exact byte identity only under `{ mode: 'exact' }`, and its default compares decoded pixels with
+  `channelTolerance` and `maxChangedRatio`.
+- A capture that emits `seek.uncontrolled` makes the sample uncertifiable: the checker reports
+  `check.uncontrolled-time` instead of certifying it, and the forwarded warning stays in the report.
+  Forwarded capture warnings (`layout.*`, asset diagnostics) are retained whether the check passes
+  or fails.
+
+The fixed design is recorded in the [composition determinism checker
+ADR](../../decisions/20261029-composition-determinism-checker.accepted.md).
 
 ## Internal loading session
 

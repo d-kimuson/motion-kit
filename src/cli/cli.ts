@@ -5,6 +5,7 @@ import { dirname, extname, join, resolve } from 'node:path';
 import {
   CommandSchema,
   EnvelopeSchema,
+  type CheckData,
   type Command as EnvelopeCommand,
   type DocsData,
   type Envelope,
@@ -15,10 +16,18 @@ import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.t
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
+import { checkComposition, checkReportPassed } from '../render/check/check.ts';
+import { defaultCheckComparison, type CheckComparison } from '../render/check/compare.ts';
 import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
-import { CliArgsSchema, type DocsArgs, type FrameArgs, type RenderArgs } from './args.ts';
+import {
+  CliArgsSchema,
+  type CheckArgs,
+  type DocsArgs,
+  type FrameArgs,
+  type RenderArgs,
+} from './args.ts';
 import { commands } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
@@ -61,14 +70,14 @@ type ParseOutcome =
   | { readonly kind: 'usage' }
   | {
       readonly kind: 'invalid';
-      readonly command: 'render' | 'frame' | 'docs';
+      readonly command: 'render' | 'frame' | 'docs' | 'check';
       readonly json: boolean;
       readonly hint: string;
     }
   | { readonly kind: 'args'; readonly value: Record<string, unknown> };
 
-const isCommandName = (value: unknown): value is 'render' | 'frame' | 'docs' =>
-  value === 'render' || value === 'frame' || value === 'docs';
+const isCommandName = (value: unknown): value is 'render' | 'frame' | 'docs' | 'check' =>
+  value === 'render' || value === 'frame' || value === 'docs' || value === 'check';
 
 /**
  * Why argv named no command the CLI can run. Each hint says what the caller can do next: `--json`
@@ -89,7 +98,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
     return diagnostic(
       'cli.invalid-arguments',
       `The ${command} subcommand is not implemented yet.`,
-      `${command} is not implemented yet; use render, frame or docs.`,
+      `${command} is not implemented yet; use render, frame, docs or check.`,
     );
   return invalidArguments(`Put the subcommand first: motion-kit ${command} [options].`);
 };
@@ -159,6 +168,27 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         json,
       },
     };
+  if (command === 'check')
+    return {
+      kind: 'args',
+      value: {
+        command,
+        entry: parsable.processedArgs[0],
+        composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
+        frame: options['frame'],
+        predecessor: options['predecessor'],
+        history: options['history'],
+        exact: options['exact'] === true,
+        channelTolerance: options['channelTolerance'],
+        changedRatio: options['changedRatio'],
+        props: options['props'],
+        json,
+      },
+    };
   return {
     kind: 'args',
     value: {
@@ -171,13 +201,18 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
 };
 
 /** Every outcome that becomes an envelope: a result, or a failure carrying Diagnostics. */
+type EnvelopeData = RenderData | FrameData | DocsData | CheckData;
 type EnvelopeOutcome =
   | {
       readonly ok: true;
-      readonly data: RenderData | FrameData | DocsData;
+      readonly data: EnvelopeData;
       readonly diagnostics: readonly Diagnostic[];
     }
-  | { readonly ok: false; readonly data: null; readonly diagnostics: readonly Diagnostic[] };
+  | {
+      readonly ok: false;
+      readonly data: EnvelopeData | null;
+      readonly diagnostics: readonly Diagnostic[];
+    };
 
 type DocsOutcome =
   | { readonly ok: true; readonly data: DocsData; readonly diagnostics: readonly Diagnostic[] }
@@ -272,12 +307,14 @@ const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() ===
  * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
  * as it arrived, while the mp4 route removes its temporary sibling and leaves no target.
  */
-const abortedLine = (args: RenderArgs | FrameArgs): string =>
-  args.command === 'render' && !isVideoOutput(args.out)
-    ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
-    : args.command === 'frame' && args.frame.length > 1
-      ? `frame aborted; any PNG frames already written remain in ${args.out}`
-      : `${args.command} aborted; no output was produced`;
+const abortedLine = (args: RenderArgs | FrameArgs | CheckArgs): string =>
+  args.command === 'check'
+    ? 'check aborted; no evidence was produced'
+    : args.command === 'render' && !isVideoOutput(args.out)
+      ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
+      : args.command === 'frame' && args.frame.length > 1
+        ? `frame aborted; any PNG frames already written remain in ${args.out}`
+        : `${args.command} aborted; no output was produced`;
 
 const isFile = (path: string): boolean => {
   try {
@@ -288,7 +325,7 @@ const isFile = (path: string): boolean => {
 };
 
 const rendererOptions = (
-  args: RenderArgs | FrameArgs,
+  args: RenderArgs | FrameArgs | CheckArgs,
   config: RendererConfig,
   signal: AbortSignal,
 ) => {
@@ -553,6 +590,72 @@ const runFrame = async (
   }
 };
 
+const defaultPixels = (): Extract<CheckComparison, { mode: 'pixels' }> => {
+  if (defaultCheckComparison.mode !== 'pixels')
+    throw new Error('The default check comparison must compare pixels.');
+  return defaultCheckComparison;
+};
+
+const checkComparisonFor = (args: CheckArgs): CheckComparison => {
+  if (args.exact) return { mode: 'exact' };
+  if (args.channelTolerance === undefined && args.changedRatio === undefined)
+    return defaultCheckComparison;
+  const defaults = defaultPixels();
+  return {
+    mode: 'pixels',
+    channelTolerance: args.channelTolerance ?? defaults.channelTolerance,
+    maxChangedRatio: args.changedRatio ?? defaults.maxChangedRatio,
+    alpha: 'ignore',
+  };
+};
+
+const runCheck = async (
+  args: CheckArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
+  if (signal.aborted) return abortedOutcome;
+  const options = rendererOptions(args, config, signal);
+  if (options === undefined) return decide(failure([entryNotFound(args.entry)]));
+  const result = await checkComposition({
+    ...options,
+    frames: args.frame,
+    ...(args.predecessor === undefined ? {} : { predecessors: args.predecessor }),
+    ...(args.history === undefined ? {} : { histories: args.history }),
+    comparison: checkComparisonFor(args),
+  });
+  if ('aborted' in result) return abortedOutcome;
+  if (!result.ok) return decide(failure([...result.error]));
+  const report = result.value;
+  const data: CheckData = {
+    format: 'check',
+    composition: report.composition.id,
+    width: report.composition.width,
+    height: report.composition.height,
+    fps: report.composition.fps,
+    frameCount: report.composition.durationInFrames,
+    comparison: report.comparison,
+    samples: report.samples.map((sample) => ({
+      frame: sample.frame,
+      width: sample.width,
+      height: sample.height,
+      histories: sample.histories.map((history) => ({
+        history: history.history,
+        predecessor: history.predecessor,
+        width: history.width,
+        height: history.height,
+        status: history.status,
+        difference: history.difference,
+      })),
+    })),
+  };
+  const diagnostics = report.diagnostics;
+  return decide(
+    checkReportPassed(report) ? { ok: true, data, diagnostics } : { ok: false, data, diagnostics },
+  );
+};
+
 const buildEnvelope = (
   command: EnvelopeCommand | null,
   outcome: EnvelopeOutcome,
@@ -576,6 +679,30 @@ const exitCodeFor = (envelope: Envelope): number => {
 };
 
 const summarize = (envelope: Envelope): string => {
+  if (envelope.command === 'check' && envelope.data !== null) {
+    const data = envelope.data;
+    const sampled = data.samples.map((sample) => sample.frame).join(', ');
+    const histories = new Set(
+      data.samples.flatMap((sample) => sample.histories.map((history) => history.history)),
+    ).size;
+    const prefix = `checked ${data.samples.length} of ${data.frameCount} frames (${sampled}) across ${histories} histories`;
+    if (envelope.ok) return `${prefix}: passed`;
+    for (const sample of data.samples) {
+      const differing = sample.histories.find((history) => history.status === 'differs');
+      if (differing === undefined) continue;
+      const difference = differing.difference;
+      const detail =
+        difference === null
+          ? 'differs'
+          : difference.mode === 'pixels'
+            ? `${(difference.changedRatio * 100).toFixed(1)}% of pixels`
+            : difference.mode === 'exact'
+              ? `${difference.differentBytes} bytes differ`
+              : 'dimensions differ';
+      return `${prefix}: frame ${sample.frame} differs in ${differing.history} (${detail})`;
+    }
+    return `${prefix}: not certified`;
+  }
   if (envelope.ok && envelope.data !== null) {
     if (envelope.command === 'render') {
       const data = envelope.data;
@@ -669,6 +796,7 @@ const usageText = `${[
   'Usage: motion-kit <command> [args]',
   '',
   'Commands:',
+  '  check         sample frames for determinism (requires --frame <n>)',
   '  docs [topic]  print a shipped guide; --list names the topics',
   '  frame         capture one or more frames to PNG',
   '  render        render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),',
@@ -676,6 +804,7 @@ const usageText = `${[
   '',
   'Examples:',
   '  motion-kit render entry.tsx --out out.mp4',
+  '  motion-kit check entry.tsx --frame 1,4 --history pool --json',
   '  motion-kit docs getting-started',
   '',
   'Run `motion-kit docs` to print the guide, or `motion-kit <command> --help` for command options.',
@@ -759,7 +888,9 @@ export const runCli = async (
       outcome =
         args.command === 'render'
           ? await runRender(args, config.value, signal, decide)
-          : await runFrame(args, config.value, signal, decide);
+          : args.command === 'frame'
+            ? await runFrame(args, config.value, signal, decide)
+            : await runCheck(args, config.value, signal, decide);
     } catch (error) {
       if (error instanceof Error && error.stack !== undefined)
         process.stderr.write(`${error.stack}\n`);
