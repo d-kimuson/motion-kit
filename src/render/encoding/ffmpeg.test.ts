@@ -104,6 +104,8 @@ type FakeVariant = {
   readonly libx264?: boolean;
   /** What the encode invocation does after draining stdin. */
   readonly encode?: 'ok' | 'fail' | 'empty' | 'stall' | 'stall-after-eof';
+  /** The error a failing encode writes to stderr. */
+  readonly failureStderr?: string;
 };
 
 /**
@@ -154,7 +156,7 @@ ${
 }
 ${
   variant.encode === 'fail'
-    ? `printf 'boom: the encoder exploded\\n' >&2\nexit 1`
+    ? `printf '%s\\n' "${variant.failureStderr ?? 'boom: the encoder exploded'}" >&2\nexit 1`
     : variant.encode === 'empty'
       ? 'exit 0'
       : variant.encode === 'stall' || variant.encode === 'stall-after-eof'
@@ -614,8 +616,32 @@ describe('FfmpegEncoder.encode', () => {
     expect(
       typeof stderrTail === 'string' && stderrTail.includes('boom: the encoder exploded'),
     ).toBe(true);
+    expect(errors[0]?.hint).toBe(
+      'Read the reported FFmpeg error and fix the composition, target path, or environment; retry if the error indicates a transient failure.',
+    );
     expect(existsSync(output)).toBe(false);
     expect(pathsLeftBehind(directory)).toEqual([]);
+  });
+
+  it('allows a retry when FFmpeg reports a transient memory failure', async () => {
+    const failure = 'Error submitting a packet to the muxer: Cannot allocate memory';
+    const binary = fakeFfmpeg({
+      version: 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers',
+      encode: 'fail',
+      failureStderr: failure,
+    });
+    const encoder = await openEncoder(binary);
+    const outcome = await encoder.encode(
+      request({ frames: streamOf(pngFrames(2)), frameCount: 2 }),
+    );
+    const errors = errorsOf(outcome);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      code: 'encode.ffmpeg-failed',
+      hint: 'Read the reported FFmpeg error and fix the composition, target path, or environment; retry if the error indicates a transient failure.',
+      details: { exitCode: 1, signal: null, stderrTail: `${failure}\n` },
+    });
+    expect(errors[0]?.hint).not.toContain('re-running without a change fails the same way');
   });
 
   it('passes the rational rate to -framerate and -r and writes only the sibling', async () => {
