@@ -21,3 +21,11 @@ export {
   type CheckDifference,
 } from './check/compare.ts';
 export { type CheckHistory } from './check/history.ts';
+export {
+  checkComposition,
+  checkReportPassed,
+  type CheckCompositionOptions,
+  type CheckReport,
+  type CheckSampleResult,
+  type CheckHistoryResult,
+} from './check/check.ts';

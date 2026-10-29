@@ -23,6 +23,9 @@ export const DiagnosticCodeSchema = z.enum([
   'layout.out-of-frame',
   'layout.unexpected-scroll',
   'layout.font-not-loaded',
+  'check.frame-differs',
+  'check.history-not-run',
+  'check.uncontrolled-time',
   'internal.unexpected',
 ]);
 
