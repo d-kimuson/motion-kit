@@ -4,6 +4,21 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## Unreleased
+
+### Added
+
+- **Composition determinism checker.** `motion-kit check <entry> --frame <n>` captures sampled
+  frames after a fresh (`cold`) capture and after warm `after-earlier`, `after-later` and `pool`
+  histories, then compares every warm capture against the cold reference. `--predecessor` and
+  `--history` select the histories explicitly, `--exact` compares PNG bytes, and the default compares
+  decoded pixels within `--channel-tolerance` 32 and `--changed-ratio` 0.002. Failures are
+  `check.frame-differs`, `check.history-not-run` and `check.uncontrolled-time`, with a `check`
+  envelope that names every sample, history and difference. The command writes no artifact, and a
+  pass is evidence only for the sampled frames, settings and environment. `checkComposition` exports
+  the same engine from `@kimuson/motion-kit/render`. The [determinism guide](docs/guide/determinism.md#check-your-own-composition)
+  documents the workflow, the layout-measurement failure it detects, and its limits.
+
 ## 0.1.0 — 2026-10-29
 
 ### Added

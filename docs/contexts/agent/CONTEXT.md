@@ -31,7 +31,17 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 
 ## Check
 
-`check` samples frames across capture histories to look for nondeterminism. It is evidence only for the frames, histories, comparison settings and environment actually sampled; a pass is not a claim about other frames, another machine, another GPU or WebGL. The command writes no artifact. The render library produces every diagnostic, including `check.frame-differs`, `check.history-not-run` and `check.uncontrolled-time`; the CLI only maps the result to the envelope, retains `data` on a failing check, and sets `ok` from whether the report has an error diagnostic. Cancellation emits no envelope, like every other command.
+`check` samples frames across capture histories to look for nondeterminism. It is evidence only for
+the frames, histories, comparison settings and environment actually sampled; a pass is not a claim
+about other frames, another machine, another GPU or WebGL. The command writes no artifact. The render
+library (`checkComposition` from `@kimuson/motion-kit/render`) produces every diagnostic, including
+`check.frame-differs`, `check.history-not-run` and `check.uncontrolled-time`; the CLI only maps the
+result to the envelope, retains `data` on a failing check, and sets `ok` from whether the report has
+an error diagnostic. A caller can rely on the report naming every sampled frame, its cold reference
+dimensions and each history's predecessor, status and difference, and on the `comparison` recording
+whether exact byte identity or the pixel tolerance was used. Cancellation emits no envelope, like
+every other command. The [determinism guide](../../guide/determinism.md#check-your-own-composition)
+has the workflow, the comparison boundaries and the limits.
 
 ## Cancellation
 

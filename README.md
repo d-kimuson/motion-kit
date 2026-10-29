@@ -140,23 +140,23 @@ The guides ship inside the package as well as in the repository, so an installed
 without a network: start at `node_modules/@kimuson/motion-kit/docs/index.md`, and the guides it links
 are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
 
-| Document                                         | What it covers                                                                                                       |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                                             |
-| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                          |
-| [CLI](docs/guide/cli.md)                         | The `render`, `frame` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
-| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                   |
-| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                |
-| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                            |
-| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                      |
+| Document                                         | What it covers                                                                                                                |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                                                      |
+| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                                   |
+| [CLI](docs/guide/cli.md)                         | The `render`, `frame`, `check` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
+| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                            |
+| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                         |
+| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                                     |
+| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                               |
 
 ## CLI
 
 The `motion-kit` bin renders Compositions from a registry entry file and prints the guides that ship
-with the package. `render`, `frame` and `docs` accept `--json`, which writes exactly one versioned
-envelope (`schemaVersion: 1`) to stdout; without it, each command prints its result as text. `docs`
-prints the guide markdown, and its `--json` envelope carries that markdown in `data.content`;
-`render` and `frame` print a short summary.
+with the package. `render`, `frame`, `check` and `docs` accept `--json`, which writes exactly one
+versioned envelope (`schemaVersion: 1`) to stdout; without it, each command prints its result as text.
+`docs` prints the guide markdown, and its `--json` envelope carries that markdown in `data.content`;
+`render`, `frame` and `check` print a short summary.
 
 ```bash
 # Capture one frame as a PNG.
@@ -164,6 +164,9 @@ motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
 
 # Render a whole Composition: an .mp4 target is encoded video, any other target is PNG frames.
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--concurrency <n>] [--json]
+
+# Sample frames after different capture histories and compare them; writes no artifact.
+motion-kit check <entry> [--composition <id>] --frame <n[,n...]> [--history <name[,name...]>] [--json]
 ```
 
 `motion-kit docs` prints the guide that ships with the package; `motion-kit docs <topic>` prints one topic (`--list` names them).
@@ -211,7 +214,7 @@ today:
   timeline hooks (`useFrame`, `useTime`, `useSequence`, `useTimeline`), `Sequence`,
   `TransitionSeries`/`TransitionScene`/`Transition`/`useTransitionProgress`, `useAsset`, the Time
   Module functions and the Diagnostic types.
-- `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool` and their types; Node only.
+- `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
 
 `/browser`, `/motion`, `/theme`, `/presets` and `/three` are planned and do not exist yet; each gets
@@ -225,7 +228,9 @@ PNG bytes across eight traversal modes (sequential, random, reverse, repeated, f
 session, fresh renderer, concurrent) in a fixed environment, and its `concurrent` mode is what lets
 `render --concurrency` be safe. What that does not promise — byte equality across GPUs and platforms,
 or trees broken by wall clocks, randomness, CSS animation or antialiased edges — is laid out in
-[determinism](docs/guide/determinism.md).
+[determinism](docs/guide/determinism.md). `motion-kit check` samples your own Composition across cold,
+warm and pool histories and reports which frames changed; a pass is evidence for the sampled frames
+and environment only.
 
 ## Examples
 
