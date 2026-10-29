@@ -1,5 +1,6 @@
 // Exercise the package export, rather than making the contract a private deep import.
 import {
+  CheckDataSchema,
   DocsDataSchema,
   EnvelopeCommandSchema,
   EnvelopeSchema,
@@ -58,6 +59,51 @@ const docsList = {
   format: 'list',
   topics: [{ id: 'index', summary: 'Overview.' }],
 };
+const checkData = {
+  format: 'check',
+  composition: 'intro',
+  width: 64,
+  height: 64,
+  fps: { numerator: 30, denominator: 1 },
+  frameCount: 6,
+  comparison: {
+    mode: 'pixels',
+    channelTolerance: 32,
+    maxChangedRatio: 0.002,
+    alpha: 'ignore',
+  },
+  samples: [
+    {
+      frame: 1,
+      width: 64,
+      height: 64,
+      histories: [
+        {
+          history: 'cold',
+          predecessor: null,
+          width: 64,
+          height: 64,
+          status: 'reference',
+          difference: null,
+        },
+        {
+          history: 'after-earlier',
+          predecessor: 0,
+          width: 64,
+          height: 64,
+          status: 'identical',
+          difference: {
+            mode: 'pixels',
+            totalPixels: 4096,
+            changedPixels: 0,
+            changedRatio: 0,
+            maxChannelDelta: 0,
+          },
+        },
+      ],
+    },
+  ],
+};
 const base = {
   schemaVersion: 1,
   command: 'render',
@@ -91,6 +137,7 @@ describe('CLI output v1', () => {
     ['frame', sequenceData],
     ['docs', docsData],
     ['docs', docsList],
+    ['check', checkData],
     ['inspect', {}],
     ['validate', { future: ['data'] }],
   ])('accepts the %s command data', (command, data) => {
@@ -115,6 +162,7 @@ describe('CLI output v1', () => {
     expect(FrameDataSchema.parse(frameData)).toEqual(frameData);
     expect(DocsDataSchema.parse(docsData)).toEqual(docsData);
     expect(DocsDataSchema.parse(docsList)).toEqual(docsList);
+    expect(CheckDataSchema.parse(checkData)).toEqual(checkData);
   });
 
   it('requires ok to agree with every generated diagnostic list', () => {

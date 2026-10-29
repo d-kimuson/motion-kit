@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { checkHistories, type CheckHistory } from '../render/check/history.ts';
 import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
 
 // The argument contract is schema-first: commander only tokenizes argv, and
@@ -101,6 +102,118 @@ export const FrameArgsSchema = z.strictObject({
 
 const docsTopic = z.string().min(1).optional();
 
+const safeFrame = (value: string, context: z.RefinementCtx): number | undefined => {
+  const number = Number(value);
+  if (!/^\d+$/u.test(value) || !Number.isSafeInteger(number)) {
+    context.addIssue({
+      code: 'custom',
+      message: `Frame ${JSON.stringify(value)} must be a nonnegative safe integer.`,
+    });
+    return undefined;
+  }
+  return number;
+};
+
+const frameList = z
+  .array(z.string())
+  .min(1)
+  .transform((values, context) => {
+    const frames: number[] = [];
+    for (const value of values.flatMap((item) => item.split(','))) {
+      const number = safeFrame(value, context);
+      if (number === undefined) continue;
+      if (frames.includes(number))
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate frame ${value}; pass each frame once.`,
+        });
+      else frames.push(number);
+    }
+    return frames.sort((a, b) => a - b);
+  });
+
+const optionalFrameList = z
+  .array(z.string())
+  .transform((values, context) => {
+    if (values.length === 0) return undefined;
+    const frames: number[] = [];
+    for (const value of values.flatMap((item) => item.split(','))) {
+      const number = safeFrame(value, context);
+      if (number === undefined) continue;
+      if (frames.includes(number))
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate frame ${value}; pass each frame once.`,
+        });
+      else frames.push(number);
+    }
+    return frames.sort((a, b) => a - b);
+  })
+  .optional();
+
+const isCheckHistory = (value: string): value is CheckHistory =>
+  checkHistories.some((history) => history === value);
+
+const historyList = z
+  .array(z.string())
+  .transform((values, context) => {
+    if (values.length === 0) return undefined;
+    const histories: CheckHistory[] = [];
+    for (const value of values.flatMap((item) => item.split(','))) {
+      if (!isCheckHistory(value)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Unknown history ${JSON.stringify(value)}; choose one of: ${checkHistories.join(', ')}.`,
+        });
+      } else if (histories.includes(value)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate history ${value}; pass each history once.`,
+        });
+      } else histories.push(value);
+    }
+    return histories;
+  })
+  .optional();
+
+const channelTolerance = z
+  .string()
+  .regex(/^\d+$/u, 'Use --channel-tolerance with an integer from 0 to 255.')
+  .transform(Number)
+  .pipe(z.number().int().min(0).max(255))
+  .optional();
+
+const changedRatio = z
+  .string()
+  .regex(/^(?:\d+(?:\.\d+)?|\.\d+)$/u, 'Use --changed-ratio with a number from 0 to 1.')
+  .transform(Number)
+  .pipe(z.number().min(0).max(1))
+  .optional();
+
+export const CheckArgsSchema = z
+  .strictObject({
+    command: z.literal('check'),
+    ...rendererConfig,
+    entry,
+    composition,
+    frame: frameList,
+    predecessor: optionalFrameList,
+    history: historyList,
+    exact: z.boolean(),
+    channelTolerance,
+    changedRatio,
+    props: propsText.optional(),
+    json,
+  })
+  .superRefine((args, context) => {
+    if (args.exact && (args.channelTolerance !== undefined || args.changedRatio !== undefined))
+      context.addIssue({
+        code: 'custom',
+        path: ['exact'],
+        message: 'Use --exact or a pixel tolerance, not both.',
+      });
+  });
+
 export const DocsArgsSchema = z
   .strictObject({
     command: z.literal('docs'),
@@ -127,9 +240,11 @@ export const CliArgsSchema = z.discriminatedUnion('command', [
   RenderArgsSchema,
   FrameArgsSchema,
   DocsArgsSchema,
+  CheckArgsSchema,
 ]);
 
 export type RenderArgs = z.infer<typeof RenderArgsSchema>;
 export type FrameArgs = z.infer<typeof FrameArgsSchema>;
 export type DocsArgs = z.infer<typeof DocsArgsSchema>;
+export type CheckArgs = z.infer<typeof CheckArgsSchema>;
 export type CliArgs = z.infer<typeof CliArgsSchema>;
