@@ -6,6 +6,7 @@ import {
   CommandSchema,
   EnvelopeSchema,
   type Command as EnvelopeCommand,
+  type DocsData,
   type Envelope,
   type FrameData,
   type RenderData,
@@ -17,8 +18,9 @@ import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
-import { CliArgsSchema, type FrameArgs, type RenderArgs } from './args.ts';
+import { CliArgsSchema, type DocsArgs, type FrameArgs, type RenderArgs } from './args.ts';
 import { commands } from './commands.ts';
+import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
@@ -58,14 +60,14 @@ type ParseOutcome =
   | { readonly kind: 'usage' }
   | {
       readonly kind: 'invalid';
-      readonly command: 'render' | 'frame';
+      readonly command: 'render' | 'frame' | 'docs';
       readonly json: boolean;
       readonly hint: string;
     }
   | { readonly kind: 'args'; readonly value: Record<string, unknown> };
 
-const isCommandName = (value: unknown): value is 'render' | 'frame' =>
-  value === 'render' || value === 'frame';
+const isCommandName = (value: unknown): value is 'render' | 'frame' | 'docs' =>
+  value === 'render' || value === 'frame' || value === 'docs';
 
 /**
  * Why argv named no command the CLI can run. Each hint says what the caller can do next: `--json`
@@ -86,7 +88,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
     return diagnostic(
       'cli.invalid-arguments',
       `The ${command} subcommand is not implemented yet.`,
-      `${command} is not implemented yet; use render or frame.`,
+      `${command} is not implemented yet; use render, frame or docs.`,
     );
   return invalidArguments(`Put the subcommand first: motion-kit ${command} [options].`);
 };
@@ -117,28 +119,54 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
     return { kind: 'invalid', command, json: argv.includes('--json'), hint };
   }
   const options = parsable.opts<Record<string, unknown>>();
-  const raw: Record<string, unknown> = {
-    command,
-    entry: parsable.processedArgs[0],
-    composition: options['composition'],
-    out: options['out'],
-    json: options['json'] === true,
+  const json = options['json'] === true;
+  if (command === 'render')
+    return {
+      kind: 'args',
+      value: {
+        command,
+        entry: parsable.processedArgs[0],
+        composition: options['composition'],
+        out: options['out'],
+        props: options['props'],
+        concurrency: options['concurrency'],
+        json,
+      },
+    };
+  if (command === 'frame')
+    return {
+      kind: 'args',
+      value: {
+        command,
+        entry: parsable.processedArgs[0],
+        composition: options['composition'],
+        out: options['out'],
+        frame: options['frame'],
+        json,
+      },
+    };
+  return {
+    kind: 'args',
+    value: {
+      command,
+      topic: parsable.processedArgs[0],
+      list: options['list'] === true,
+      json,
+    },
   };
-  if (command === 'render') {
-    raw['props'] = options['props'];
-    raw['concurrency'] = options['concurrency'];
-  }
-  if (command === 'frame') raw['frame'] = options['frame'];
-  return { kind: 'args', value: raw };
 };
 
 /** Every outcome that becomes an envelope: a result, or a failure carrying Diagnostics. */
 type EnvelopeOutcome =
   | {
       readonly ok: true;
-      readonly data: RenderData | FrameData;
+      readonly data: RenderData | FrameData | DocsData;
       readonly diagnostics: readonly Diagnostic[];
     }
+  | { readonly ok: false; readonly data: null; readonly diagnostics: readonly Diagnostic[] };
+
+type DocsOutcome =
+  | { readonly ok: true; readonly data: DocsData; readonly diagnostics: readonly Diagnostic[] }
   | { readonly ok: false; readonly data: null; readonly diagnostics: readonly Diagnostic[] };
 
 type CommandOutcome =
@@ -151,6 +179,47 @@ const failure = (diagnostics: readonly Diagnostic[]): EnvelopeOutcome => ({
   data: null,
   diagnostics,
 });
+
+const docsFailure = (diagnostics: readonly Diagnostic[]): DocsOutcome => ({
+  ok: false,
+  data: null,
+  diagnostics,
+});
+
+/** Reads a shipped guide or lists the topics; a broken install is `internal.unexpected`. */
+const runDocs = (args: DocsArgs): DocsOutcome => {
+  if (args.list && args.topic !== undefined)
+    return docsFailure([
+      invalidArguments(`--list takes no topic; drop it to list the topics. ${docsTopicsHint()}`),
+    ]);
+  if (args.list)
+    return {
+      ok: true,
+      diagnostics: [],
+      data: { format: 'list', topics: docsTopics.map(({ id, summary }) => ({ id, summary })) },
+    };
+  const topic = args.topic ?? 'index';
+  if (!isDocsTopic(topic)) return docsFailure([invalidArguments(docsTopicsHint())]);
+  try {
+    return {
+      ok: true,
+      diagnostics: [],
+      data: { format: 'markdown', topic, content: readDocsFile(topic) },
+    };
+  } catch (error) {
+    if (error instanceof Error && error.stack !== undefined)
+      process.stderr.write(`${error.stack}\n`);
+    return docsFailure([internalUnexpected()]);
+  }
+};
+
+const printDocs = (data: DocsData): void => {
+  if (data.format === 'markdown') process.stdout.write(data.content);
+  else
+    process.stdout.write(
+      `${data.topics.map(({ id, summary }) => `${id}\t${summary}`).join('\n')}\n`,
+    );
+};
 
 const abortedOutcome: CommandOutcome = { ok: false, aborted: true };
 
@@ -489,6 +558,22 @@ export type RunCliOptions = {
   readonly signal?: AbortSignal;
 };
 
+const usageText = `${[
+  'Usage: motion-kit <command> [args]',
+  '',
+  'Commands:',
+  '  docs [topic]  print a shipped guide; --list names the topics',
+  '  frame         capture one frame to a PNG',
+  '  render        render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),',
+  '                with --concurrency <n> renderers capturing at once (default: half the cores)',
+  '',
+  'Examples:',
+  '  motion-kit render entry.tsx --out out.mp4',
+  '  motion-kit docs getting-started',
+  '',
+  'Run `motion-kit docs` to print the guide, or `motion-kit <command> --help` for command options.',
+].join('\n')}\n`;
+
 export const runCli = async (
   argv: readonly string[],
   options: RunCliOptions = {},
@@ -500,17 +585,13 @@ export const runCli = async (
 
   if (parsed.kind === 'help') return 0;
   if (parsed.kind === 'usage') {
-    process.stdout.write(
-      'Usage: motion-kit <render|frame> <entry> [options]\n\nCommands:\n  frame    capture one frame to a PNG\n  render   render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),\n           with --concurrency <n> renderers capturing at once (default: half the cores)\n\nRun `motion-kit <command> --help` for command options.\n',
-    );
+    process.stdout.write(usageText);
     return 0;
   }
   if (parsed.kind === 'no-command') {
     // Without `--json` the human route is unchanged: a usage line on stderr and nothing on stdout.
     if (!argv.includes('--json')) {
-      process.stderr.write(
-        'Usage: motion-kit <render|frame> <entry> [options]\nRun motion-kit --help for usage.\n',
-      );
+      process.stderr.write(usageText);
       return 2;
     }
     // With it, the caller still gets the one document it was promised, naming `command: null` when
@@ -535,6 +616,16 @@ export const runCli = async (
     return emit(buildEnvelope(command, failure([invalidArguments(hint)]), durationMs()), json);
   }
 
+  if (checked.data.command === 'docs') {
+    const outcome = runDocs(checked.data);
+    if (!checked.data.json && outcome.ok) {
+      printDocs(outcome.data);
+      return 0;
+    }
+    return emit(buildEnvelope('docs', outcome, durationMs()), checked.data.json);
+  }
+
+  const args = checked.data;
   let outcome: CommandOutcome;
   // A cancelled run's line is written below, but a library that exits the process from its own
   // signal handler can end the run before that line is reached; this cover is the last chance to
@@ -543,7 +634,7 @@ export const runCli = async (
   const report = (): void => {
     if (reported) return;
     reported = true;
-    process.stderr.write(`${abortedLine(checked.data)}\n`);
+    process.stderr.write(`${abortedLine(args)}\n`);
   };
   const releaseCover = coverOnExit(report);
   // The route reports its own outcome as final the moment it commits (or fails for good), which is
@@ -556,9 +647,9 @@ export const runCli = async (
   try {
     try {
       outcome =
-        checked.data.command === 'render'
-          ? await runRender(checked.data, signal, decide)
-          : await runFrame(checked.data, signal, decide);
+        args.command === 'render'
+          ? await runRender(args, signal, decide)
+          : await runFrame(args, signal, decide);
     } catch (error) {
       if (error instanceof Error && error.stack !== undefined)
         process.stderr.write(`${error.stack}\n`);
@@ -573,7 +664,7 @@ export const runCli = async (
     // The run is not cancelled, so it owes the caller no aborted line any more: a signal from
     // here on must not describe a finished render as one that produced nothing.
     releaseCover();
-    return emit(buildEnvelope(checked.data.command, outcome, durationMs()), checked.data.json);
+    return emit(buildEnvelope(args.command, outcome, durationMs()), args.json);
   } finally {
     releaseCover();
   }

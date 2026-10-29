@@ -4,6 +4,15 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## 0.1.0 — 2026-10-29
+
+### Added
+
+- **`motion-kit docs`.** The CLI prints the guide that ships in the package: `docs [topic]` prints
+  `docs/index.md` or `docs/guide/<topic>.md` verbatim, `--list` names the seven topics, and `--json`
+  returns the same content as a `command: "docs"` envelope. `--help` now lists the three commands
+  with examples and points at `motion-kit docs`.
+
 ## 0.0.2 — 2026-10-29
 
 A patch release with no API or behaviour change.

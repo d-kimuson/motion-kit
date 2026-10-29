@@ -1,5 +1,6 @@
 // Exercise the package export, rather than making the contract a private deep import.
 import {
+  DocsDataSchema,
   EnvelopeCommandSchema,
   EnvelopeSchema,
   FrameDataSchema,
@@ -35,6 +36,15 @@ const frameData = {
   width: 1920,
   height: 1080,
 };
+const docsData = {
+  format: 'markdown',
+  topic: 'cli',
+  content: '# CLI\n',
+};
+const docsList = {
+  format: 'list',
+  topics: [{ id: 'index', summary: 'Overview.' }],
+};
 const base = {
   schemaVersion: 1,
   command: 'render',
@@ -65,6 +75,8 @@ describe('CLI output v1', () => {
   it.each([
     ['render', renderData],
     ['frame', frameData],
+    ['docs', docsData],
+    ['docs', docsList],
     ['inspect', {}],
     ['validate', { future: ['data'] }],
   ])('accepts the %s command data', (command, data) => {
@@ -87,6 +99,8 @@ describe('CLI output v1', () => {
     });
     expect(RenderDataSchema.parse(renderData)).toEqual(renderData);
     expect(FrameDataSchema.parse(frameData)).toEqual(frameData);
+    expect(DocsDataSchema.parse(docsData)).toEqual(docsData);
+    expect(DocsDataSchema.parse(docsList)).toEqual(docsList);
   });
 
   it('requires ok to agree with every generated diagnostic list', () => {
@@ -127,6 +141,8 @@ describe('CLI output v1', () => {
     { ...base, data: undefined },
     { ...base, schemaVersion: 2 },
     { ...base, command: 'preview' },
+    { ...base, command: 'docs', data: { ...docsData, topic: 'missing' } },
+    { ...base, command: 'docs', data: { ...docsList, topics: [], extra: true } },
     { ...base, durationMs: -1 },
     { ...base, data: frameData },
     { ...base, command: 'frame' },

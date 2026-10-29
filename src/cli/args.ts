@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
+
 // The argument contract is schema-first: commander only tokenizes argv, and
 // these schemas validate and normalize every command invocation. The closed
 // command enum matches the TASK-164 envelope (`inspect`/`validate` are later
@@ -44,8 +46,37 @@ export const FrameArgsSchema = z.strictObject({
   json,
 });
 
-export const CliArgsSchema = z.discriminatedUnion('command', [RenderArgsSchema, FrameArgsSchema]);
+const docsTopic = z.string().min(1).optional();
+
+export const DocsArgsSchema = z
+  .strictObject({
+    command: z.literal('docs'),
+    topic: docsTopic,
+    list: z.boolean(),
+    json,
+  })
+  .superRefine((args, context) => {
+    if (args.topic !== undefined && !isDocsTopic(args.topic))
+      context.addIssue({
+        code: 'custom',
+        path: ['topic'],
+        message: `Unknown docs topic; choose one of: ${docsTopicIds.join(', ')}.`,
+      });
+    if (args.list && args.topic !== undefined)
+      context.addIssue({
+        code: 'custom',
+        path: ['topic'],
+        message: `--list takes no topic; drop it to list the topics. ${docsTopicsHint()}`,
+      });
+  });
+
+export const CliArgsSchema = z.discriminatedUnion('command', [
+  RenderArgsSchema,
+  FrameArgsSchema,
+  DocsArgsSchema,
+]);
 
 export type RenderArgs = z.infer<typeof RenderArgsSchema>;
 export type FrameArgs = z.infer<typeof FrameArgsSchema>;
+export type DocsArgs = z.infer<typeof DocsArgsSchema>;
 export type CliArgs = z.infer<typeof CliArgsSchema>;

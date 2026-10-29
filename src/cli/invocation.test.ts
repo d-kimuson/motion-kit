@@ -26,7 +26,7 @@ const invocationEnvelope = (argv: readonly string[]): Envelope =>
         code: 'cli.invalid-arguments',
         severity: 'error',
         message: 'Command-line arguments are invalid.',
-        hint: 'Pass one of the known subcommands: render, frame, inspect, validate.',
+        hint: 'Pass one of the known subcommands: render, frame, docs, inspect, validate.',
       },
     ],
     durationMs: 1,
@@ -37,7 +37,10 @@ describe('resolveCommand', () => {
     // A usable invocation, and one that fails inside commander: both still name the subcommand.
     { argv: ['render', '--bogus', '--json'], command: 'render' },
     { argv: ['frame', 'entry.tsx', '--frame', '0', '--out', 'f.png'], command: 'frame' },
-    // Reserved subcommands resolve to themselves: the enum is the contract's.
+    // The shipped docs command and the reserved subcommands resolve to themselves: the enum is
+    // the contract's.
+    { argv: ['docs', '--json'], command: 'docs' },
+    { argv: ['docs', 'cli'], command: 'docs' },
     { argv: ['inspect', '--json'], command: 'inspect' },
     { argv: ['validate', '--json'], command: 'validate' },
     // A value-taking option's value is not a positional argument, so it cannot take the slot or
@@ -58,7 +61,7 @@ describe('resolveCommand', () => {
   });
 
   it('knows the contract enum and nothing else, so no sentinel member is possible', () => {
-    expect(CommandSchema.options).toEqual(['render', 'frame', 'inspect', 'validate']);
+    expect(CommandSchema.options).toEqual(['render', 'frame', 'docs', 'inspect', 'validate']);
     expect(resolveCommand(['unknown'])).toBeNull();
     expect(resolveCommand([])).toBeNull();
   });
@@ -100,6 +103,7 @@ describe('resolveCommand', () => {
     { argv: ['render', '--bogus', '--json'] },
     { argv: ['--json'] },
     { argv: ['unknown', '--json'] },
+    { argv: ['docs', '--json'] },
     { argv: ['inspect', '--json'] },
     { argv: ['--out', '/tmp/a.png', 'render', 'entry.tsx', '--json'] },
   ])('produces an envelope both validators accept for $argv', ({ argv }) => {
