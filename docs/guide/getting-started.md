@@ -217,7 +217,7 @@ The CLI's project root is the directory you run it in (`process.cwd()`):
 
 ## Next steps
 
-- [CLI reference](cli.md) — both commands, every flag, the envelope and the exit codes.
+- [CLI reference](cli.md) — `render`, `frame` and `docs`, every flag, the envelope and the exit codes.
 - [Authoring](authoring.md) — Composition, Sequence, TransitionSeries, hooks, `useAsset`, audio.
 - [Determinism](determinism.md) — what "every frame is a pure function of time" guarantees, and
   what it does not.

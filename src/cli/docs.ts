@@ -33,6 +33,9 @@ export const docsTopics: readonly DocsTopicEntry[] = docsTopicIds.map((id) => ({
 export const isDocsTopic = (value: string): value is DocsTopic =>
   docsTopicIds.some((id) => id === value);
 
+/** The hint that names every topic, for an unknown one or a `--list` that also carries a topic. */
+export const docsTopicsHint = (): string => `Choose one of: ${docsTopicIds.join(', ')}.`;
+
 const packageName = '@kimuson/motion-kit';
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 

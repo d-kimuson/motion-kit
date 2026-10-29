@@ -140,21 +140,23 @@ The guides ship inside the package as well as in the repository, so an installed
 without a network: start at `node_modules/@kimuson/motion-kit/docs/index.md`, and the guides it links
 are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
 
-| Document                                         | What it covers                                                                           |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                 |
-| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.              |
-| [CLI](docs/guide/cli.md)                         | Both commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
-| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.       |
-| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.    |
-| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                |
-| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                          |
+| Document                                         | What it covers                                                                                                       |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                                             |
+| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                          |
+| [CLI](docs/guide/cli.md)                         | The `render`, `frame` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
+| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                   |
+| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                |
+| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                            |
+| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                      |
 
 ## CLI
 
-The `motion-kit` bin renders Compositions from a registry entry file. The commands accept `--json`,
-which writes exactly one versioned envelope (`schemaVersion: 1`) to stdout; without it, the same data
-is printed as a short human summary.
+The `motion-kit` bin renders Compositions from a registry entry file and prints the guides that ship
+with the package. `render`, `frame` and `docs` accept `--json`, which writes exactly one versioned
+envelope (`schemaVersion: 1`) to stdout; without it, each command prints its result as text. `docs`
+prints the guide markdown, and its `--json` envelope carries that markdown in `data.content`;
+`render` and `frame` print a short summary.
 
 ```bash
 # Capture one frame as a PNG.

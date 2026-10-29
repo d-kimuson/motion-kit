@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { docsTopicIds, isDocsTopic } from './docs.ts';
+import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
 
 // The argument contract is schema-first: commander only tokenizes argv, and
 // these schemas validate and normalize every command invocation. The closed
@@ -66,7 +66,7 @@ export const DocsArgsSchema = z
       context.addIssue({
         code: 'custom',
         path: ['topic'],
-        message: '--list takes no topic; drop it to list the topics.',
+        message: `--list takes no topic; drop it to list the topics. ${docsTopicsHint()}`,
       });
   });
 

@@ -353,6 +353,7 @@ describe('motion-kit CLI', () => {
     expect(envelope).toMatchObject({ command: 'docs', ok: false, data: null });
     expect(envelope.diagnostics[0]).toMatchObject({ code: 'cli.invalid-arguments' });
     expect(envelope.diagnostics[0]?.hint).toContain('--list takes no topic');
+    for (const topic of docsTopicRows) expect(envelope.diagnostics[0]?.hint).toContain(topic.id);
     expect(result.stdout.trim().split('\n')).toHaveLength(1);
   });
 

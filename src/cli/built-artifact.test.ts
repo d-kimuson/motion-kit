@@ -1,6 +1,7 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { execFile } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -75,12 +76,12 @@ afterAll(() => {
 
 type RunResult = { readonly code: number; readonly stdout: string; readonly stderr: string };
 
-const run = async (args: readonly string[]): Promise<RunResult> => {
+const run = async (args: readonly string[], cli: string = distCli): Promise<RunResult> => {
   let stdout = '';
   let stderr = '';
   let code = 0;
   try {
-    const result = await execFileAsync(process.execPath, [distCli, ...args], {
+    const result = await execFileAsync(process.execPath, [cli, ...args], {
       cwd: projectRoot,
       timeout: 120_000,
       maxBuffer: 64 * 1024 * 1024,
@@ -184,6 +185,31 @@ describe('built package layout', () => {
         content: readFileSync(new URL('../../docs/index.md', import.meta.url), 'utf8'),
       },
     });
+  }, 60_000);
+
+  it('writes the internal-failure stack when the installed tree has no docs', async () => {
+    const brokenRoot = mkdtempSync(join(tmpdir(), 'motion-kit-broken-'));
+    try {
+      cpSync(new URL('../../dist', import.meta.url), join(brokenRoot, 'dist'), {
+        recursive: true,
+      });
+      cpSync(new URL('../../package.json', import.meta.url), join(brokenRoot, 'package.json'));
+      symlinkSync(new URL('../../node_modules', import.meta.url), join(brokenRoot, 'node_modules'));
+      const result = await run(['docs', '--json'], join(brokenRoot, 'dist', 'cli.js'));
+      expect(result.code).toBe(3);
+      const envelope = EnvelopeSchema.parse(JSON.parse(result.stdout.trim()));
+      expect(validateJson(envelope)).toBe(true);
+      expect(envelope).toMatchObject({
+        command: 'docs',
+        ok: false,
+        data: null,
+        diagnostics: [{ code: 'internal.unexpected' }],
+      });
+      expect(result.stderr).toContain('The shipped guide');
+      expect(result.stderr).toMatch(/\n\s+at /u);
+    } finally {
+      rmSync(brokenRoot, { recursive: true, force: true });
+    }
   }, 60_000);
 
   it('reads docs from the packed tarball, not from the checkout', async () => {

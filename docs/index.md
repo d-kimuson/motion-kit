@@ -113,7 +113,7 @@ pnpm exec motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/you/hello-video/out/still.png (1920x1080) in 962.6ms
 ```
 
-Add `--json` to either command to get one versioned envelope on stdout instead of the summary:
+Add `--json` to any command to get one versioned envelope on stdout instead of its text output:
 
 ```bash
 pnpm exec motion-kit render entry.tsx --out out.mp4 --json

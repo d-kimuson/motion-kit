@@ -20,7 +20,7 @@ import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
 import { CliArgsSchema, type DocsArgs, type FrameArgs, type RenderArgs } from './args.ts';
 import { commands } from './commands.ts';
-import { docsTopicIds, docsTopics, isDocsTopic, readDocsFile } from './docs.ts';
+import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
@@ -186,12 +186,12 @@ const docsFailure = (diagnostics: readonly Diagnostic[]): DocsOutcome => ({
   diagnostics,
 });
 
-const docsTopicsHint = (): string => `Choose one of: ${docsTopicIds.join(', ')}.`;
-
 /** Reads a shipped guide or lists the topics; a broken install is `internal.unexpected`. */
 const runDocs = (args: DocsArgs): DocsOutcome => {
   if (args.list && args.topic !== undefined)
-    return docsFailure([invalidArguments('--list takes no topic; drop it to list the topics.')]);
+    return docsFailure([
+      invalidArguments(`--list takes no topic; drop it to list the topics. ${docsTopicsHint()}`),
+    ]);
   if (args.list)
     return {
       ok: true,
@@ -206,7 +206,9 @@ const runDocs = (args: DocsArgs): DocsOutcome => {
       diagnostics: [],
       data: { format: 'markdown', topic, content: readDocsFile(topic) },
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.stack !== undefined)
+      process.stderr.write(`${error.stack}\n`);
     return docsFailure([internalUnexpected()]);
   }
 };
