@@ -137,9 +137,14 @@ is compared against:
 By default a sample at frame `f` uses `f - 1` and `f + 1` as its predecessors, each kept only when it
 is inside `[0, durationInFrames)`. `--frame` and `--predecessor` are repeatable or comma-separated;
 explicit `--predecessor` values replace the default list for every sampled frame. The pool renders
-the ascending half-open range `[max(0, min(f, p) - 1), min(durationInFrames, max(f, p) + 2))` and
-reads back `f`; the `predecessor` in the report names the requested `p`, while the frame that pool
-Renderer actually captured before `f` is whichever frame of that window it was dealt.
+the ascending half-open range `[from, min(durationInFrames, max(f, ...predecessors) + 2))`, where
+`from` starts at `max(0, min(f, p) - 1)` and moves one frame lower when that would make the sample
+the pool Renderer's first capture (`f - from < 2`, never below `0`). The upper bound uses every
+predecessor that applies to the sample, not just one, so with several `--predecessor` values the
+window reaches two frames past the later of the sample and the latest requested predecessor. The
+report's `predecessor` for the `pool` history names the frame that pool Renderer actually captured
+immediately before `f` (`f - 2` under the ascending deal), or `null` when `f < 2` and the sample
+was that Renderer's first capture.
 
 At scene boundaries a sample may not support every history: frame `0` has no earlier frame and the
 last frame has no later one. Such a history is absent from the sample when it was not requested;
@@ -206,12 +211,13 @@ check exits `0`, every warm status is `identical`, and `diagnostics` is empty:
 motion-kit check entry.tsx --composition traversal-fixed --frame 2,6 --json
 ```
 
-Without `--json`, a passing run prints one line on stdout and a failing run writes the diagnostic and
-the summary to stderr, for example:
+Without `--json`, a passing run prints one line on stdout and a failing run writes the diagnostics and
+the summary to stderr. The `--frame 2,6` dependent run prints:
 
 ```text
-checked 1 of 12 frames (2) across 2 histories: frame 2 differs in after-earlier (8.3% of pixels) in
-2353.3ms
+error: check.frame-differs: A warm capture of frame 2 differs from its cold reference. — Make the frame a pure function of its time; a warm realm must not carry state into later frames.
+error: check.frame-differs: A warm capture of frame 6 differs from its cold reference. — Make the frame a pure function of its time; a warm realm must not carry state into later frames.
+checked 2 of 12 frames (2, 6) across 4 histories: frame 2 differs in after-earlier (8.3% of pixels) in 8780.8ms
 ```
 
 For a long video, do not sweep every frame. Sample a few frames — scene starts, transition edges, a
@@ -270,6 +276,13 @@ is an integer from 0 to 255 and `--changed-ratio` (default `0.002`) is a number 
   never silently compared.
 - `maxChannelDelta` is the largest absolute per-channel difference over the compared channels; it is
   reported even when the capture is within tolerance.
+
+Those boundaries are what the statuses mean. In pixels mode `identical` means no compared pixel
+exceeded the channel tolerance, `within-tolerance` means some pixel did but `changedRatio` stayed
+within `maxChangedRatio`, and `differs` means the tolerance was exceeded. A pixel-mode `identical`
+therefore claims visually equal decoded pixels, not byte identity: the PNG buffers can still differ.
+In exact mode `identical` instead means the two PNG byte buffers are equal and `differs` means they
+are not. This is why the report names the comparison mode next to each status.
 
 `--exact` instead compares the two PNG byte buffers and reports `differentBytes`, `referenceBytes`
 and `actualBytes`. Exact byte identity and tolerance-based visual equality are **distinct claims**,

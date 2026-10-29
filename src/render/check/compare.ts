@@ -1,4 +1,5 @@
 import { type Diagnostic } from '../../lib/diagnostic.ts';
+import { type Result } from '../../lib/result.ts';
 import { decodePng } from './png.ts';
 
 /** How two captures are compared. `exact` claims byte identity; `pixels` decodes both captures
@@ -148,7 +149,13 @@ const comparePixels = (
   };
 };
 
-/** Compare decoded pixels unless `exact` was requested; exact mode never decodes the PNGs. */
+/**
+ * Compare decoded pixels unless `exact` was requested; exact mode never decodes the PNGs.
+ *
+ * This is an invariant API and throws when a capture cannot be decoded (a contract violation).
+ * Callers at a boundary that hands user captures in use `compareCaptures`, which converts the
+ * exception into a `Result` so nothing throws across the public API.
+ */
 export const comparePng = (
   actual: Uint8Array,
   reference: Uint8Array,
@@ -157,3 +164,23 @@ export const comparePng = (
   comparison.mode === 'exact'
     ? compareExact(actual, reference)
     : comparePixels(actual, reference, comparison);
+
+const comparisonFailure = (cause: unknown): Diagnostic => ({
+  code: 'internal.unexpected',
+  severity: 'error',
+  message: 'The checker could not compare two captures.',
+  hint: `Report this as a motion-kit bug: a capture was not a decodable PNG (${cause instanceof Error ? cause.message : String(cause)}).`,
+});
+
+/** The boundary form of `comparePng`: an undecodable capture becomes `internal.unexpected`. */
+export const compareCaptures = (
+  actual: Uint8Array,
+  reference: Uint8Array,
+  comparison: CheckComparison,
+): Result<CheckComparisonResult, readonly Diagnostic[]> => {
+  try {
+    return { ok: true, value: comparePng(actual, reference, comparison) };
+  } catch (cause) {
+    return { ok: false, error: [comparisonFailure(cause)] };
+  }
+};

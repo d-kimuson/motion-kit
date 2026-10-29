@@ -6,7 +6,7 @@ import { createRendererPool, type RendererPool } from '../pool.ts';
 import { createRenderer, type Renderer, type RendererOptions } from '../renderer.ts';
 import {
   checkComparisonDiagnostic,
-  comparePng,
+  compareCaptures,
   defaultCheckComparison,
   type CheckComparison,
   type CheckDifference,
@@ -14,10 +14,10 @@ import {
 } from './compare.ts';
 import {
   checkHistories,
+  defaultPredecessors,
   planHistories,
   type CheckHistory,
   type CheckHistoryPlanError,
-  type PlannedHistory,
 } from './history.ts';
 
 export type CheckCompositionOptions = RendererOptions & {
@@ -29,6 +29,10 @@ export type CheckCompositionOptions = RendererOptions & {
 
 export type CheckHistoryResult = {
   readonly history: CheckHistory;
+  /**
+   * The frame this history's Renderer captured immediately before the sample, or `null` when the
+   * sample was its first capture (`cold`, and `pool` for frames below 2).
+   */
   readonly predecessor: number | null;
   /** This capture's dimensions, not the descriptor's. */
   readonly width: number;
@@ -234,19 +238,24 @@ const internalDiagnostic = (frame: number, message: string): Diagnostic => ({
 });
 
 const historyResult = (
-  entry: PlannedHistory,
+  history: CheckHistory,
+  predecessor: number | null,
   capture: RenderedFrame,
   reference: Uint8Array,
   comparison: CheckComparison,
-): CheckHistoryResult => {
-  const compared = comparePng(capture.image, reference, comparison);
+): Result<CheckHistoryResult, readonly Diagnostic[]> => {
+  const compared = compareCaptures(capture.image, reference, comparison);
+  if (!compared.ok) return compared;
   return {
-    history: entry.history,
-    predecessor: entry.predecessor,
-    width: capture.width,
-    height: capture.height,
-    status: compared.status,
-    difference: compared.difference,
+    ok: true,
+    value: {
+      history,
+      predecessor,
+      width: capture.width,
+      height: capture.height,
+      status: compared.value.status,
+      difference: compared.value.difference,
+    },
   };
 };
 
@@ -325,6 +334,7 @@ const checkComposition = async (options: CheckCompositionOptions): Promise<Check
     if (rangeProblems.length > 0) return { ok: false, error: rangeProblems };
 
     for (const frame of frames) {
+      const requestedPredecessors = predecessors ?? defaultPredecessors(frame, durationInFrames);
       if (cold === undefined) {
         const opened = await openRenderer();
         if (!opened.ok) return openOutcome(opened);
@@ -370,9 +380,14 @@ const checkComposition = async (options: CheckCompositionOptions): Promise<Check
               if (!opened.ok) return openOutcome(opened);
               pool = opened.value;
             }
-            // D6: the ascending window keeps the pool's own predecessor adjacent to the sample.
-            const from = Math.max(0, Math.min(frame, predecessor) - 1);
-            const to = Math.min(durationInFrames, Math.max(frame, predecessor) + 2);
+            // D6: the ascending deal gives the sample the Renderer `(frame - from) % 2`, and it
+            // has a predecessor only when `frame - from >= 2`. Push the start one frame lower
+            // when the anchor start would make the sample that Renderer's first capture.
+            const anchorFrom = Math.max(0, Math.min(frame, predecessor) - 1);
+            const from = frame - anchorFrom < 2 ? Math.max(0, anchorFrom - 1) : anchorFrom;
+            // The window still reaches two frames past the later of the sample and every
+            // requested predecessor, so a far-away predecessor keeps its own evidence.
+            const to = Math.min(durationInFrames, Math.max(frame, ...requestedPredecessors) + 2);
             let actual: RenderedFrame | undefined;
             for await (const result of pool.renderFrames({
               from,
@@ -397,7 +412,17 @@ const checkComposition = async (options: CheckCompositionOptions): Promise<Check
                   ),
                 ],
               };
-            historyResults.push(historyResult(entry, actual, reference.image, comparison));
+            // Under the ascending deal the same Renderer captured `frame - 2` immediately
+            // before the sample; below frame 2 the sample was that Renderer's first capture.
+            const compared = historyResult(
+              entry.history,
+              frame < 2 ? null : frame - 2,
+              actual,
+              reference.image,
+              comparison,
+            );
+            if (!compared.ok) return compared;
+            historyResults.push(compared.value);
             continue;
           }
           const opened = await openRenderer();
@@ -412,7 +437,15 @@ const checkComposition = async (options: CheckCompositionOptions): Promise<Check
             if (!later.ok) return captureOutcome(later);
             forward(later.value);
             if (hasUncontrolledTime(later.value)) uncontrolled = true;
-            historyResults.push(historyResult(entry, later.value, reference.image, comparison));
+            const compared = historyResult(
+              entry.history,
+              predecessor,
+              later.value,
+              reference.image,
+              comparison,
+            );
+            if (!compared.ok) return compared;
+            historyResults.push(compared.value);
           } finally {
             await disposeRenderer(pair);
           }

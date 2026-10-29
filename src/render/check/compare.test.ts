@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkComparisonDiagnostic, comparePng, type CheckComparison } from './compare.ts';
+import {
+  checkComparisonDiagnostic,
+  compareCaptures,
+  comparePng,
+  type CheckComparison,
+} from './compare.ts';
 import { encodePng } from './png-fixture.ts';
 
 const pixelsComparison: CheckComparison = {
@@ -176,6 +181,41 @@ describe('comparePng pixel mode', () => {
     expect(comparePng(actual, reference, pixelsComparison)).toMatchObject({
       status: 'identical',
       difference: { mode: 'pixels', totalPixels: 1, changedPixels: 0, maxChannelDelta: 0 },
+    });
+  });
+});
+
+describe('compareCaptures', () => {
+  it('converts an undecodable capture to internal.unexpected in pixel mode', () => {
+    const garbage = new Uint8Array([1, 2, 3, 4]);
+    const result = compareCaptures(garbage, rgbPng(1, 1, rgb(1, 1)), pixelsComparison);
+    expect(result).toMatchObject({
+      ok: false,
+      error: [{ code: 'internal.unexpected', severity: 'error' }],
+    });
+    if (result.ok) throw new Error('The garbage capture was compared');
+    expect(result.error[0]?.message).toBe('The checker could not compare two captures.');
+    expect(result.error[0]?.hint).toContain('Report this as a motion-kit bug');
+  });
+
+  it('compares a valid PNG like comparePng', () => {
+    const reference = rgbPng(1, 1, rgb(1, 1, 100));
+    const actual = rgbPng(1, 1, rgb(1, 1, 100));
+    expect(compareCaptures(actual, reference, pixelsComparison)).toEqual({
+      ok: true,
+      value: comparePng(actual, reference, pixelsComparison),
+    });
+  });
+
+  it('never decodes in exact mode', () => {
+    const garbage = new Uint8Array([1, 2, 3, 4]);
+    expect(compareCaptures(garbage, garbage, { mode: 'exact' })).toMatchObject({
+      ok: true,
+      value: { status: 'identical', difference: { mode: 'exact', differentBytes: 0 } },
+    });
+    expect(compareCaptures(new Uint8Array([9]), garbage, { mode: 'exact' })).toMatchObject({
+      ok: true,
+      value: { status: 'differs', difference: { mode: 'exact', differentBytes: 4 } },
     });
   });
 });

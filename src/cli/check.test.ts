@@ -340,8 +340,48 @@ describe('check CLI with the traversal fixture', () => {
     ).toEqual([
       { history: 'cold', predecessor: null },
       { history: 'after-later', predecessor: 9 },
-      { history: 'pool', predecessor: 9 },
+      { history: 'pool', predecessor: 1 },
     ]);
+  }, 180_000);
+
+  it('reports the pool actual predecessor when the requested one is later than the sample', async () => {
+    const result = await runDirect(
+      checkArgs([
+        '--composition',
+        'traversal-fixed',
+        '--frame',
+        '2',
+        '--predecessor',
+        '3',
+        '--json',
+      ]),
+    );
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    if (envelope.command !== 'check' || envelope.data === null)
+      throw new Error('expected check data');
+    expect(
+      envelope.data.samples[0]?.histories.map((history) => ({
+        history: history.history,
+        predecessor: history.predecessor,
+      })),
+    ).toEqual([
+      { history: 'cold', predecessor: null },
+      { history: 'after-later', predecessor: 3 },
+      { history: 'pool', predecessor: 0 },
+    ]);
+  }, 180_000);
+
+  it('reports no pool predecessor when the sample is below frame 2', async () => {
+    const result = await runDirect(
+      checkArgs(['--composition', 'traversal-fixed', '--frame', '1', '--json']),
+    );
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    if (envelope.command !== 'check' || envelope.data === null)
+      throw new Error('expected check data');
+    const pool = envelope.data.samples[0]?.histories.find((history) => history.history === 'pool');
+    expect(pool).toMatchObject({ history: 'pool', predecessor: null });
   }, 180_000);
 
   it('exits 1 with composition.props-invalid for an out-of-range frame', async () => {

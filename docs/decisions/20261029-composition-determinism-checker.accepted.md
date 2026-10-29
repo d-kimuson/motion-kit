@@ -53,10 +53,16 @@ The default histories are all four the inputs can support. An unrequested histor
 support is absent; a history requested explicitly (via `--history`) that cannot run, or a sample
 that would be left with only the cold reference, is a `check.history-not-run` error.
 
-The pool window for sample `f` and predecessor `p` is the ascending half-open range
-`[max(0, min(f, p) - 1), min(durationInFrames, max(f, p) + 2))`. The result names the requested `p` as
-`predecessor`; the pool's actual predecessor for `f` is whichever frame that Renderer captured
-before it. Two Renderers are opened once per run and reused across samples in ascending sample order.
+The pool window for sample `f` and predecessor `p` starts at `max(0, min(f, p) - 1)` and moves one
+frame lower when that start would make the sample the pool Renderer's first capture (`f - from < 2`,
+never below `0`), so the sample is that Renderer's second capture whenever the frame index allows it.
+The ascending half-open range ends at `min(durationInFrames, max(f, ...predecessors) + 2)`, where
+`...predecessors` is every predecessor that applies to the sample, not just one: with several
+`--predecessor` values the window reaches two frames past the later of the sample and the latest
+requested predecessor. The result's `predecessor` for `pool` names the frame that pool Renderer
+actually captured immediately before `f` — `f - 2` under the ascending deal — or `null` when `f < 2`
+and the sample was that Renderer's first capture. Two Renderers are opened once per run and reused
+across samples in ascending sample order.
 
 ### Comparison
 
@@ -88,7 +94,10 @@ The default is `{ mode: 'pixels', channelTolerance: 32, maxChangedRatio: 0.002, 
   `mode` names which one was used.
 
 A status is `reference` for the cold capture, or `identical`, `within-tolerance` (pixels mode only)
-or `differs`. The difference union is `exact | pixels | dimensions`; it is `null` only for the
+or `differs`. In pixels mode `identical` means no compared pixel exceeded `channelTolerance`,
+`within-tolerance` means some pixel did but `changedRatio` stayed within `maxChangedRatio`, and
+`differs` means the tolerance was exceeded; a pixel-mode `identical` is not byte identity. In exact
+mode `identical` means the PNG bytes are equal. The difference union is `exact | pixels | dimensions`; it is `null` only for the
 reference. `src/render/check/png.ts` decodes non-interlaced 8-bit colour types 0, 2, 4 and 6 with all
 five filter types using `node:zlib` only; an unsupported PNG is a contract violation converted by the
 check layer to `internal.unexpected`, never thrown across the boundary.
@@ -98,8 +107,9 @@ check layer to `internal.unexpected`, never thrown across the boundary.
 The envelope gains one strict `data` member with `command: 'check'` and `format: 'check'`
 (`CheckDataSchema` in `src/agent/cli-output.ts`): the Composition id, descriptor dimensions, `fps`,
 `frameCount`, the `comparison` actually used, and `samples`. Each sample carries its frame, the cold
-reference dimensions, and its histories; each history carries its name, `predecessor` (`null` only
-for cold), its own dimensions, `status`, and `difference`. There is deliberately no `passed` field and
+reference dimensions, and its histories; each history carries its name, `predecessor` (`null`
+for `cold`, and for `pool` when the sample was that Renderer's first capture), its own dimensions,
+`status`, and `difference`. There is deliberately no `passed` field and
 no `durationSeconds`: a check passes iff the envelope is `ok: true`, a failing check retains `data` so
 the caller can name the sample and histories that differed, and `check` is not a render.
 

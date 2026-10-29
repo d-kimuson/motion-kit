@@ -184,7 +184,9 @@ renderer configuration as `render` and `frame`.
 `cold` opens a fresh Renderer and captures the sample as its first frame; it is the reference every
 other history is compared against. `after-earlier` and `after-later` each open a dedicated Renderer,
 capture their predecessor, then the sample. `pool` captures the ascending window around the sample
-through the run's single two-Renderer pool. The default predecessors are `f - 1` and `f + 1`, kept
+through the run's single two-Renderer pool; its reported `predecessor` is the frame that pool
+Renderer actually captured immediately before the sample (`null` when the sample was its first
+capture), not necessarily the requested one. The default predecessors are `f - 1` and `f + 1`, kept
 only when inside `[0, durationInFrames)`. A sample at frame `0` or at the last frame therefore has no
 history on one side; requesting that history explicitly is `check.history-not-run` (exit `1`), not a
 silent pass. Out-of-range sample or predecessor frames are reported once the frame count is known as
@@ -195,14 +197,16 @@ different evidence from two identical renders, and gives a long-video sampling r
 
 ```bash
 motion-kit check entry.tsx --composition traversal-fixed --frame 2,6
-# checked 2 of 12 frames (2, 6) across 4 histories: passed in 9183.8ms
+# checked 2 of 12 frames (2, 6) across 4 histories: passed in 8968.6ms
 ```
 
-A failure writes the diagnostics and the summary to stderr, for example:
+A failure writes the diagnostics and the summary to stderr. The same sampling of the dependent
+fixture prints:
 
 ```text
 error: check.frame-differs: A warm capture of frame 2 differs from its cold reference. — Make the frame a pure function of its time; a warm realm must not carry state into later frames.
-checked 1 of 12 frames (2) across 2 histories: frame 2 differs in after-earlier (8.3% of pixels) in 2353.3ms
+error: check.frame-differs: A warm capture of frame 6 differs from its cold reference. — Make the frame a pure function of its time; a warm realm must not carry state into later frames.
+checked 2 of 12 frames (2, 6) across 4 histories: frame 2 differs in after-earlier (8.3% of pixels) in 8780.8ms
 ```
 
 `check`'s `data` is a strict `format: "check"` object. It carries the Composition id and descriptor,
@@ -265,7 +269,11 @@ dimensions and one entry per history (predecessor, dimensions, status and differ
 ```
 
 A history's `status` is `reference` for `cold`, or `identical`, `within-tolerance` or `differs` for a
-warm capture. Its `difference` is `null` only for the reference; otherwise it is a union on `mode`:
+warm capture. In pixels mode `identical` means no compared pixel exceeded `channelTolerance`,
+`within-tolerance` means some pixel did but `changedRatio` stayed within `maxChangedRatio`, and
+`differs` means the tolerance was exceeded; a pixel-mode `identical` is therefore not byte identity.
+In exact mode `identical` means the PNG bytes are equal. A history's `difference` is `null` only for
+the reference; otherwise it is a union on `mode`:
 `exact` (`differentBytes`, `referenceBytes`, `actualBytes`), `pixels` (`totalPixels`, `changedPixels`,
 `changedRatio`, `maxChannelDelta`) or `dimensions`. Exact byte equality and tolerance-based equality
 are different claims, and `comparison.mode` names the one that was used. There is no `passed` field:

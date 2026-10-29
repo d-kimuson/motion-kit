@@ -61,7 +61,7 @@ const validateHistories = (histories: readonly CheckHistory[]): readonly CheckHi
   return [...histories];
 };
 
-const defaultPredecessors = (frame: number, durationInFrames: number): readonly number[] =>
+export const defaultPredecessors = (frame: number, durationInFrames: number): readonly number[] =>
   [frame - 1, frame + 1].filter(
     (predecessor) =>
       Number.isSafeInteger(predecessor) && predecessor >= 0 && predecessor < durationInFrames,
