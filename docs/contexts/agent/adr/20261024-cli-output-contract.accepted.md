@@ -65,6 +65,7 @@ The code pattern is `^[a-z]+(\.[a-z0-9-]+)+$`. The namespace is the segment befo
 | `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid`           |
 | `seek`        | `seek.uncontrolled` (Tier C detected; emit as warning)                                                            |
 | `layout`      | `layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`, `layout.font-not-loaded`                    |
+| `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                                         |
 | `motion`      | `motion.invalid-input`, `motion.non-finite-result`                                                                |
 | `internal`    | `internal.unexpected`                                                                                             |
 

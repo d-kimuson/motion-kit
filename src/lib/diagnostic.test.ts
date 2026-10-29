@@ -21,8 +21,9 @@ describe('Diagnostic', () => {
   });
 
   it('reserves all initial codes and their namespaces', () => {
-    // TASK-159 added `encode.ffmpeg-unsupported` and `encode.output-invalid` to the enum.
-    expect(DiagnosticCodeSchema.options).toHaveLength(22);
+    // TASK-159 added `encode.ffmpeg-unsupported` and `encode.output-invalid` to the enum; Issue #60
+    // added the three `check.*` codes the composition determinism checker reports.
+    expect(DiagnosticCodeSchema.options).toHaveLength(25);
     const namespaces = [
       'cli',
       'composition',
@@ -32,6 +33,7 @@ describe('Diagnostic', () => {
       'encode',
       'seek',
       'layout',
+      'check',
       'internal',
     ];
     for (const code of DiagnosticCodeSchema.options) {
