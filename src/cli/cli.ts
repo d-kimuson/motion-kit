@@ -135,6 +135,10 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         out: options['out'],
         props: options['props'],
         concurrency: options['concurrency'],
+        videoCrf: options['videoCrf'],
+        videoBitrate: options['videoBitrate'],
+        scale: options['scale'],
+        fps: options['fps'],
         json,
       },
     };
@@ -329,6 +333,13 @@ const runRender = async (
 ): Promise<CommandOutcome> => {
   // Checked before the browser exists, so a run cancelled while it started does no work.
   if (signal.aborted) return abortedOutcome;
+  if (args.videoCrf !== undefined && args.videoBitrate !== undefined)
+    return failure([invalidArguments('Use either --video-crf or --video-bitrate, not both.')]);
+  if (
+    !isVideoOutput(args.out) &&
+    [args.videoCrf, args.videoBitrate, args.scale, args.fps].some((value) => value !== undefined)
+  )
+    return failure([invalidArguments('Video options require an .mp4 output path.')]);
   const opened = await openPool(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
@@ -340,6 +351,52 @@ const runRender = async (
     // The target's extension selects the format: an `.mp4` file is encoded video, and any
     // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
     if (isVideoOutput(outAbsolute)) {
+      let fps: { numerator: number; denominator: number } | undefined;
+      if (args.fps !== undefined) {
+        const parts = args.fps.split('/');
+        const decimal = parts[0] ?? '';
+        const digits = decimal.split('.')[1]?.length ?? 0;
+        fps =
+          parts.length === 2
+            ? { numerator: Number(parts[0]), denominator: Number(parts[1]) }
+            : { numerator: Number(decimal.replace('.', '')), denominator: 10 ** digits };
+        const parsedRate = createFrameRate(fps);
+        if (
+          !parsedRate.ok ||
+          parsedRate.value.numerator * rate.value.denominator >
+            rate.value.numerator * parsedRate.value.denominator
+        )
+          return decide(
+            failure([
+              invalidArguments(
+                'Use a positive --fps no greater than the Composition fps, for example 30000/1001.',
+              ),
+            ]),
+          );
+      }
+      let resolution: { width: number; height: number } | undefined;
+      if (args.scale !== undefined) {
+        const parts = args.scale.split('x');
+        resolution =
+          parts.length === 2
+            ? { width: Number(parts[0]), height: Number(parts[1]) }
+            : {
+                width: Math.round(descriptor.width * Number(args.scale)),
+                height: Math.round(descriptor.height * Number(args.scale)),
+              };
+        if (
+          ![resolution.width, resolution.height].every(
+            (value) => Number.isSafeInteger(value) && value > 0 && value % 2 === 0,
+          )
+        )
+          return decide(
+            failure([
+              invalidArguments(
+                'Use --scale yielding positive even dimensions, for example 1280x720 or 0.5.',
+              ),
+            ]),
+          );
+      }
       mkdirSync(dirname(outAbsolute), { recursive: true });
       // The same signal reaches the encoder, which kills its child and removes the sibling.
       // Audio is the Composition's own declaration, so it resolves against this project root;
@@ -348,6 +405,10 @@ const runRender = async (
         composition: renderer,
         output: outAbsolute,
         projectRoot: config.projectRoot,
+        ...(fps === undefined ? {} : { fps }),
+        ...(resolution === undefined ? {} : { resolution }),
+        ...(args.videoCrf === undefined ? {} : { crf: args.videoCrf }),
+        ...(args.videoBitrate === undefined ? {} : { videoBitrate: args.videoBitrate }),
         signal,
       });
       if (!encoded.ok)

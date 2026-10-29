@@ -1,4 +1,10 @@
-import { createFrameRate } from '../core/timeline/time.ts';
+import {
+  createFrameRate,
+  frameCount,
+  frameToTime,
+  timeToFrameFloor,
+  toSeconds,
+} from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';
 import { encoderInvariantDiagnostic } from './encoding/diagnostics.ts';
@@ -7,6 +13,7 @@ import {
   type EncodeProgress,
   type Encoder,
   type FfmpegEncoderOptions,
+  type VideoEncodingOptions,
 } from './encoding/encoder.ts';
 import { createFfmpegEncoder } from './encoding/ffmpeg.ts';
 
@@ -24,7 +31,8 @@ export type VideoComposition = {
   }) => AsyncIterable<FrameCaptureResult>;
 };
 
-export type RenderVideoOptions = {
+export type RenderVideoOptions = VideoEncodingOptions & {
+  readonly fps?: { readonly numerator: number; readonly denominator: number };
   readonly composition: VideoComposition;
   /** Absolute path of the MP4 to produce. */
   readonly output: string;
@@ -56,7 +64,9 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
   const cancelled = (): boolean => signal?.aborted === true;
   if (cancelled()) return { ok: false, aborted: true };
   const descriptor = composition.descriptor();
-  if (!createFrameRate(descriptor.fps).ok)
+  const sourceRate = createFrameRate(descriptor.fps);
+  const outputRate = createFrameRate(options.fps ?? descriptor.fps);
+  if (!sourceRate.ok || !outputRate.ok)
     return {
       ok: false,
       error: [
@@ -66,6 +76,48 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
         ),
       ],
     };
+  const duration = frameToTime(BigInt(descriptor.durationInFrames), sourceRate.value);
+  const count = frameCount(duration, outputRate.value);
+  if (
+    !count.ok ||
+    count.value > BigInt(Number.MAX_SAFE_INTEGER) ||
+    outputRate.value.numerator * sourceRate.value.denominator >
+      sourceRate.value.numerator * outputRate.value.denominator
+  )
+    return {
+      ok: false,
+      error: [
+        encoderInvariantDiagnostic(
+          'Invalid output frame rate.',
+          'Choose an output frame rate no greater than the Composition frame rate.',
+        ),
+      ],
+    };
+  const total = Number(count.value);
+  const frames =
+    options.fps === undefined
+      ? composition.renderFrames({
+          from: 0,
+          to: descriptor.durationInFrames,
+          signal,
+          format: videoCapture,
+        })
+      : (async function* () {
+          for (let i = 0; i < total; i++) {
+            const source = Number(
+              timeToFrameFloor(frameToTime(BigInt(i), outputRate.value), sourceRate.value),
+            );
+            for await (const frame of composition.renderFrames({
+              from: source,
+              to: source + 1,
+              signal,
+              format: videoCapture,
+            })) {
+              yield frame;
+              if (!frame.ok) return;
+            }
+          }
+        })();
   let resolved = encoder;
   if (resolved === undefined) {
     // Probe before the first frame is rendered, so a missing binary fails without a capture run.
@@ -81,15 +133,17 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
   }
   if (cancelled()) return { ok: false, aborted: true };
   return resolved.encode({
-    frames: composition.renderFrames({
-      from: 0,
-      to: descriptor.durationInFrames,
-      signal,
-      format: videoCapture,
-    }),
+    frames,
     imageFormat: videoCapture.type,
-    fps: descriptor.fps,
-    frameCount: descriptor.durationInFrames,
+    fps: options.fps ?? descriptor.fps,
+    frameCount: total,
+    ...(options.fps === undefined
+      ? {}
+      : { sourceFps: descriptor.fps, durationSeconds: toSeconds(duration) }),
+    ...(options.crf === undefined ? {} : { crf: options.crf }),
+    ...(options.videoBitrate === undefined ? {} : { videoBitrate: options.videoBitrate }),
+    ...(options.resolution === undefined ? {} : { resolution: options.resolution }),
+    ...(options.preset === undefined ? {} : { preset: options.preset }),
     output,
     ...(descriptor.audio === undefined ? {} : { audio: descriptor.audio }),
     ...(projectRoot === undefined ? {} : { projectRoot }),

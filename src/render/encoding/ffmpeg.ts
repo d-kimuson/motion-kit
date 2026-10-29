@@ -413,6 +413,38 @@ const encodeWithFfmpeg = async (
   request: EncodeRequest,
 ): Promise<EncodeOutcome> => {
   const { output, frameCount, signal } = request;
+  if (
+    (request.crf !== undefined &&
+      (!Number.isSafeInteger(request.crf) || request.crf < 0 || request.crf > 51)) ||
+    (request.videoBitrate !== undefined &&
+      (!Number.isSafeInteger(request.videoBitrate) || request.videoBitrate <= 0)) ||
+    (request.crf !== undefined && request.videoBitrate !== undefined) ||
+    (request.resolution !== undefined &&
+      ![request.resolution.width, request.resolution.height].every(
+        (n) => Number.isSafeInteger(n) && n > 0 && n % 2 === 0,
+      )) ||
+    (request.preset !== undefined &&
+      ![
+        'ultrafast',
+        'superfast',
+        'veryfast',
+        'faster',
+        'fast',
+        'medium',
+        'slow',
+        'slower',
+        'veryslow',
+      ].includes(request.preset))
+  )
+    return {
+      ok: false,
+      error: [
+        encoderInvariantDiagnostic(
+          'Invalid video encoding options.',
+          'Use CRF 0–51 or a positive bitrate, and positive even output dimensions.',
+        ),
+      ],
+    };
   // Zero is a legal frame count: decide from the request before anything is created.
   if (frameCount === 0)
     return { ok: false, error: [outputInvalidDiagnostic({ output, reason: 'no-frames' })] };
@@ -428,11 +460,13 @@ const encodeWithFfmpeg = async (
         ),
       ],
     };
+  const sourceRate = createFrameRate(request.sourceFps ?? request.fps);
+  if (!sourceRate.ok) return { ok: false, error: [sourceRate.error] };
   // Resolved before the sibling exists, so a missing file leaves no temporary file and no child.
   const audio = resolveAudioTracks({
     tracks: request.audio ?? [],
     projectRoot: request.projectRoot ?? process.cwd(),
-    rate: timebase.rate,
+    rate: sourceRate.value,
   });
   if (!audio.ok) return { ok: false, error: [audio.error] };
   // The channel counts decide the mono conversion; probed before the sibling for the same reason.
@@ -468,12 +502,26 @@ const encodeWithFfmpeg = async (
     ...audioInputArguments(tracks),
     '-c:v',
     REQUIRED_VIDEO_ENCODER,
-    ...inputFilter[request.imageFormat ?? 'png'],
+    ...(request.resolution === undefined
+      ? inputFilter[request.imageFormat ?? 'png']
+      : [
+          '-vf',
+          `${request.imageFormat === 'jpeg' ? 'scale=out_range=tv,format=yuv420p,' : ''}scale=${request.resolution.width}:${request.resolution.height}:flags=lanczos`,
+        ]),
+    ...(request.videoBitrate === undefined ? ['-crf', String(request.crf ?? 28)] : []),
+    ...(request.videoBitrate === undefined ? [] : ['-b:v', `${String(request.videoBitrate)}k`]),
+    ...(request.preset === undefined ? [] : ['-preset', request.preset]),
+    '-movflags',
+    '+faststart',
     '-pix_fmt',
     PIXEL_FORMAT,
     '-r',
     rateText,
-    ...(tracks.length === 0 ? [] : audioOutputArguments(tracks, timebase.seconds)),
+    ...(tracks.length === 0
+      ? request.durationSeconds === undefined
+        ? []
+        : ['-t', String(request.durationSeconds)]
+      : audioOutputArguments(tracks, request.durationSeconds ?? timebase.seconds)),
     temporary,
   ];
 
@@ -604,10 +652,10 @@ const encodeWithFfmpeg = async (
   const receipt: EncodeReceipt = {
     output,
     frameCount,
-    width: written.size.width,
-    height: written.size.height,
+    width: request.resolution?.width ?? written.size.width,
+    height: request.resolution?.height ?? written.size.height,
     fps: request.fps,
-    durationSeconds: timebase.seconds,
+    durationSeconds: request.durationSeconds ?? timebase.seconds,
     diagnostics: written.diagnostics,
   };
   return { ok: true, value: receipt };

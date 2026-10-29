@@ -15,7 +15,25 @@ export type EncodeProgress = {
   readonly frameCount: number;
 };
 
-export type EncodeRequest = {
+export type VideoEncodingOptions = {
+  readonly crf?: number;
+  readonly videoBitrate?: number;
+  readonly resolution?: { readonly width: number; readonly height: number };
+  readonly sourceFps?: { readonly numerator: number; readonly denominator: number };
+  readonly durationSeconds?: number;
+  readonly preset?:
+    | 'ultrafast'
+    | 'superfast'
+    | 'veryfast'
+    | 'faster'
+    | 'fast'
+    | 'medium'
+    | 'slow'
+    | 'slower'
+    | 'veryslow';
+};
+
+export type EncodeRequest = VideoEncodingOptions & {
   readonly frames: FrameStream;
   /** The encoding every frame of `frames` arrives in; PNG when omitted. A frame in another
    * encoding is a contract violation (`internal.unexpected`).

@@ -77,6 +77,8 @@ Tests: `pnpm test --project loading` runs the Chromium config/lifetime/launch ma
 
 ## Encoding
 
+The [MP4 size and quality decision](adr/20261029-mp4-size-and-quality-controls.accepted.md) specifies CRF 28 by default, bitrate, scaling and frame-rate controls, faststart, sampling and size-estimation caveats.
+
 The [accepted encoding decision](adr/20261025-system-ffmpeg-encoder.accepted.md) fixes the Phase 1 encoder; TASK-159 implements it and wires the CLI. `src/render/encoding` owns the port and the whole subprocess boundary.
 
 - Phase 1 encodes H.264/MP4 with **`ffmpeg` from the user's `PATH`** (or an explicit `ffmpegPath`). motion-kit bundles and downloads no binary and takes no encoder package dependency; a working FFmpeg 6.0+ with `libx264` is a documented prerequisite, probed once per invocation.

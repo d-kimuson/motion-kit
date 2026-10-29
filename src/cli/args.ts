@@ -41,6 +41,28 @@ export const RenderArgsSchema = z.strictObject({
   props: propsText.optional(),
   /** Renderers capturing at once; half the machine's parallelism when omitted. */
   concurrency: z.coerce.number().int().positive().optional(),
+  videoCrf: z
+    .string()
+    .regex(/^(?:[0-9]|[1-4][0-9]|5[01])$/u, 'Use --video-crf with an integer from 0 to 51.')
+    .transform(Number)
+    .optional(),
+  videoBitrate: z
+    .string()
+    .regex(/^[1-9][0-9]*$/u, 'Use --video-bitrate with a positive integer in kbps.')
+    .transform(Number)
+    .pipe(z.number().int())
+    .optional(),
+  scale: z
+    .string()
+    .regex(/^(?:\d+(?:\.\d+)?|\d+x\d+)$/u, 'Use --scale with a positive factor or WxH.')
+    .optional(),
+  fps: z
+    .string()
+    .regex(
+      /^(?:\d+(?:\.\d+)?|\d+\/\d+)$/u,
+      'Use --fps with a positive decimal or numerator/denominator.',
+    )
+    .optional(),
   json,
 });
 

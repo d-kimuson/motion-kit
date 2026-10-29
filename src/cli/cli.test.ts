@@ -395,6 +395,44 @@ describe('motion-kit CLI', () => {
     expect(readdirSync(directory)).toEqual(['frame-00000.png']);
   }, 60_000);
   it.each([
+    ['--video-crf', '52'],
+    ['--video-bitrate', '0'],
+    ['--fps', '1/0'],
+    ['--scale', '31x32'],
+    ['--video-crf', '24', '--video-bitrate', '400'],
+  ])(
+    'rejects invalid video options %s',
+    async (...flags) => {
+      const result = await run([
+        'render',
+        'entry-required.tsx',
+        '--composition',
+        'one',
+        '--out',
+        join(outputRoot, 'bad.mp4'),
+        ...flags,
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      expect(result.envelope?.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+    },
+    120_000,
+  );
+
+  it('rejects video options for frames output', async () => {
+    const result = await run([
+      'render',
+      'entry-required.tsx',
+      '--out',
+      join(outputRoot, 'frames'),
+      '--video-crf',
+      '28',
+      '--json',
+    ]);
+    expect(result.code).toBe(2);
+    expect(result.envelope?.diagnostics[0]?.code).toBe('cli.invalid-arguments');
+  });
+  it.each([
     { flags: ['--project-root', 'missing'], env: {}, hint: '--project-root' },
     { flags: ['--vite-config', 'missing'], env: {}, hint: '--vite-config' },
     { flags: [], env: { MOTION_KIT_SOFTWARE_WEBGL: 'yes' }, hint: 'MOTION_KIT_SOFTWARE_WEBGL' },

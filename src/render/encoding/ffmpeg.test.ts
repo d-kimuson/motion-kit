@@ -356,6 +356,33 @@ describe('createFfmpegEncoder probe', () => {
 });
 
 describe('FfmpegEncoder.encode', () => {
+  it('validates options and constructs quality and scale arguments', async () => {
+    const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
+    const base = request({ frames: streamOf(pngFrames(2)), frameCount: 2 });
+    for (const options of [
+      { crf: 52 },
+      { crf: 20, videoBitrate: 500 },
+      { videoBitrate: 0 },
+      { resolution: { width: 63, height: 64 } },
+    ]) {
+      expect(errorsOf(await encoder.encode({ ...base, ...options }))[0]?.code).toBe(
+        'internal.unexpected',
+      );
+    }
+    expect(
+      (
+        await encoder.encode({
+          ...base,
+          videoBitrate: 500,
+          resolution: { width: 32, height: 32 },
+          preset: 'slow',
+        })
+      ).ok,
+    ).toBe(true);
+    expect(encodeArgv().join(' ')).toContain(
+      '-vf scale=32:32:flags=lanczos -b:v 500k -preset slow -movflags +faststart',
+    );
+  });
   it('writes an H.264 file and reports a receipt for the whole range', async () => {
     const pngs = pngFrames(10);
     const progress: EncodeProgress[] = [];
@@ -500,6 +527,10 @@ describe('FfmpegEncoder.encode', () => {
       'pipe:0',
       '-c:v',
       'libx264',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
       '-pix_fmt',
       'yuv420p',
       '-r',
@@ -792,6 +823,10 @@ describe('declared audio', () => {
       'pipe:0',
       '-c:v',
       'libx264',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
       '-pix_fmt',
       'yuv420p',
       '-r',
@@ -851,6 +886,10 @@ describe('declared audio', () => {
       second,
       '-c:v',
       'libx264',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
       '-pix_fmt',
       'yuv420p',
       '-r',

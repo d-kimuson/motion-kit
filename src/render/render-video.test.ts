@@ -240,6 +240,93 @@ const onsetsOf = (samples: Int16Array, threshold = 0.02): number[] => {
 };
 
 describe('renderVideo', () => {
+  it('captures only the source frames needed by a lower output rate', async () => {
+    const captured: number[] = [];
+    const result = await renderVideo({
+      composition: {
+        descriptor: () => ({
+          id: 'sample',
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 7,
+        }),
+        renderFrames: ({ from }) => {
+          captured.push(from);
+          return asyncIterableOf<FrameCaptureResult>([
+            {
+              ok: true,
+              value: {
+                frame: from,
+                width: 16,
+                height: 16,
+                format: 'jpeg',
+                image: Buffer.from('frame'),
+                diagnostics: [],
+              },
+            },
+          ]);
+        },
+      },
+      output: join(directory, 'sample.mp4'),
+      fps: { numerator: 24, denominator: 1 },
+      encoder: {
+        encode: async (request) => {
+          for await (const frame of request.frames)
+            if (!frame.ok) throw new Error('capture failed');
+          expect(request.frameCount).toBe(6);
+          return { ok: false, aborted: true };
+        },
+      },
+    });
+    expect(result).toEqual({ ok: false, aborted: true });
+    expect(captured).toEqual([0, 1, 2, 3, 5, 6]);
+  });
+
+  it.each([
+    { fps: { numerator: 24, denominator: 1 }, count: '6' },
+    { fps: { numerator: 30000, denominator: 1001 }, count: '7' },
+  ])(
+    'encodes a non-integral duration at $fps',
+    async ({ fps, count }) => {
+      const renderer = await open();
+      const composition = {
+        descriptor: () => ({
+          ...renderer.descriptor(),
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 7,
+        }),
+        renderFrames: renderer.renderFrames,
+      };
+      const output = join(directory, 'fraction.mp4');
+      const result = await renderVideo({ composition, output, fps });
+      expect(result.ok).toBe(true);
+      const stream = probe(output);
+      expect(stream['nb_frames']).toBe(count);
+      expect(Number(stream['duration'])).toBeCloseTo(7 / 30, 1);
+      const bytes = (await import('node:fs')).readFileSync(output);
+      expect(bytes.indexOf('moov')).toBeLessThan(bytes.indexOf('mdat'));
+    },
+    180_000,
+  );
+
+  it('encodes a scaled lower-rate video', async () => {
+    const renderer = await open();
+    const output = join(directory, 'scaled.mp4');
+    const outcome = await renderVideo({
+      composition: renderer,
+      output,
+      fps: { numerator: 15, denominator: 1 },
+      resolution: { width: 80, height: 60 },
+    });
+    expect(outcome).toMatchObject({ ok: true, value: { frameCount: 30, width: 80, height: 60 } });
+    expect(probe(output)).toMatchObject({
+      width: 80,
+      height: 60,
+      r_frame_rate: '15/1',
+      nb_frames: '30',
+    });
+  }, 180_000);
   it('encodes a 2-second Composition to H.264 MP4 without a PNG directory', async () => {
     const renderer = await open();
     const descriptor = renderer.descriptor();
