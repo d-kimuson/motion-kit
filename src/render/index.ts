@@ -12,5 +12,6 @@ export {
   defaultConcurrency,
   type RendererPool,
   type RendererPoolOptions,
+  type RenderFrameListOptions,
 } from './pool.ts';
 export { pngCapture, type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';

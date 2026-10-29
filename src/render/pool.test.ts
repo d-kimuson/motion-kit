@@ -106,6 +106,14 @@ describe('renderer pool', () => {
     expect(results[0]).toMatchObject({ ok: false, error: [{ code: 'asset.load-failed' }] });
   });
 
+  it('stops a frame list at the first failed capture', async () => {
+    const pool = await open(2, 'failed');
+    const results = [];
+    for await (const result of pool.renderFrameList({ frames: [4, 1, 5] })) results.push(result);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ ok: false, error: [{ code: 'asset.load-failed' }] });
+  });
+
   it('stays usable after a consumer stops reading partway', async () => {
     const pool = await open(2);
     for await (const result of pool.renderFrames({ from: 0, to: 6 })) {

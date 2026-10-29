@@ -540,6 +540,37 @@ describe('renderVideo', () => {
     expect(rmsIn(pcm, 2.2, 2.9)).toBeLessThan(0.005);
   }, 180_000);
 
+  it('keeps audio timing and gain on the source timebase at a reduced output rate', async () => {
+    mkdirSync(join(directory, 'audio'));
+    const first = join(directory, 'audio', 'clip-1.wav');
+    const second = join(directory, 'audio', 'clip-2.wav');
+    generateSine(first, 0.5, 440);
+    generateSine(second, 0.5, 880);
+    const renderer = await open('audio', './encoding/fixtures/audio.tsx');
+    const composition = {
+      descriptor: () => ({ ...renderer.descriptor(), durationInFrames: 59 }),
+      renderFrames: renderer.renderFrames,
+    };
+    const output = join(directory, 'reduced-audio.mp4');
+    const result = await renderVideo({
+      composition,
+      output,
+      projectRoot: directory,
+      fps: { numerator: 12, denominator: 1 },
+    });
+    expect(result).toMatchObject({ ok: true, value: { frameCount: 36, durationSeconds: 2.95 } });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(2.95, 2);
+    const pcm = pcmOf(output);
+    const onsets = onsetsOf(pcm);
+    expect(onsets).toHaveLength(2);
+    expect(Math.abs((onsets[0] ?? NaN) - 0.5)).toBeLessThanOrEqual(1 / 12);
+    expect(Math.abs((onsets[1] ?? NaN) - 1.5)).toBeLessThanOrEqual(1 / 12);
+    expect(Math.abs(rmsIn(pcm, 0.6, 0.9) / rmsIn(pcmOf(first), 0.05, 0.45) - 1)).toBeLessThan(0.1);
+    expect(
+      Math.abs(rmsIn(pcm, 1.6, 1.9) / (0.5 * rmsIn(pcmOf(second), 0.05, 0.45)) - 1),
+    ).toBeLessThan(0.1);
+  }, 180_000);
+
   it('renders a mono clip at the level of its own file, like a stereo one', async () => {
     mkdirSync(join(directory, 'audio'));
     const mono = join(directory, 'audio', 'level-mono.wav');

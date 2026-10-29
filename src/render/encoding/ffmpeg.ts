@@ -40,6 +40,8 @@ import {
 export const MINIMUM_FFMPEG_VERSION = '6.0';
 /** The only H.264 encoder Phase 1 accepts; a build without it cannot produce MP4. */
 export const REQUIRED_VIDEO_ENCODER = 'libx264';
+/** Default libx264 quality when no bitrate or CRF is requested. */
+export const DEFAULT_VIDEO_CRF = 28;
 /** Bounded probe/stderr output; FFmpeg logs are unbounded and never belong whole in a Diagnostic. */
 const STDERR_TAIL_LIMIT = 4096;
 /** Bounded escalation for a child that ignores SIGTERM. */
@@ -284,9 +286,14 @@ const inputCodec: Readonly<Record<CaptureFormat['type'], string>> = { png: 'png'
 /** mjpeg decodes to full-range `yuvj420p`, which `-pix_fmt` alone carries into the MP4 as
  * full range; scaling to the limited range gives the same output format a PNG input gets.
  */
-const inputFilter: Readonly<Record<CaptureFormat['type'], readonly string[]>> = {
-  png: [],
-  jpeg: ['-vf', `scale=out_range=tv,format=${PIXEL_FORMAT}`],
+const inputFilter = (request: EncodeRequest): readonly string[] => {
+  const filters = [
+    ...(request.imageFormat === 'jpeg' ? [`scale=out_range=tv,format=${PIXEL_FORMAT}`] : []),
+    ...(request.resolution === undefined
+      ? []
+      : [`scale=${request.resolution.width}:${request.resolution.height}:flags=lanczos`]),
+  ];
+  return filters.length === 0 ? [] : ['-vf', filters.join(',')];
 };
 
 /** Hands the image stream to the child and stops at the first failed frame, abort, or over-long stream. */
@@ -502,13 +509,10 @@ const encodeWithFfmpeg = async (
     ...audioInputArguments(tracks),
     '-c:v',
     REQUIRED_VIDEO_ENCODER,
-    ...(request.resolution === undefined
-      ? inputFilter[request.imageFormat ?? 'png']
-      : [
-          '-vf',
-          `${request.imageFormat === 'jpeg' ? 'scale=out_range=tv,format=yuv420p,' : ''}scale=${request.resolution.width}:${request.resolution.height}:flags=lanczos`,
-        ]),
-    ...(request.videoBitrate === undefined ? ['-crf', String(request.crf ?? 28)] : []),
+    ...inputFilter(request),
+    ...(request.videoBitrate === undefined
+      ? ['-crf', String(request.crf ?? DEFAULT_VIDEO_CRF)]
+      : []),
     ...(request.videoBitrate === undefined ? [] : ['-b:v', `${String(request.videoBitrate)}k`]),
     ...(request.preset === undefined ? [] : ['-preset', request.preset]),
     '-movflags',

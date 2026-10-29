@@ -24,7 +24,7 @@ import {
   type EncodeProgress,
   type Encoder,
 } from './encoder.ts';
-import { createFfmpegEncoder } from './ffmpeg.ts';
+import { createFfmpegEncoder, DEFAULT_VIDEO_CRF } from './ffmpeg.ts';
 
 let directory: string;
 beforeEach(() => {
@@ -356,6 +356,133 @@ describe('createFfmpegEncoder probe', () => {
 });
 
 describe('FfmpegEncoder.encode', () => {
+  it('pins the default CRF', () => {
+    expect(DEFAULT_VIDEO_CRF).toBe(28);
+  });
+
+  it.each(['png', 'jpeg'] as const)('pins %s input with and without scaling', async (format) => {
+    const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
+    const data = [Buffer.from('frame')];
+    for (const scaled of [false, true]) {
+      const result = await encoder.encode({
+        ...request({
+          frames: asyncIterableOf([frameOf(data, 0, undefined, format)]),
+          frameCount: 1,
+          imageFormat: format,
+        }),
+        ...(scaled ? { resolution: { width: 32, height: 32 } } : {}),
+      });
+      expect(result.ok).toBe(true);
+      const filter = format === 'jpeg' ? 'scale=out_range=tv,format=yuv420p' : '';
+      const scale = scaled ? 'scale=32:32:flags=lanczos' : '';
+      const filters = [filter, scale].filter(Boolean).join(',');
+      expect(encodeArgv()).toEqual([
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-f',
+        'image2pipe',
+        '-framerate',
+        '10/1',
+        '-c:v',
+        format === 'jpeg' ? 'mjpeg' : 'png',
+        '-i',
+        'pipe:0',
+        '-c:v',
+        'libx264',
+        ...(filters ? ['-vf', filters] : []),
+        '-crf',
+        '28',
+        '-movflags',
+        '+faststart',
+        '-pix_fmt',
+        'yuv420p',
+        '-r',
+        '10/1',
+        expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
+      ]);
+    }
+  });
+
+  it.each(['crf', 'bitrate', 'scale', 'fps'] as const)(
+    'pins %s arguments with and without audio',
+    async (option) => {
+      const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
+      const source = join(directory, 'clip.wav');
+      writeFileSync(source, 'RIFF');
+      for (const audio of [false, true]) {
+        if (audio) fakeFfprobe(2);
+        const extra =
+          option === 'crf'
+            ? { crf: 21 }
+            : option === 'bitrate'
+              ? { videoBitrate: 500 }
+              : option === 'scale'
+                ? { resolution: { width: 32, height: 32 } }
+                : {
+                    fps: { numerator: 5, denominator: 1 },
+                    sourceFps: { numerator: 10, denominator: 1 },
+                    durationSeconds: 0.3,
+                  };
+        const result = await encoder.encode({
+          ...request({ frames: streamOf([Buffer.from('frame')]), frameCount: 1 }),
+          ...extra,
+          ...(audio ? { audio: [{ src: source, startInFrames: 1, volume: 0.5 }] } : {}),
+        });
+        expect(result.ok).toBe(true);
+        const rate = option === 'fps' ? '5/1' : '10/1';
+        const graph =
+          '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=100:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,apad[aout]';
+        expect(encodeArgv()).toEqual([
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-f',
+          'image2pipe',
+          '-framerate',
+          rate,
+          '-c:v',
+          'png',
+          '-i',
+          'pipe:0',
+          ...(audio ? ['-i', source] : []),
+          '-c:v',
+          'libx264',
+          ...(option === 'scale' ? ['-vf', 'scale=32:32:flags=lanczos'] : []),
+          ...(option === 'bitrate' ? ['-b:v', '500k'] : ['-crf', option === 'crf' ? '21' : '28']),
+          '-movflags',
+          '+faststart',
+          '-pix_fmt',
+          'yuv420p',
+          '-r',
+          rate,
+          ...(audio
+            ? [
+                '-filter_complex',
+                graph,
+                '-map',
+                '0:v:0',
+                '-map',
+                '[aout]',
+                '-c:a',
+                'aac',
+                '-b:a',
+                '192k',
+                '-ar',
+                '48000',
+                '-t',
+                option === 'fps' ? '0.300000' : '0.100000',
+              ]
+            : option === 'fps'
+              ? ['-t', '0.3']
+              : []),
+          expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
+        ]);
+      }
+    },
+  );
   it('validates options and constructs quality and scale arguments', async () => {
     const encoder = await openEncoder(fakeFfmpeg({ version: 'ffmpeg version 9.0.1' }));
     const base = request({ frames: streamOf(pngFrames(2)), frameCount: 2 });

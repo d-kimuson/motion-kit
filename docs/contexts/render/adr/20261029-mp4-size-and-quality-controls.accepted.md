@@ -2,7 +2,7 @@
 
 ## Decision
 
-The encoder defaults to libx264 CRF 28, its medium preset, yuv420p and MP4 faststart. On the [one-second 1080p explainer slice](../knowledge/20261029-mp4-size-quality-measurements.md), CRF 28 reduced size from 148123 to 93801 bytes against CRF 23, with PSNR 43.327 dB and SSIM 0.989616; CRF 30 was smaller but lost more quality. Slow did not save size on this slice. These measurements justify a trade-off, not a universal size guarantee.
+The encoder defaults to libx264 CRF 28, its medium preset, yuv420p and MP4 faststart. On the [one-second 1080p explainer slice](../knowledge/20261029-mp4-size-quality-measurements.md), captured as production JPEG quality 95, CRF 28 reduced size from 149467 to 95555 bytes against CRF 23, with PSNR 42.861 dB and SSIM 0.989311 against PNG reference captures; CRF 30 was smaller but lost more quality. These measurements justify a trade-off, not a universal size guarantee.
 
 The internal Encoder accepts CRF 0–51 or a positive video bitrate in kbps, but not both, an x264 preset and output dimensions. The CLI exposes `--video-crf`, `--video-bitrate`, `--scale` and `--fps` only for MP4. Dimensions must be positive and even; a factor applies to the Composition viewport. FFmpeg scales with lanczos after JPEG range conversion, without re-layout. Audio remains AAC 192 kbps.
 

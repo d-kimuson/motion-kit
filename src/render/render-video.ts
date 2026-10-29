@@ -23,6 +23,11 @@ import { createFfmpegEncoder } from './encoding/ffmpeg.ts';
  */
 export type VideoComposition = {
   readonly descriptor: () => LoadingDescriptor;
+  readonly renderFrameList?: (options: {
+    readonly frames: Iterable<number>;
+    readonly signal?: AbortSignal;
+    readonly format?: CaptureFormat;
+  }) => AsyncIterable<FrameCaptureResult>;
   readonly renderFrames: (options: {
     readonly from: number;
     readonly to: number;
@@ -94,6 +99,10 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
       ],
     };
   const total = Number(count.value);
+  const sourceFrames = function* () {
+    for (let i = 0; i < total; i++)
+      yield Number(timeToFrameFloor(frameToTime(BigInt(i), outputRate.value), sourceRate.value));
+  };
   const frames =
     options.fps === undefined
       ? composition.renderFrames({
@@ -102,22 +111,21 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
           signal,
           format: videoCapture,
         })
-      : (async function* () {
-          for (let i = 0; i < total; i++) {
-            const source = Number(
-              timeToFrameFloor(frameToTime(BigInt(i), outputRate.value), sourceRate.value),
-            );
-            for await (const frame of composition.renderFrames({
-              from: source,
-              to: source + 1,
-              signal,
-              format: videoCapture,
-            })) {
-              yield frame;
-              if (!frame.ok) return;
+      : composition.renderFrameList !== undefined
+        ? composition.renderFrameList({ frames: sourceFrames(), signal, format: videoCapture })
+        : (async function* () {
+            for (const source of sourceFrames()) {
+              for await (const frame of composition.renderFrames({
+                from: source,
+                to: source + 1,
+                signal,
+                format: videoCapture,
+              })) {
+                yield frame;
+                if (!frame.ok) return;
+              }
             }
-          }
-        })();
+          })();
   let resolved = encoder;
   if (resolved === undefined) {
     // Probe before the first frame is rendered, so a missing binary fails without a capture run.
