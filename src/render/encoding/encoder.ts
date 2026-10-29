@@ -39,11 +39,9 @@ export type EncodeRequest = VideoEncodingOptions & {
    * encoding is a contract violation (`internal.unexpected`).
    */
   readonly imageFormat?: CaptureFormat['type'];
-  /** The Composition's rational rate; never a rounded float. */
+  /** The output rational rate; never a rounded float. */
   readonly fps: { readonly numerator: number; readonly denominator: number };
-  /** The descriptor's `durationInFrames`: the total `frames` is expected to yield, and the
-   * bound `EncodeProgress` and the receipt are measured against. Zero is legal (see Diagnostics).
-   */
+  /** The total output frames expected from `frames`; bounds progress and the receipt. Zero is legal. */
   readonly frameCount: number;
   /** Absolute path of the MP4 to produce. */
   readonly output: string;
@@ -67,7 +65,7 @@ export type EncodeReceipt = {
   readonly width: number;
   readonly height: number;
   readonly fps: { readonly numerator: number; readonly denominator: number };
-  /** Derived by the Time Module from frameCount and fps. */
+  /** Composition duration when supplied; otherwise derived from frameCount and fps. */
   readonly durationSeconds: number;
   /** The warnings the captured frames carried (`seek.uncontrolled`, `layout.*`), in frame
    * order and unchanged. A successful encode is still a successful render, and the CLI's

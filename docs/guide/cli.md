@@ -236,8 +236,9 @@ and `frames` containing the same per-frame fields except `format`, in ascending 
 }
 ```
 
-FPS is always a rational, including integer rates. `durationSeconds` is the Time Module's
-`frameCount / fps`, not a separately declared number. A successful render is `ok: true` and may still
+FPS is always a rational, including integer rates. `durationSeconds` is the Composition duration
+from the Time Module, not a separately declared number. At a reduced MP4 output rate, `frameCount`
+is the ceiling of that duration times the output FPS, so `frameCount / fps` can be longer. A successful render is `ok: true` and may still
 carry warnings; `ok: true` with warnings is a success, so branch on `ok`, not on an empty
 `diagnostics`.
 

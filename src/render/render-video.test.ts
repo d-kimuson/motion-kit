@@ -310,6 +310,44 @@ describe('renderVideo', () => {
     180_000,
   );
 
+  it.each([false, true])(
+    'preserves all ceiling-counted frames with audio=%s',
+    async (audio) => {
+      const renderer = await open();
+      const clip = join(directory, 'short.wav');
+      if (audio) generateSine(clip, 0.015, 440);
+      const composition = {
+        descriptor: () => ({
+          ...renderer.descriptor(),
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 3,
+          ...(audio ? { audio: [{ src: clip }, { src: clip, startInFrames: 2 }] } : {}),
+        }),
+        renderFrames: renderer.renderFrames,
+      };
+      const output = join(directory, 'short.mp4');
+      const result = await renderVideo({
+        composition,
+        output,
+        fps: { numerator: 24, denominator: 1 },
+      });
+      expect(result).toMatchObject({ ok: true, value: { frameCount: 3, durationSeconds: 0.1 } });
+      expect(probe(output)).toMatchObject({
+        r_frame_rate: '24/1',
+        avg_frame_rate: '24/1',
+        nb_frames: '3',
+      });
+      if (audio) {
+        expect(Number(probeAudio(output)['duration'])).toBeCloseTo(0.1, 3);
+        const onsets = onsetsOf(pcmOf(output));
+        expect(onsets).toHaveLength(2);
+        expect(Math.abs(onsets[0] ?? NaN)).toBeLessThanOrEqual(0.005);
+        expect(Math.abs((onsets[1] ?? NaN) - 2 / 30)).toBeLessThanOrEqual(0.01);
+      }
+    },
+    180_000,
+  );
+
   it('encodes a scaled lower-rate video', async () => {
     const renderer = await open();
     const output = join(directory, 'scaled.mp4');

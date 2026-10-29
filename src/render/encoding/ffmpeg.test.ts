@@ -432,8 +432,7 @@ describe('FfmpegEncoder.encode', () => {
         });
         expect(result.ok).toBe(true);
         const rate = option === 'fps' ? '5/1' : '10/1';
-        const graph =
-          '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=100:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,apad[aout]';
+        const graph = `[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=100:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=${option === 'fps' ? '0.300000' : '0.100000'},atrim=end=${option === 'fps' ? '0.300000' : '0.100000'}[aout]`;
         expect(encodeArgv()).toEqual([
           '-y',
           '-hide_banner',
@@ -472,12 +471,8 @@ describe('FfmpegEncoder.encode', () => {
                 '192k',
                 '-ar',
                 '48000',
-                '-t',
-                option === 'fps' ? '0.300000' : '0.100000',
               ]
-            : option === 'fps'
-              ? ['-t', '0.3']
-              : []),
+            : []),
           expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
         ]);
       }
@@ -992,7 +987,7 @@ describe('declared audio', () => {
     const graph = [
       '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=500:all=1[a0]',
       '[2:a]atrim=start=1.000000:end=2.000000,asetpts=PTS-STARTPTS,volume=0.5,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=1500:all=1[a1]',
-      '[a0][a1]amix=inputs=2:duration=longest:normalize=0,apad[aout]',
+      '[a0][a1]amix=inputs=2:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=3.000000,atrim=end=3.000000[aout]',
     ].join(';');
     expect(encodeArgv()).toEqual([
       '-y',
@@ -1033,8 +1028,6 @@ describe('declared audio', () => {
       '192k',
       '-ar',
       '48000',
-      '-t',
-      '3.000000',
       expect.stringMatching(/\/\.audio\.[0-9a-f-]{36}\.part\.mp4$/u),
     ]);
     // One channel probe per track, in declaration order: the count is what the graph depends on.
@@ -1062,7 +1055,7 @@ describe('declared audio', () => {
     // the same file render 3.01 dB quieter as mono than as stereo; `pan` keeps every sample.
     const graph = encodeArgv()[encodeArgv().indexOf('-filter_complex') + 1] ?? '';
     expect(graph).toBe(
-      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=0:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,apad[aout]',
+      '[1:a]atrim=start=0.000000,asetpts=PTS-STARTPTS,volume=1,aresample=48000,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=0:all=1[a0];[a0]amix=inputs=1:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=0.400000,atrim=end=0.400000[aout]',
     );
     expect(graph).not.toContain('channel_layouts=stereo');
   });

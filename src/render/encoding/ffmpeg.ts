@@ -522,9 +522,7 @@ const encodeWithFfmpeg = async (
     '-r',
     rateText,
     ...(tracks.length === 0
-      ? request.durationSeconds === undefined
-        ? []
-        : ['-t', String(request.durationSeconds)]
+      ? []
       : audioOutputArguments(tracks, request.durationSeconds ?? timebase.seconds)),
     temporary,
   ];
