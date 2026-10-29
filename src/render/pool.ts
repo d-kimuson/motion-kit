@@ -17,8 +17,8 @@ export type RendererPoolOptions = RendererOptions & {
   /** How many renderers capture at once, each in its own realm. A positive integer; the pool
    * opens no more renderers than the Composition has frames.
    *
-   * Each renderer holds one frame queued behind the one it captures, and `queueTimeoutMs` runs
-   * while it waits, so a queue budget shorter than one frame's capture aborts that frame.
+   * With multiple renderers, each holds one frame queued behind the one it captures, and
+   * `queueTimeoutMs` runs while it waits. A single renderer submits frames sequentially.
    */
   readonly concurrency: number;
 };
@@ -59,16 +59,15 @@ const invalidConcurrency: Diagnostic = {
 
 /**
  * Deals frames round-robin and yields them in frame order. Each renderer serialises its own
- * requests, so at most two frames per renderer are in flight: enough to keep every realm busy
- * while the oldest is consumed, and a queued frame waits behind one capture at most (the
- * `queueTimeoutMs` caveat on `RendererPoolOptions.concurrency`).
+ * requests, so at most two frames per renderer are in flight when there are multiple renderers.
+ * A single renderer submits frames sequentially, without spending queue budget on prefetch.
  */
 const renderInterleaved = async function* (
   renderers: readonly Renderer[],
   { frames, signal, format }: RenderFrameListOptions,
   dispose: () => Promise<Result<undefined>>,
 ): AsyncGenerator<FrameCaptureResult> {
-  const window = renderers.length * 2;
+  const window = renderers.length === 1 ? 1 : renderers.length * 2;
   const pending: { frame: number; result: Promise<FrameCaptureResult> }[] = [];
   const iterator = frames[Symbol.iterator]();
   let next = 0;

@@ -65,6 +65,27 @@ it('bounds list prefetch to two frames per renderer and drains on early return',
   await opened.value.dispose();
 });
 
+it('submits single-renderer ranges and frame lists one at a time', async () => {
+  const opened = await createRendererPool({ projectRoot: '.', entry: 'entry.ts', concurrency: 1 });
+  if (!opened.ok) throw new Error('pool failed');
+  for (const [stream, expected] of [
+    [opened.value.renderFrames({ from: 1, to: 4 }), [1, 2, 3]],
+    [opened.value.renderFrameList({ frames: [4, 2, 8] }), [4, 2, 8]],
+  ] as const) {
+    state.calls[0]?.splice(0);
+    const iterator = stream[Symbol.asyncIterator]();
+    for (let index = 0; index < expected.length; index++) {
+      expect((await iterator.next()).value).toMatchObject({
+        ok: true,
+        value: { frame: expected[index] },
+      });
+      expect(state.calls).toEqual([expected.slice(0, index + 1)]);
+    }
+    expect((await iterator.next()).done).toBe(true);
+  }
+  await opened.value.dispose();
+});
+
 it('deals reduced-rate source frames across renderers and yields in order', async () => {
   const opened = await createRendererPool({ projectRoot: '.', entry: 'entry.ts', concurrency: 3 });
   if (!opened.ok) throw new Error('pool failed');
