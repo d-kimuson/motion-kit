@@ -305,7 +305,7 @@ const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() ===
 /**
  * Invalidates the previous completion receipt before this run can write its first PNG. The
  * schemaVersion/format pair is the identifying header this route writes; anything without both
- * fields is user-owned, so it survives both this cleanup and the final manifest write.
+ * fields is user-owned, so the caller must refuse the run without changing it.
  */
 const prepareFramesManifest = (outAbsolute: string): boolean => {
   const manifestPath = join(outAbsolute, 'manifest.json');
@@ -510,7 +510,19 @@ const runRender = async (
       });
     }
     mkdirSync(outAbsolute, { recursive: true });
-    const writeManifest = prepareFramesManifest(outAbsolute);
+    if (!prepareFramesManifest(outAbsolute))
+      return decide(
+        failure([
+          {
+            ...diagnostic(
+              'cli.invalid-arguments',
+              `The output manifest ${join(outAbsolute, 'manifest.json')} is not a motion-kit frames manifest.`,
+              'Choose another --out directory or move the existing manifest.json file.',
+            ),
+            location: { file: join(outAbsolute, 'manifest.json') },
+          },
+        ]),
+      );
     const files: string[] = [];
     const diagnostics: Diagnostic[] = [];
     let width = descriptor.width;
@@ -529,24 +541,23 @@ const runRender = async (
       diagnostics.push(...result.value.diagnostics);
     }
     const manifestPath = join(outAbsolute, 'manifest.json');
-    if (writeManifest)
-      writeFileSync(
-        manifestPath,
-        `${JSON.stringify(
-          {
-            schemaVersion: 1,
-            format: 'frames',
-            composition: descriptor.id,
-            width,
-            height,
-            fps: descriptor.fps,
-            frameCount: descriptor.durationInFrames,
-            files,
-          },
-          null,
-          2,
-        )}\n`,
-      );
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          format: 'frames',
+          composition: descriptor.id,
+          width,
+          height,
+          fps: descriptor.fps,
+          frameCount: descriptor.durationInFrames,
+          files,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     return decide({
       ok: true,
       diagnostics,

@@ -991,29 +991,56 @@ describe('motion-kit CLI', () => {
     }
   }, 120_000);
 
-  it('preserves an unrelated user manifest through cancelled and successful frames renders', async () => {
-    const output = join(outputRoot, 'reused-frames-user-manifest');
-    mkdirSync(output, { recursive: true });
+  it.each([
+    ['unrelated', '{\n  "name": "user-owned",\n  "files": ["keep.txt"]\n}\n'],
+    ['malformed', '{"schemaVersion": 1, "format": "frames",\n'],
+  ])(
+    'refuses a %s manifest collision before writing any PNG',
+    async (kind, source) => {
+      const output = join(outputRoot, `reused-frames-${kind}-manifest`);
+      mkdirSync(output, { recursive: true });
+      const manifestPath = join(output, 'manifest.json');
+      const userManifest = Buffer.from(source);
+      writeFileSync(manifestPath, userManifest);
+
+      const result = await run([
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      expect(assertValidEnvelope(result)).toMatchObject({
+        command: 'render',
+        ok: false,
+        data: null,
+        diagnostics: [
+          {
+            code: 'cli.invalid-arguments',
+            severity: 'error',
+            message: `The output manifest ${manifestPath} is not a motion-kit frames manifest.`,
+            hint: 'Choose another --out directory or move the existing manifest.json file.',
+            location: { file: manifestPath },
+          },
+        ],
+      });
+      expect(readFileSync(manifestPath)).toEqual(userManifest);
+      expect(readdirSync(output)).toEqual(['manifest.json']);
+    },
+    60_000,
+  );
+
+  it('leaves partial PNGs but no owned manifest after a mid-run write failure', async () => {
+    const output = join(outputRoot, 'reused-frames-write-failure');
+    const blocker = join(output, 'frame-00001.png');
+    mkdirSync(blocker, { recursive: true });
+    const marker = Buffer.from('keep this directory untouched\n');
+    writeFileSync(join(blocker, 'keep.txt'), marker);
     const manifestPath = join(output, 'manifest.json');
-    const userManifest = '{\n  "name": "user-owned",\n  "files": ["keep.txt"]\n}\n';
-    writeFileSync(manifestPath, userManifest);
-    const child = spawnRun(
-      ['render', 'entry-long.tsx', '--composition', 'long', '--out', output, '--json'],
-      {},
-    );
-    try {
-      await waitFor(
-        () => readdirSync(output).some((name) => name.endsWith('.png')),
-        60_000,
-        'the first PNG beside the user manifest',
-      );
-      child.child.kill('SIGINT');
-      expect(await child.exit).toEqual({ code: 130, signal: null });
-      expect(readFileSync(manifestPath, 'utf8')).toBe(userManifest);
-    } finally {
-      if (child.child.exitCode === null && child.child.signalCode === null)
-        child.child.kill('SIGKILL');
-    }
+    writeFileSync(manifestPath, JSON.stringify({ schemaVersion: 1, format: 'frames' }));
 
     const result = await run([
       'render',
@@ -1024,13 +1051,20 @@ describe('motion-kit CLI', () => {
       output,
       '--json',
     ]);
-    expect(result.code).toBe(0);
+    expect(result.code).toBe(3);
     expect(assertValidEnvelope(result)).toMatchObject({
-      ok: true,
-      data: { format: 'frames', frameCount: 6 },
+      command: 'render',
+      ok: false,
+      data: null,
+      diagnostics: [{ code: 'internal.unexpected', severity: 'error' }],
     });
-    expect(readFileSync(manifestPath, 'utf8')).toBe(userManifest);
-  }, 120_000);
+    expect(readFileSync(join(output, 'frame-00000.png')).subarray(0, 8)).toEqual(
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    expect(readdirSync(blocker)).toEqual(['keep.txt']);
+    expect(readFileSync(join(blocker, 'keep.txt'))).toEqual(marker);
+    expect(existsSync(manifestPath)).toBe(false);
+  }, 60_000);
 
   it('writes the same frames from several renderers as from one', async () => {
     const render = async (concurrency: string) => {
