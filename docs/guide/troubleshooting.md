@@ -69,9 +69,9 @@ credential-redacted tail of its log:
 { "code": "encode.ffmpeg-failed", "details": { "exitCode": 1, "signal": null, "stderrTail": "…" } }
 ```
 
-Re-running without a change fails the same way. The usual causes are a declared audio file FFmpeg
-cannot decode, or an unsupported codec inside a clip; check the clip on its own with
-`ffprobe <file>`.
+Read the reported FFmpeg error and fix the composition, target path, or environment; retry if the
+error indicates a transient failure. The usual causes are a declared audio file FFmpeg cannot
+decode, or an unsupported codec inside a clip; check the clip on its own with `ffprobe <file>`.
 
 ### `encode.output-invalid`
 

@@ -51,7 +51,7 @@ export const ffmpegFailedDiagnostic = (options: {
     options.exitCode === null
       ? `FFmpeg was terminated by ${options.signal ?? 'a signal'} while encoding.`
       : `FFmpeg exited with code ${options.exitCode} while encoding.`,
-  hint: 'Read the reported FFmpeg error and fix the composition or the target path; re-running without a change fails the same way.',
+  hint: 'Read the reported FFmpeg error and fix the composition, target path, or environment; retry if the error indicates a transient failure.',
   details: { exitCode: options.exitCode, signal: options.signal, stderrTail: options.stderrTail },
 });
 
