@@ -177,11 +177,11 @@ ones:
 A module-level exception in the entry (a throw while the entry is imported) surfaces the same way.
 
 When the frame transport or page throws during capture, the message is `"The frame transport or
-page failed."` and `details.cause` preserves the caught exception's sanitized `message`, plus its
-`name` and `code` when present. Use that evidence to investigate page, transport/CDP and browser
+page failed."` and, when the exception yields a usable message or name, `details.cause` preserves
+its sanitized `message`, plus its `name` and `code` when present. Use that evidence to investigate page, transport/CDP and browser
 failures; the diagnostic does not classify which one failed. The cause drops stack frames, redacts
 URL credentials and machine-specific paths, and is bounded to 500 characters. Human-readable output
-keeps only the deterministic message and hint, so re-run with `--json` to inspect `details.cause`.
+keeps only the deterministic message and hint, so re-run with `--json` to inspect `details.cause` when present.
 
 ## `composition.props-invalid`
 

@@ -142,8 +142,9 @@ export const pageErrorCause = (error: unknown): PageErrorCause | undefined => {
 
 /**
  * A frame transport or page exception keeps its deterministic code, message, hint and
- * location, and reports evidence in `details.cause` for investigating a page exception,
- * transport or CDP failure, or Chromium crash; the diagnostic itself does not classify it.
+ * location, and, when it yields a usable message or name, reports evidence in `details.cause`
+ * for investigating a page exception, transport or CDP failure, or Chromium crash;
+ * the diagnostic itself does not classify it.
  */
 export const pageErrorDiagnostic = (input: { error: unknown; location: Location }): Diagnostic => {
   const cause = pageErrorCause(input.error);
