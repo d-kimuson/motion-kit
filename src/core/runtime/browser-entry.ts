@@ -89,6 +89,7 @@ export const bootstrapComposition = (input: unknown): void => {
     cancel: (requestId) => runtime?.cancel(requestId),
     pendingAssets: (requestId) => runtime?.pendingAssets(requestId) ?? [],
     warnings: () => runtime?.warnings() ?? [],
+    sequences: () => runtime?.sequences() ?? [],
     assetReadiness: () =>
       runtime === undefined ? { pending: [], failed: [], ready: [] } : assetsOf(runtime).snapshot(),
     whenReady: (timeoutMs) => {

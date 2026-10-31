@@ -6,6 +6,8 @@ import {
   defineCompositions,
   Sequence,
   toSeconds,
+  TransitionScene,
+  TransitionSeries,
   useFrame,
   useSequence,
   useTime,
@@ -15,6 +17,7 @@ import {
   type RationalInput,
   type Result,
   type SequenceContext,
+  type SequenceSpan,
   type TimelineContext,
 } from '@kimuson/motion-kit';
 import fc from 'fast-check';
@@ -23,6 +26,8 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
+
+import { activeSequences } from '../sequence/directory.ts';
 
 const unwrap = <T,>(result: Result<T>): T => {
   if (!result.ok) throw new Error(result.error.message);
@@ -573,6 +578,7 @@ describe('Sequence membership', () => {
     { from: Number.NaN, duration: 1 },
     { from: 0, duration: Number.POSITIVE_INFINITY },
     { from: { numerator: 1, denominator: 0 }, duration: 1 },
+    { from: 0, duration: 1, name: '' },
   ])('rejects invalid authored range %j rather than rendering children', async (props) => {
     const Invalid = vi.fn(() => <Probe />);
     await withScene(
@@ -592,6 +598,116 @@ describe('Sequence membership', () => {
         expect(Invalid).not.toHaveBeenCalled();
       },
     );
+  });
+});
+
+describe('named Sequences', () => {
+  const fps30 = { numerator: 30, denominator: 1 };
+  const path = (spans: readonly SequenceSpan[]) => spans.map((span) => span.path.join(' > '));
+
+  it('reports mounted spans clipped to their ancestors, skipping unnamed Sequences', async () => {
+    await withScene(
+      () => (
+        <>
+          <Sequence name="intro" from={0} duration={2}>
+            <Sequence from={0.5} duration={1}>
+              <Sequence name="title" from={0} duration={2}>
+                <Probe name="title" />
+              </Sequence>
+            </Sequence>
+          </Sequence>
+          <Sequence name="body" from={2} duration={1}>
+            <Probe name="body" />
+          </Sequence>
+          <Sequence from={3} duration={1}>
+            <Probe name="unnamed" />
+          </Sequence>
+        </>
+      ),
+      async ({ seek, runtime }) => {
+        expectTypeOf(runtime.sequences()).toEqualTypeOf<readonly SequenceSpan[]>();
+        await seek(0);
+        expect(runtime.sequences()).toEqual([
+          { path: ['intro'], startFrame: 0, endFrame: 60 },
+          { path: ['body'], startFrame: 60, endFrame: 90 },
+        ]);
+        await seek(15);
+        expect(runtime.sequences()).toEqual([
+          { path: ['intro'], startFrame: 0, endFrame: 60 },
+          { path: ['intro', 'title'], startFrame: 15, endFrame: 45 },
+          { path: ['body'], startFrame: 60, endFrame: 90 },
+        ]);
+        for (const [frame, active] of [
+          [14, ['intro']],
+          [15, ['intro', 'intro > title']],
+          [44, ['intro', 'intro > title']],
+          [59, ['intro']],
+          [60, ['body']],
+          [90, []],
+        ] as const) {
+          await seek(frame);
+          expect(path(activeSequences(runtime.sequences(), frame))).toEqual(active);
+        }
+        await seek(45);
+        expect(path(runtime.sequences())).toEqual(['intro', 'body']);
+      },
+      fps30,
+    );
+  });
+
+  it('names TransitionSeries scenes on the same path', async () => {
+    await withScene(
+      () => (
+        <Sequence name="part" from={1} duration={4}>
+          <TransitionSeries>
+            <TransitionScene name="a" duration={1}>
+              <Probe name="a" />
+            </TransitionScene>
+            <TransitionScene duration={1}>
+              <Probe name="b" />
+            </TransitionScene>
+          </TransitionSeries>
+        </Sequence>
+      ),
+      async ({ seek, runtime }) => {
+        await seek(30);
+        expect(runtime.sequences()).toEqual([
+          { path: ['part'], startFrame: 30, endFrame: 150 },
+          { path: ['part', 'a'], startFrame: 30, endFrame: 60 },
+        ]);
+      },
+      fps30,
+    );
+  });
+
+  it('renders the same output with and without names', async () => {
+    const scene = (named: boolean) => () => (
+      <Sequence from={1} duration={1} {...(named ? { name: 'shot' } : {})}>
+        <Sequence from={0.5} duration={0.5} {...(named ? { name: 'caption' } : {})}>
+          <Probe />
+        </Sequence>
+      </Sequence>
+    );
+    const outputs = new Map<boolean, unknown[]>();
+    const spans = new Map<boolean, readonly SequenceSpan[]>();
+    for (const named of [false, true]) {
+      await withScene(
+        scene(named),
+        async ({ seek, read, runtime }) => {
+          const seen: unknown[] = [];
+          for (const frame of [0, 30, 45, 59, 60]) {
+            await seek(frame);
+            seen.push(read());
+          }
+          outputs.set(named, seen);
+          spans.set(named, runtime.sequences());
+        },
+        fps30,
+      );
+    }
+    expect(outputs.get(true)).toEqual(outputs.get(false));
+    expect(spans.get(false)).toEqual([]);
+    expect(path(spans.get(true) ?? [])).toEqual(['shot']);
   });
 });
 

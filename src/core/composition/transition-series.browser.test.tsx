@@ -157,6 +157,7 @@ describe('TransitionSeries public components', () => {
     }>();
     expectTypeOf<TransitionSceneProps>().toEqualTypeOf<{
       duration: number | RationalInput;
+      name?: string;
       children: ReactNode;
     }>();
     expectTypeOf<TransitionSeriesProps>().toEqualTypeOf<{ children?: ReactNode }>();

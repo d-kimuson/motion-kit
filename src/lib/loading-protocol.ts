@@ -47,6 +47,19 @@ export type LoadingDescriptor = Readonly<
   // the wire instead of letting a consumer write through an array that throws at runtime.
   Omit<z.infer<typeof descriptorSchema>, 'audio'> & { audio?: readonly AudioTrack[] }
 >;
+/**
+ * A named Sequence the mounted tree renders, as the half-open frames it is visible in (clipped
+ * to its ancestors, not to the Composition duration). `path` lists the named ancestors outer to
+ * inner and ends with this Sequence's own name.
+ */
+export const sequenceSpanSchema = z.object({
+  path: z.array(z.string().min(1)).min(1),
+  startFrame: z.number().int(),
+  endFrame: z.number().int(),
+});
+export type SequenceSpan = Readonly<
+  Omit<z.infer<typeof sequenceSpanSchema>, 'path'> & { path: readonly string[] }
+>;
 export const resultSchema = <T extends z.ZodType>(value: T) =>
   z.discriminatedUnion('ok', [
     z.object({ ok: z.literal(true), value }),
@@ -80,6 +93,8 @@ export type LoadingPage = FramePage & {
   assetReadiness: () => AssetReadinessSnapshot;
   /** Same registry settlement the frame barrier awaits. Not a package export. */
   whenReady: (timeoutMs: number) => Promise<AssetSettlement>;
+  /** Named Sequences mounted at the last settled frame, for a preview host. Not a package export. */
+  sequences: () => readonly SequenceSpan[];
 };
 declare global {
   // Interface merging is required for the browser global.

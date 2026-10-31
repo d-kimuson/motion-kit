@@ -19,6 +19,8 @@ import { createTransitionSeries, sampleTransition } from './overlap.ts';
 export type TransitionSeriesProps = { children?: ReactNode };
 export type TransitionSceneProps = {
   duration: number | RationalInput;
+  /** Same contract as `SequenceProps.name`. */
+  name?: string;
   children: ReactNode;
 };
 export type TransitionProps = {
@@ -112,7 +114,11 @@ export const TransitionSeries = ({ children }: TransitionSeriesProps) => {
         const interval = timing.scenes[index];
         if (interval === undefined) throw new Error('Missing scene timing.');
         return (
-          <AbsoluteSequence key={scene.key} interval={offsetSequence(interval, parent.start)}>
+          <AbsoluteSequence
+            key={scene.key}
+            interval={offsetSequence(interval, parent.start)}
+            name={scene.props.name}
+          >
             {scene.props.children}
           </AbsoluteSequence>
         );
