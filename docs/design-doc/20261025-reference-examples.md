@@ -111,16 +111,17 @@ Available today:
 | `@kimuson/motion-kit` (root, `src/index.ts`) | `defineComposition`, `defineCompositions`, `Sequence`, `TransitionSeries`, `TransitionScene`, `Transition`, `useTransitionProgress`, `useTime`, `useFrame`, `useSequence`, `useTimeline`, `useAsset` (font and image), and the Time Module functions |
 | `@kimuson/motion-kit/render`                 | `createRenderer` and its types (Node only)                                                                                                                                                                                                           |
 | `@kimuson/motion-kit/agent`                  | the CLI output envelope schemas                                                                                                                                                                                                                      |
+| `@kimuson/motion-kit/three`                  | `ThreeCanvas`, `CameraRig` and their types; the example installs `three` and `@react-three/fiber`, the optional peers                                                                                                                                |
 | CLI                                          | `motion-kit render <entry> [--composition <id>] --out <file.mp4 \| dir> [--props <json>] [--json]` and `motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]`                                                              |
 
 Not available yet, so no example may use them:
 
-- `/browser` (TASK-190), `/motion` (Phase 2), `/theme` (Phase 2), `/presets` (Phase 3), `/three` (Phase 3). `package.json#exports` has only `.`, `./render` and `./agent`.
+- `/browser` (TASK-190), `/motion` (Phase 2), `/theme` (Phase 2), `/presets` (Phase 3). _Amended 2026-10-31 (TASK-184):_ `/three` left this list and joined the table above; `package.json#exports` was `.`, `./render` and `./agent` only, and is now those three plus `./three` (`ThreeCanvas`, `CameraRig` and their types, with `three` and `@react-three/fiber` as optional peers the example installs).
 - `src/motion` holds `interpolate`, `easing`, `keyframes`, `spring`, `springState`, `springSettleTime` and `retarget` with no public subpath yet, so an example does not reach them. `Animate`, `Reveal` and `Stagger` do not exist in any form.
 - Audio: no Composition may declare audio until TASK-171.
 - Video assets: `AssetDescriptor` is a union of `FontAssetDescriptor` and `ImageAssetDescriptor`; there is no video kind and no frame-seeking integration.
 - `inspect`, `validate` (Phase 4; the CLI reserves the subcommand names and reports them as not implemented).
-- The determinism suite. `defineDeterminismSuite`/`runDeterminismSuite` live in `src/render/determinism/suite.ts`; `/render` exports `createRenderer` and its types only, and `package.json#exports` has no third subpath, so no file under `examples/` can import them without violating the boundary below. The gate reaches an example from the outside instead ([CI policy](#ci-policy)).
+- The determinism suite. `defineDeterminismSuite`/`runDeterminismSuite` live in `src/render/determinism/suite.ts`; `/render` exports `createRenderer` and its types only, and no subpath exports the suite, so no file under `examples/` can import them without violating the boundary below. The gate reaches an example from the outside instead ([CI policy](#ci-policy)). _Amended 2026-10-31 (TASK-184):_ `package.json#exports` no longer has three subpaths — `/three` is a fourth — but it exports `ThreeCanvas`, `CameraRig` and their types, not the determinism suite, so the exclusion stands.
 
 Consequences the example tasks must live with:
 

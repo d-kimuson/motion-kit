@@ -27,9 +27,9 @@ full-size wrapper.
 
 ```tsx
 import { useTime } from '@kimuson/motion-kit';
-import { CameraRig, ThreeCanvas } from '@kimuson/motion-kit/three';
+import { CameraRig, ThreeCanvas, type CameraPose } from '@kimuson/motion-kit/three';
 
-const orbit = (seconds: number) => ({
+const orbit = (seconds: number): CameraPose => ({
   position: [Math.sin(seconds) * 3, 1, Math.cos(seconds) * 3],
   lookAt: [0, 0, 0],
   fov: 45,
@@ -53,7 +53,7 @@ const Spinner = () => {
   return (
     <mesh rotation={[0, time * 0.6, 0]}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#2f6df6" />
+      <meshBasicMaterial color="#2f6df6" />
     </mesh>
   );
 };
@@ -74,7 +74,10 @@ const Spinner = () => {
 `ThreeCanvas` opens the canvas with `frameloop="never"`, a stopped R3F clock, `dpr` 1 and
 `preserveDrawingBuffer: true`, then advances the root once per settled frame and waits for the GPU
 before the capture. It accepts neither a renderer factory nor a pre-made WebGL context: either would
-fix the drawing buffer's attributes before motion-kit can force `preserveDrawingBuffer`. Two rules keep that guarantee:
+fix the drawing buffer's attributes before motion-kit can force `preserveDrawingBuffer`. That rule is
+type-level only: `ThreeCanvasProps['gl']` takes the parameters object rather than a factory and omits
+`context`, and nothing checks either at runtime, so plain JavaScript that passes a `context` still
+gets a blank capture instead of an error. Two rules keep that guarantee:
 
 - **Derive, do not integrate.** A value written from `useTime()` is a pure function of the frame. A
   value that adds a delta, eases towards a previous value, or reads a wall clock is history, and

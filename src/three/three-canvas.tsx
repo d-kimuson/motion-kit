@@ -17,7 +17,9 @@ import { createCanvasSettlement, type CanvasTarget } from './settlement.ts';
 export type ThreeCanvasProps = Omit<CanvasProps, 'frameloop' | 'gl' | 'dpr'> & {
   /** WebGLRenderer parameters. `preserveDrawingBuffer` is forced to true: the capture reads
    * the default framebuffer. A renderer factory and a pre-made `context` are not accepted, because
-   * both would fix the drawing buffer's attributes (or its canvas) before this component can. */
+   * both would fix the drawing buffer's attributes (or its canvas) before this component can. This
+   * is a type-level rule only: nothing checks `context` at runtime, so JavaScript that passes one
+   * gets a blank capture rather than an error. */
   gl?: Omit<WebGLRendererParameters, 'preserveDrawingBuffer' | 'canvas' | 'context'>;
   /** Device pixel ratio; defaults to 1 so output does not depend on the host display. */
   dpr?: number;
