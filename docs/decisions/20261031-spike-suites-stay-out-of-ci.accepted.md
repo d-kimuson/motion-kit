@@ -16,9 +16,11 @@ has the environment, the per-run measurements and the renderer backend. `motion`
 passed 1/5 on an unattributed comparison mismatch. None of the failures showed a missing readiness
 barrier, and none is a property a shipped path depends on.
 
-_Amended 2026-10-31 (TASK-177):_ a second run (41207262712) passed `clock` 4/5 and reproduced `assets`
-on the same single pixel. The `clock` failure is now attributed to the capture rather than to the
-clock: its failing comparison is DOM-identical and pixel-different. The decision below is unchanged.
+_Amended 2026-10-31 (TASK-177):_ two further runs (41207262712, 41219905051) passed `clock` 4/5 then
+0/5 and reproduced `assets` on the same single pixel. The `clock` failure is attributed to the paused
+`<video>` presenting a picture that `currentTime` does not fix — the media frame accuracy the spike
+excludes — rather than to the clock, the seek order or the readiness chain: every failing comparison is
+DOM-identical and differs only inside the video rectangle. The decision below is unchanged.
 
 The production browser contract is already exercised on Linux: `check.yaml` runs the
 `composition-dom`, `loading` and `frame-transport` projects there, with the AppArmor user-namespace
@@ -38,9 +40,12 @@ first Linux browser coverage.
   the run.
 - Byte-exact DOM plus PNG equality stays the comparison rule of every spike. A Linux run reports the
   mismatch; it gets no tolerance.
-- The two Linux failures stay open: fixing them means diagnosing the platform difference (paint and
-  screenshot reproducibility for `assets`, the unattributed comparison for `clock`), not loosening
-  the comparison.
+- The two Linux failures stay open: neither is a readiness or determinism difference, and closing them
+  means deciding what the fixture should compare, not loosening the comparison.
+  _Amended 2026-10-31 (TASK-177):_ `clock`'s failing comparison differs only inside the paused video's
+  rectangle, so the choice is to mask the video out of the PNG comparison, to stop seeking to times
+  between video frames, or to accept the limit; `assets` needs the same kind of choice for its one
+  pixel. Until one is taken, both keep byte-exact equality and stay `known-linux-failure`.
 - Adopting a spike's technique into shipped code obliges the adopter to test the adopted contract on
   Linux. The spike is a record of an experiment, not that test.
 
@@ -56,11 +61,9 @@ first Linux browser coverage.
   `upload-artifact`; both must be bumped together.
 - TASK-177's remaining work is a decision on the `assets` pixel and, for `clock`, a decision once a
   run reports the differing pixels of the readiness-gate recovery capture; not a CI change.
-  _Amended 2026-10-31 (TASK-177):_ the diagnostic run happened (41207262712) and named the failing
-  comparison — `skip-barrier`'s recovery capture, `{"dom":true,"png":false}`. The spikes now report
-  the coordinate and size of every mismatching capture, so the next failing run decides between a
-  stale composite, the paused video's presented frame and a raster difference; the decision on both
-  failures is still open.
+  _Amended 2026-10-31 (TASK-177):_ the diagnostic runs happened (41207262712, 41219905051) and named
+  the failing comparisons and their rectangles — the paused video's frame for `clock`, one pixel for
+  `assets`. What remains is the decision for both, not a CI change.
 
 ## Alternatives
 
