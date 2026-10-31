@@ -40,6 +40,10 @@ export default defineConfig({
             'src/**/*.determinism.test.ts',
           ],
           setupFiles: ['configs/vitest/time.setup.ts'],
+          // A Lean differential case or a React DOM case can miss Vitest's 5 s default when other
+          // work saturates the machine (`.agents/troubleshots/` used to record it); 30 s still
+          // fails a real hang.
+          testTimeout: 30_000,
         },
       },
       {
