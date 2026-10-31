@@ -18,7 +18,7 @@ export type SequenceProps = {
   /** Nonnegative seconds. Zero duration renders no children. */
   duration: number | RationalInput;
   /**
-   * Nonempty label a host shows for this span (preview timeline, review comments). Nested names
+   * Nonempty label a host reads for this span through `sequences()`. Nested names
    * form a path; unnamed Sequences add no segment. Rendering is the same with or without it.
    */
   name?: string;
