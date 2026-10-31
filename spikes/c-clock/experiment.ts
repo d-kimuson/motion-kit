@@ -236,9 +236,16 @@ const runComparison = async (parent: Page) => {
         extraRafCalls: heldState.rafCalls - held.state.rafCalls,
       };
       if (mechanism === 'own') {
+        // Name the comparisons that failed, not just that one did: the failure is the only output a
+        // failing run keeps, and DOM versus PNG decides whether the clock or the pixels drifted.
+        const mismatches = [
+          ...random.map((result) => ({ stage: 'order', ...result })),
+          ...fresh.map((result) => ({ stage: 'fresh', ...result })),
+          { stage: 'hold', time: 500, dom: hold.dom, png: hold.png },
+        ].filter((result) => !result.dom || !result.png);
         requireThat(
-          [...random, ...fresh, hold].every((result) => result.dom && result.png),
-          'Own clock failed order/hold equality',
+          mismatches.length === 0,
+          `Own clock failed order/hold equality: ${JSON.stringify(mismatches)}`,
         );
         for (const frame of frames) {
           const state = baseline.get(frame)?.state;
@@ -359,7 +366,10 @@ const runComparison = async (parent: Page) => {
           animations: 'allow',
         });
         recoveredAfterRelease = dom === reference.dom && png.equals(reference.png);
-        requireThat(recoveredAfterRelease, 'Readiness gate did not recover reference frame');
+        requireThat(
+          recoveredAfterRelease,
+          `Readiness gate did not recover reference frame: ${JSON.stringify({ dom: dom === reference.dom, png: png.equals(reference.png) })}`,
+        );
       }
       negative.push({
         fault,

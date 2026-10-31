@@ -1,6 +1,6 @@
 # Spike D: explicit asset readiness before capture
 
-Run `pnpm spike:assets` to reproduce font, image, GLTF and texture readiness controls in Playwright Chromium. The experiment is **not shipped or exported and is deliberately outside `pnpm test`**: Linux CI stability/runtime and browser provisioning have not been qualified. See the [report](../../docs/contexts/render/knowledge/spike-d-assets.md) and [accepted cross-context ADR](../../docs/decisions/20261023-asset-readiness-registry.accepted.md).
+Run `pnpm spike:assets` to reproduce font, image, GLTF and texture readiness controls in Playwright Chromium. The experiment is **not shipped or exported and is deliberately outside `pnpm test`**: browser provisioning is not part of the default checks and the suite stays out of the CI gates ([ADR](../../docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)). On Linux it fails 5/5 on one screenshot pixel in the font fixture, with no readiness difference ([record](../../docs/contexts/render/knowledge/20261031-linux-spike-qualification.md)). See the [report](../../docs/contexts/render/knowledge/spike-d-assets.md) and [accepted cross-context ADR](../../docs/decisions/20261023-asset-readiness-registry.accepted.md).
 
 ## Run
 
@@ -41,4 +41,4 @@ The default success deadline is 5 s. Tests use 300 ms while taking negative cont
 
 ## Out of scope
 
-No public `useAsset` API, production registry, loader wrappers or render implementation. No video/audio, large raster decode stress, external GLTF buffers/textures, Draco/KTX2, shader compile failure, GPU queue-pressure benchmark, GPU/context recovery, WebGPU, multi-canvas, hidden lazy assets, Suspense transitions/nesting, StrictMode, changing sources mid-frame, cache eviction, cancellation, cross-process/browser/GPU/OS pixel identity or Linux CI qualification. A tiny SVG matching on `onload` does not prove `onload` is sufficient for all image formats. The report specifies what TASK-158 still needs to implement and test.
+No public `useAsset` API, production registry, loader wrappers or render implementation. No video/audio, large raster decode stress, external GLTF buffers/textures, Draco/KTX2, shader compile failure, GPU queue-pressure benchmark, GPU/context recovery, WebGPU, multi-canvas, hidden lazy assets, Suspense transitions/nesting, StrictMode, changing sources mid-frame, cache eviction, cancellation, cross-process/browser/GPU/OS pixel identity or hardware-GPU behavior. A tiny SVG matching `onload` does not prove `onload` is sufficient for all image formats. The report specifies what TASK-158 still needs to implement and test.
