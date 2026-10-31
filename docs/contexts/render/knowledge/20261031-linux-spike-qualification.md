@@ -42,28 +42,21 @@ every repetition log.
 Wall time is around the whole `pnpm spike:*` process. Five repetitions per command per run; Vitest's
 own duration stays within 1 s of it except for `three-flags`, which forks a child process per profile.
 
-| Suite               | Linux result across the four runs | Linux wall    | macOS baseline  |
+| Suite               | Linux result across the five runs | Linux wall    | macOS baseline  |
 | ------------------- | --------------------------------- | ------------- | --------------- |
 | `spike:motion`      | **5/5** every run                 | 29.06–30.91 s | 29.38 / 29.42 s |
-| `spike:three`       | **5/5** every run                 | 11.84–13.01 s | 9.81 / 11.29 s  |
+| `spike:three`       | **5/5** every run                 | 11.42–13.01 s | 9.81 / 11.29 s  |
 | `spike:three:flags` | **5/5** every run                 | 32.21–46.21 s | 32.42 s         |
-| `spike:clock`       | **1/5**, 4/5, **0/5**, 3/5        | 3.60–52.67 s  | 38.83 / 39.10 s |
+| `spike:clock`       | **1/5**, 4/5, **0/5**, 3/5, 4/5   | 3.60–52.67 s  | 38.83 / 39.10 s |
 | `spike:assets`      | **0/5** every run                 | 7.48–9.57 s   | 9.70 / 10.07 s  |
 
 - `motion` is indistinguishable from macOS, and `three` is 5–30% slower than the two macOS software
-  runs (means 11.70, 12.30, 12.51 and 12.23 s against 10.78 and 9.30 s). The other two suites move
-  more between runs than between platforms: `three-flags` took 32.21–33.95 s in run 41220801083 and
-  43.12–46.21 s in the other three (macOS 32.42 s), and a passing `clock` took 38.39–39.23 s there
-  against 49.13–52.67 s elsewhere (macOS 38.83–39.10 s). Wall time is therefore a runner-load
-  observation, not a platform measurement, and only the pass counts carry the qualification.
-  `assets` is not comparable at all: the failing test aborts before its fresh-fixture and Suspense
-  phases.
-
-- `motion` is indistinguishable from macOS. `three` is 8–30% slower than the two macOS software runs
-  (mean 11.70 s, 12.30 s and 12.51 s against 10.78 and 9.30 s), `three-flags` about 37% slower
-  (43.12–46.21 s against 32.42 s), and a passing `clock` 25–35% slower (49.13 s, 50.83–52.67 s,
-  49.13 s against 38.83–39.10 s). `assets` is not comparable: the failing test aborts before its
-  fresh-fixture and Suspense phases.
+  runs (means 11.70, 12.30, 12.51, 12.23 and 11.85 s against 10.78 and 9.30 s). The other two suites
+  move more between runs than between platforms: `three-flags` took 32.21–33.95 s in run 41220801083,
+  43.12–46.21 s in three earlier runs and 37.01–37.99 s in the last (macOS 32.42 s), and a passing
+  `clock` ranged 36.12–52.67 s against 38.83–39.10 s on macOS. Wall time is therefore a runner-load
+  observation, not a platform measurement, and only the pass counts carry the qualification. `assets`
+  is not comparable at all: the failing test aborts before its fresh-fixture and Suspense phases.
 - `three` reproduced every macOS comparison on Linux in all four runs: 14/14 seeded random, 10/10
   fresh roots, 1/1 held frames, four `finish`/`readback`/`rAF`/`none` barriers 7/7 each, zero readback
   byte mismatches, and all four history-dependent negative controls mismatching in DOM and PNG. The
@@ -137,10 +130,10 @@ the whole `three` suite keep byte-exact equality on Linux.
 
 ## `clock`: the paused video's presented frame
 
-Twenty repetitions over the four runs: `clock` passed 1/5, 4/5, 0/5, then 3/5. A failure aborts the
-comparison, so only the thrown message reaches the log. Two messages carry the verdict: `e297a57` names
-the failing comparison and its DOM/PNG verdict, and the pixel diagnostic added with this record names
-the coordinate of the difference. Neither changes an assertion.
+Twenty-five repetitions over the five runs: `clock` passed 1/5, 4/5, 0/5, 3/5, then 4/5. A failure
+aborts the comparison, so only the thrown message reaches the log. Two messages carry the verdict:
+`e297a57` names the failing comparison and its DOM/PNG verdict, and the pixel diagnostic added with this
+record names the coordinate of the difference. Neither changes an assertion.
 
 | Run         | Failed | Failing comparisons                                              | Verdict in the log                                  |
 | ----------- | ------ | ---------------------------------------------------------------- | --------------------------------------------------- |
@@ -148,16 +141,18 @@ the coordinate of the difference. Neither changes an assertion.
 | 41207262712 | 1 of 5 | 1 × readiness-gate recovery (500 ms)                             | `{"dom":true,"png":false}`                          |
 | 41219905051 | 5 of 5 | 4 × own-clock `fresh` (250 ms ×3, 500 ms), 1 × recovery (500 ms) | DOM equal, pixels differ inside the video rectangle |
 | 41220801083 | 2 of 5 | 2 × own-clock `fresh` (500 ms, 1500 ms)                          | same, both inside the video rectangle               |
+| 41221304831 | 1 of 5 | 1 × own-clock `fresh` (2000 ms)                                  | same, inside the video rectangle                    |
 
 **Attribution: the paused `<video>` presented a different picture at the same `currentTime`.** That is
 media frame presentation — which this spike's own scope excludes — and not clock nondeterminism and not
-a DOM-versus-paint timing problem. The evidence is the seven failures of the two runs with the pixel
-diagnostic (41219905051 and 41220801083):
+a DOM-versus-paint timing problem. The evidence is the eight failures of the three runs with the pixel
+diagnostic (41219905051, 41220801083 and 41221304831):
 
 1. Every failure is DOM-equal and pixel-different, and every differing box lies inside the video
    rectangle (`160×90` at `y 150`): `x 0–159`, `y 150–231` (6,893 pixels) for a 250 ms reference,
-   `x 0–159`, `y 150–233` (8,976 pixels) for 500 ms, and `x 0–159`, `y 150–239` (9,484 pixels) for
-   1500 ms. None of the DOM boxes above `y 150` differs.
+   `x 0–159`, `y 150–233` (8,976 pixels) for 500 ms, `x 0–159`, `y 150–239` (9,484 pixels) for
+   1500 ms and the same box with 9,235 pixels for 2000 ms. None of the DOM boxes above `y 150`
+   differs.
 2. The compared DOM already carries every clock-derived value (`outerHTML` with the rAF box styles, the
    React value, `rafClock`, both CSS `currentTime`s, the computed transforms, `video.currentTime`,
    `seeking`, the microtask and the timer stamps), so `dom: true` says the clock state, the seek order
@@ -169,12 +164,14 @@ diagnostic (41219905051 and 41220801083):
    video-rectangle pixels different.
 5. The sample pixels are different test-pattern colours for the same frame — `(0,150) 128,0,254`
    against `(0,150) 245,2,0` — so these are different pictures, not a one-pixel raster deviation.
-6. The failing times are the times where the presented frame is ambiguous at 10 fps — 250 ms (between
-   frames 2 and 3), 500 ms and 1500 ms (exactly on frames 5 and 15) — while 100, 750, 1000 and 2000 ms
-   have not failed in twenty repetitions. The failing comparisons are the ones where two pages reach
-   that time by different seek histories: a fresh page `0 → 500` against a baseline `0 → 100 … → 500`.
-   Which of the neighbouring frames is presented is not fixed by `currentTime`, and Chromium's choice
-   inside the media pipeline was not measured here.
+6. The failing times are 250, 500, 1500 and 2000 ms; 0, 100, 750 and 1000 ms never failed in
+   twenty-five repetitions. At 10 fps the failing times sit on or between frame boundaries (0.25 is
+   between frames 2 and 3, 0.5 and 1.5 are frames 5 and 15, 2.0 is frame 20), yet 0.75 and 1.0 s are no
+   safer targets and did not fail, so the ambiguity of the target explains how a neighbour can be shown,
+   not which times lose. The failing comparisons are the ones where two pages reach that time by
+   different seek histories: a fresh page `0 → 500` against a baseline `0 → 100 … → 500`. Which of the
+   neighbouring frames is presented is not fixed by `currentTime`, and Chromium's choice inside the
+   media pipeline was not measured here.
 
 Run 41204901232's three detail-less failures sit in the same comparisons (own-clock `order`/`fresh`
 against a baseline) and are attributed to this class by analogy only: their own logs carry no verdict.
@@ -189,7 +186,7 @@ decision, not a diagnosis:
 
 - Mask the video rectangle out of the PNG comparison, keeping byte equality for the rest of the frame.
 - Keep the full-frame comparison and stop seeking to times whose presented frame is ambiguous at 10 fps
-  (250, 500 and 1500 ms in this fixture), so both pages present the same frame.
+  (250, 500, 1500 and 2000 ms have failed in this fixture), so both pages present the same frame.
 - Keep asserting the full frame and record the failure as a known limit of the fixture.
 
 No comparison was relaxed for this record, because choosing between those is the maintainer's call
@@ -219,11 +216,12 @@ PNG, no tolerance, no disabled animation, no image threshold.
 
 ## Residuals
 
-- Four runs, five repetitions per suite each, one Linux image (`ubuntu26`, 20261026.180.1), one
+- Five runs, five repetitions per suite each, one Linux image (`ubuntu26`, 20261026.180.1), one
   Chromium build and one SwiftShader backend. A different runner image, a hardware GPU or an ARM
-  runner is unmeasured. The `clock` failure rate went 4/5, 1/5, 5/5, 2/5 across four runs with no
-  change to the comparison, so how often an ambiguous video seek target presents the neighbouring
-  frame is load- or timing-dependent and another run would report differently again.
+  runner is unmeasured. The `clock` failure rate went 4/5, 1/5, 5/5, 2/5, 1/5 across five runs with
+  no change to the comparison, so how often an ambiguous video seek target presents the neighbouring
+  frame is load- or timing-dependent and another run would report differently again. This record covers
+  the five runs above; the harness is on-demand, so later runs are not folded into it.
 - Both failures are attributed and open. `assets` is one screenshot pixel in the font fixture and `clock`
   is the paused video's presented frame; each needs a decision (a documented tolerance or a stable
   capture path for `assets`; mask the video, avoid ambiguous video seek targets, or accept the limit

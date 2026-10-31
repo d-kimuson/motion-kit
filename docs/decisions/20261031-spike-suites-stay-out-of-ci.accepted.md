@@ -16,8 +16,8 @@ has the environment, the per-run measurements and the renderer backend. `motion`
 passed 1/5 on an unattributed comparison mismatch. None of the failures showed a missing readiness
 barrier, and none is a property a shipped path depends on.
 
-_Amended 2026-10-31 (TASK-177):_ three further runs (41207262712, 41219905051, 41220801083) passed
-`clock` 4/5, 0/5 and 3/5 and reproduced `assets` on the same single pixel. The `clock` failure is
+_Amended 2026-10-31 (TASK-177):_ four further runs (41207262712, 41219905051, 41220801083,
+41221304831) passed `clock` 4/5, 0/5, 3/5 and 4/5 and reproduced `assets` on the same single pixel. The `clock` failure is
 attributed to the paused `<video>` presenting a picture that `currentTime` does not fix — the media
 frame accuracy the spike excludes — rather than to the clock, the seek order or the readiness chain:
 every failing comparison is DOM-identical and differs only inside the video rectangle. The decision
@@ -63,8 +63,8 @@ first Linux browser coverage.
 - TASK-177's remaining work is a decision on the `assets` pixel and, for `clock`, a decision once a
   run reports the differing pixels of the readiness-gate recovery capture; not a CI change.
   _Amended 2026-10-31 (TASK-177):_ the diagnostic runs happened (41207262712, 41219905051,
-  41220801083) and named the failing comparisons and their rectangles — the paused video's frame for
-  `clock`, one pixel for `assets`. What remains is the decision for both, not a CI change.
+  41220801083, 41221304831) and named the failing comparisons and their rectangles — the paused
+  video's frame for `clock`, one pixel for `assets`. What remains is the decision for both, not a CI change.
 
 ## Alternatives
 
