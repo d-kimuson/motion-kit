@@ -43,8 +43,8 @@ every repetition log.
 
 Wall time is around the whole `pnpm spike:*` process. Five repetitions per command per run; over the
 120 repetitions of `motion`, `three`, `clock` and `assets`, Vitest's own duration differs from it by
-at most 1.62 s, while `three-flags` forks a child process per profile and spends most of its wall time
-outside the test run.
+at most 1.62 s, while `three-flags` runs eight Vitest invocations through `run-flags.ts`, one per profile, so
+its recorded duration is only the first one's.
 The `clock` baseline is the exception in the last column: it is a Vitest duration, measured on the
 same machine under the same command, because the macOS record kept no wall time for `clock`.
 
