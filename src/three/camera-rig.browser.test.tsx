@@ -96,6 +96,34 @@ describe('CameraRig', () => {
     expect(mismatches(pixelsOf(fresh.capture), reference)).toBe(0);
   }, 60_000);
 
+  it('restores the projection the camera had at mount when a later frame omits fov and zoom', async () => {
+    const stepped = (seconds: number): CameraPose =>
+      seconds > 0.1 ? { position: [0, 0, 5], fov: 90, zoom: 2 } : { position: [0, 0, 5] };
+    const instance = await mount({
+      scene: (capture) => (
+        <ThreeCanvas
+          gl={gl}
+          camera={{ fov: 45, near: 0.1, far: 100 }}
+          onCreated={(state) => {
+            capture.state = state;
+          }}
+        >
+          <CameraRig pose={stepped} />
+          <Cube />
+        </ThreeCanvas>
+      ),
+    });
+    mounted.push(instance);
+    // Frame 6 is 0.2 s, so it sets the projection; frame 0 omits it. A rig that kept the previous
+    // value would leave 90 and 2 here and depend on the frame rendered before it.
+    expect((await instance.settle(6)).status).toBe('ready');
+    expect(camera(instance).fov).toBe(90);
+    expect(camera(instance).zoom).toBe(2);
+    expect((await instance.settle(0)).status).toBe('ready');
+    expect(camera(instance).fov).toBe(45);
+    expect(camera(instance).zoom).toBe(1);
+  }, 60_000);
+
   it('leaves the canvas Tier B', async () => {
     const instance = await open();
     expect((await instance.settle(0)).status).toBe('ready');

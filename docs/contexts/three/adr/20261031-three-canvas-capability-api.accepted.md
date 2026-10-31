@@ -22,6 +22,7 @@ export type ThreeCanvasProps = Omit<CanvasProps, 'frameloop' | 'gl' | 'dpr'> & {
 ```
 
 - Renders R3F `<Canvas frameloop="never" dpr={dpr ?? 1}>` with `gl={{ ...gl, preserveDrawingBuffer: true }}`, calls `renderer.setAnimationLoop(null)` after creation and chains the caller's `onCreated`. Every other `CanvasProps` field passes through: motion-kit does not restrict what three or R3F can express. A renderer factory is not accepted, and `preserveDrawingBuffer` is not configurable, because capture reads the default framebuffer (R2 has not validated an alternative).
+
 - Children are wrapped in the canvas's own `<Suspense fallback={null}>`, with a generation probe as the **last child inside that same boundary**. The probe reads `useCompositionFrame().generation` and reports it from `useLayoutEffect`, so it commits only after every sibling — including R3F `useLoader` assets — has resolved. A suspending child therefore keeps the boundary on its fallback and no generation is reported.
 - Each mounted canvas registers one integration through `useCompositionRuntime().registerIntegration`, with the id `three-canvas:${useId()}`. That is the whole ownership model: a canvas advances its own root and never calls `runGlobalEffects`, never advances another canvas.
 - `settle(snapshot, signal)` waits until the R3F root exists **and** has a non-zero measured size, then until the probe has reported `snapshot.generation`, then calls `state.advance(toSeconds(snapshot.presentationTime), false)` exactly once, then `gl.finish()`. A lost context returns a failed `Result` carrying `render.page-error`; recovery is TASK-185. Every wait is woken by the abort signal and resolves without a Diagnostic, because the runtime has already terminated that request and only reads the result of a live one. A stale generation never satisfies a wait.
@@ -54,7 +55,9 @@ export type CameraPose = Readonly<{
 export type CameraRigProps = { pose: (time: number) => CameraPose };
 ```
 
-`CameraRig` applies `pose(useTime())` to R3F's default camera (`useThree((s) => s.camera)`) in `useLayoutEffect` on every committed snapshot: position, `up` (default `[0, 1, 0]`), `lookAt` (default `[0, 0, 0]`), then `fov`/`zoom` and `updateProjectionMatrix()` when the pose sets them. It writes every field from the pose and reads no prior pose, and it never uses `useFrame`. That absolute overwrite is what makes it Tier B and is the reason it exists rather than being a rename of an R3F pattern: the spike's `sticky-camera` control is the failure it prevents.
+`CameraRig` applies `pose(useTime())` to R3F's default camera (`useThree((s) => s.camera)`) in `useLayoutEffect` on every committed snapshot: position, `up` (default `[0, 1, 0]`), `lookAt` (default `[0, 0, 0]`), then `fov`/`zoom` and `updateProjectionMatrix()`. It writes every field from the pose and reads no prior pose, and it never uses `useFrame`. That absolute overwrite is what makes it Tier B and is the reason it exists rather than being a rename of an R3F pattern: the spike's `sticky-camera` control is the failure it prevents.
+
+_Amended 2026-10-31 (TASK-184):_ an omitted `fov` or `zoom` is written from the value the camera had at mount, captured once before the first pose is applied, so all five fields are written on every settled frame. The earlier sentence applied `fov`/`zoom` only "when the pose sets them", which left a later frame's projection in place and made the frame depend on the one rendered before it.
 
 The pose is applied during React commit, before `advance()` renders, because the integration waits for the generation probe, which is the last layout effect of that commit.
 

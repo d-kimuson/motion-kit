@@ -60,8 +60,9 @@ const Spinner = () => {
 ```
 
 - `CameraRig` takes only `pose`, a function of the local seconds reported by `useTime()`. It writes
-  position, `up`, `lookAt` and (when present) `fov`/`zoom` on every frame, so a seek backwards lands
-  on exactly the pose that frame asks for.
+  position, `up` and `lookAt`, then `fov`/`zoom`, on every frame; an omitted `fov` or `zoom` is the
+  value the camera had at mount, never the one the previous frame wrote. A seek backwards therefore
+  lands on exactly the pose that frame asks for.
 - Every animated value must be computed from a hook, exactly as in the DOM. `useTime()`,
   `useSequence()` and `useTimeline()` work inside `<Canvas>`; they read the same context the rest of
   the tree reads.
