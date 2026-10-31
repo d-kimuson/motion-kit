@@ -245,6 +245,10 @@ try {
           ws: false,
           open: false,
           host: '127.0.0.1',
+          // The service always answers plain http, and Vite skips its Host check under
+          // https or allowedHosts: true, which would open every route to DNS rebinding.
+          https: undefined,
+          allowedHosts: resolved.server.allowedHosts === true ? [] : resolved.server.allowedHosts,
         });
         resolved.server.fs.allow = allow;
         resolved.resolve.alias = aliases;

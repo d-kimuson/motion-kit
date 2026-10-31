@@ -147,6 +147,20 @@ it("applies Vite's Host check to the preview routes", async () => {
   expect(await statusFromHost(audio, '[::1]:9000')).toBe(200);
 });
 
+it('keeps the Host check under a project config that would switch it off', async () => {
+  const root = fixture();
+  // Vite skips its Host check under either option; the service answers plain http regardless.
+  writeFileSync(
+    join(root, 'vite.config.ts'),
+    'export default { server: { allowedHosts: true, https: {} } };',
+  );
+  const result = await open(root);
+  if (!result.ok) throw new Error('Preview failed to start');
+  const audio = new URL('/__motion-kit/preview/audio?src=audio/voice.wav', result.value.url);
+  expect(await statusFromHost(audio, 'rebound.example')).toBe(403);
+  expect(await statusFromHost(new URL('/entry.tsx', audio), 'rebound.example')).toBe(403);
+});
+
 it('emits reload when a served module changes and serves the new source', async () => {
   const root = fixture();
   const result = await open(root);
