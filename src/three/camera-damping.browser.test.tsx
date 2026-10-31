@@ -11,7 +11,7 @@ import {
   type Mounted,
   type RootCapture,
 } from './fixtures/harness.tsx';
-import { orderCheck } from './fixtures/orders.ts';
+import { freshMountsOf, orderCheck } from './fixtures/orders.ts';
 import { ThreeCanvas } from './three-canvas.tsx';
 
 // The negative control behind the "controls and damping" exclusion: a camera that eases towards a
@@ -77,10 +77,14 @@ describe('camera damping', () => {
     expect(mismatches(pixelsOf(sequential.capture), pixelsOf(fresh.capture))).toBeGreaterThan(0);
   }, 120_000);
 
-  // The negative control for the fresh-mount pass itself: a history-dependent scene must make it
-  // report a mismatch, or a Tier B claim that passes through it proves nothing about fresh seeks.
-  it('makes the Tier B order check report a fresh-mount mismatch', async () => {
-    const check = await orderCheck({ frames: [0, 5, 9], scene });
-    expect(check.freshMismatches.some((count) => count > 0)).toBe(true);
+  // The negative control for the fresh-mount pass itself. The structural half pins that the pass
+  // opens one mount per claimed frame and renders that frame as the mount's first and only render,
+  // so a refactor back to a shared fresh mount fails here; the pixel half pins that the pass can
+  // report a mismatch at all, so a Tier B claim that passes through it proves something.
+  it('opens one fresh mount per claimed frame and makes it report a mismatch', async () => {
+    const frames = [0, 5, 9];
+    const check = await orderCheck({ frames, scene });
+    expect(check.fresh.mounts).toEqual(freshMountsOf(frames));
+    expect(check.fresh.mismatches.some((count) => count > 0)).toBe(true);
   }, 120_000);
 });

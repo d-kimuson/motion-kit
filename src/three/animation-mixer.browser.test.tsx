@@ -11,7 +11,7 @@ import {
   type Mounted,
   type RootCapture,
 } from './fixtures/harness.tsx';
-import { orderCheck } from './fixtures/orders.ts';
+import { freshMountsOf, orderCheck } from './fixtures/orders.ts';
 import { ThreeCanvas } from './three-canvas.tsx';
 
 const gl = { antialias: false } as const;
@@ -95,7 +95,8 @@ describe('AnimationMixer', () => {
     }
     expect(check.referenceDifference).toBeGreaterThan(0);
     expect(check.shuffledMismatches).toEqual([0, 0, 0, 0, 0]);
-    expect(check.freshMismatches).toEqual([0, 0, 0]);
+    expect(check.fresh.mounts).toEqual(freshMountsOf(frames));
+    expect(check.fresh.mismatches).toEqual([0, 0, 0]);
   }, 120_000);
 
   it('writes the clip value the frame asks for, not the value the previous frame left', async () => {

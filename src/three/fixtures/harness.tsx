@@ -42,6 +42,9 @@ export type Mounted = {
   /** Render one output frame; a new request id per call, as the host does. */
   readonly settle: (frame: number) => Promise<FrameOutcome>;
   readonly settleWith: (frame: number, requestId: string) => Promise<FrameOutcome>;
+  /** Every render this mount has run, one entry per `advance`: the frame it was asked for, in
+   * request order, repeated when the runtime resettled. A mount that has not rendered is `[]`. */
+  readonly rendered: readonly number[];
   readonly resize: (width: number, height: number) => void;
   readonly dispose: () => void;
 };
@@ -85,14 +88,17 @@ export const mount = async ({
     root.render(<Composition definition={definition} compositionRuntime={runtime} />);
   });
   let requests = 0;
+  const rendered: number[] = [];
   /** Settle and complete the capture, as the renderer's frame job does: an uncompleted
    * request keeps exclusive ownership, and the next frame would only queue. */
   const render = async (frame: number, requestId: string): Promise<FrameOutcome> => {
+    rendered.push(frame);
     let outcome = await runtime.settleFrame(frame, { source: 'renderer', requestId });
     while (outcome.status === 'ready') {
       const completion = runtime.completeCapture(outcome.lease);
       if (completion.status === 'accepted') return outcome;
       if (completion.status !== 'resettle') return completion;
+      rendered.push(frame);
       outcome = await runtime.resettle(outcome.lease);
     }
     return outcome;
@@ -103,6 +109,9 @@ export const mount = async ({
     capture,
     settle: (frame: number) => render(frame, `frame-${++requests}`),
     settleWith: (frame: number, requestId: string) => render(frame, requestId),
+    get rendered() {
+      return rendered.slice();
+    },
     resize: (nextWidth, nextHeight) => {
       container.style.width = `${nextWidth}px`;
       container.style.height = `${nextHeight}px`;

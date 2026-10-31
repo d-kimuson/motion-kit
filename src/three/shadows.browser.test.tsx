@@ -9,7 +9,7 @@ import {
   type Mounted,
   type RootCapture,
 } from './fixtures/harness.tsx';
-import { orderCheck } from './fixtures/orders.ts';
+import { freshMountsOf, orderCheck } from './fixtures/orders.ts';
 import { ThreeCanvas } from './three-canvas.tsx';
 
 const gl = { antialias: false } as const;
@@ -66,8 +66,9 @@ const open = async (castShadow: boolean): Promise<{ instance: Mounted; capture: 
 
 describe('shadow maps', () => {
   it('is Tier B with shadows on: the same frame is byte-identical in any order', async () => {
+    const frames = [0, 5, 11];
     const check = await orderCheck({
-      frames: [0, 5, 11],
+      frames,
       mount: { durationInFrames: 16 },
       scene: shadowScene(true),
     });
@@ -76,7 +77,8 @@ describe('shadow maps', () => {
     }
     expect(check.referenceDifference).toBeGreaterThan(0);
     expect(check.shuffledMismatches).toEqual([0, 0, 0, 0, 0]);
-    expect(check.freshMismatches).toEqual([0, 0, 0]);
+    expect(check.fresh.mounts).toEqual(freshMountsOf(frames));
+    expect(check.fresh.mismatches).toEqual([0, 0, 0]);
   }, 120_000);
 
   it('renders a shadow region that a light without castShadow does not', async () => {

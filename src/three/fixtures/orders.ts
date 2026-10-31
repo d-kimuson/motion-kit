@@ -10,18 +10,41 @@ export type BClaim = Readonly<{
   mount?: Omit<MountOptions, 'scene' | 'initialSize'>;
 }>;
 
+/** One mount the fresh pass opened, and every render it ran before the capture. */
+export type FreshMount = Readonly<{
+  /** The claimed frame this mount was opened for; its capture is compared with that frame's pixels. */
+  frame: number;
+  /** The frame of every render this mount ran, in order. A pass that renders each claimed frame as
+   * the first and only render of its own mount reports exactly `[frame]`. */
+  rendered: readonly number[];
+}>;
+
+/** What the fresh-mount pass did: the mounts it opened, and the pixels each one differed by. */
+export type FreshPass = Readonly<{
+  /** One entry per mount the pass opened, in the order it opened them. */
+  mounts: readonly FreshMount[];
+  /** Byte differences against the reference, in `frames` order. */
+  mismatches: readonly number[];
+}>;
+
 /** What the sequential, shuffled/repeated and fresh-mount passes measured. */
 export type OrderCheck = Readonly<{
   /** Pixels of every claimed frame, captured in sequential order by the first mount. */
   reference: ReadonlyMap<number, Uint8Array>;
   /** Byte differences when the claimed frames are replayed backwards and repeated on that mount. */
   shuffledMismatches: readonly number[];
-  /** Byte differences when each claimed frame is the first frame a fresh mount renders; one mount is
-   * opened per claimed frame, so no earlier frame of that mount can leave state behind. */
-  freshMismatches: readonly number[];
+  /** The fresh-mount pass: one mount is opened per claimed frame, so no earlier frame of that mount
+   * can leave state behind. It reports what it did, which is what pins the pass's structure. */
+  fresh: FreshPass;
   /** Byte differences between the first and the last claimed frame; zero means nothing moved. */
   referenceDifference: number;
 }>;
+
+/** The mounts a correct fresh pass reports for `frames`: one per frame, that frame rendered once.
+ * Every Tier B claim compares `OrderCheck['fresh']['mounts']` with this, so a pass that shares one
+ * mount between the claimed frames fails a test instead of merely measuring a different pixel. */
+export const freshMountsOf = (frames: readonly number[]): FreshMount[] =>
+  frames.map((frame) => ({ frame, rendered: [frame] }));
 
 const pixelsAt = async (instance: Mounted, frame: number): Promise<Uint8Array> => {
   const outcome = await instance.settle(frame);
@@ -55,8 +78,9 @@ const replayOrder = (frames: readonly number[]): readonly number[] => {
  * frame orders. The first pass renders frames 0 to the last claimed frame in order on one mount, the
  * second replays the claimed frames backwards and repeated on that same mount, and the third renders
  * each claimed frame as the first frame of its own fresh mount. It returns the measurements instead
- * of asserting them, so each test states the claim it makes; every mount it opens is disposed here,
- * in both the pass and the failure path.
+ * of asserting them, so each test states the claim it makes; the fresh pass also reports the mounts
+ * it opened and what each rendered, so a test can pin the pass's structure and not only its pixels.
+ * Every mount it opens is disposed here, in both the pass and the failure path.
  */
 export const orderCheck = async ({
   scene,
@@ -79,6 +103,7 @@ export const orderCheck = async ({
     sequential.dispose();
   }
   const freshMismatches: number[] = [];
+  const freshMounts: FreshMount[] = [];
   for (const frame of frames) {
     const expected = reference.get(frame);
     if (expected === undefined) throw new Error(`No reference for frame ${frame}.`);
@@ -86,6 +111,7 @@ export const orderCheck = async ({
     try {
       freshMismatches.push(mismatches(await pixelsAt(fresh, frame), expected));
     } finally {
+      freshMounts.push({ frame, rendered: fresh.rendered });
       fresh.dispose();
     }
   }
@@ -94,7 +120,7 @@ export const orderCheck = async ({
   return {
     reference,
     shuffledMismatches,
-    freshMismatches,
+    fresh: { mounts: freshMounts, mismatches: freshMismatches },
     referenceDifference: mismatches(first, last),
   };
 };
