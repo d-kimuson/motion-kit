@@ -1,11 +1,17 @@
 name: Spikes (Linux)
 
 # Qualification run for the four spike suites and the R3F flag matrix on the
-# runner image that check.yaml uses. Every measurement in spikes/*/README.md is
-# macOS arm64, so this workflow records the renderer backend, pass counts and
-# per-run wall time on Linux before deciding whether a browser job belongs in
-# check.yaml (TASK-177). It produces evidence, not a gate: a failing repetition
-# is annotated and its log is still uploaded.
+# runner image that check.yaml uses. Every other measurement in spikes/ is
+# macOS arm64; this workflow records the renderer backend, pass counts and
+# per-run wall time on Linux. The Linux results and their diagnoses are in
+# docs/contexts/render/knowledge/20261031-linux-spike-qualification.md.
+#
+# The spikes stay out of check.yaml, per the cross-context ADR
+# docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md. Two suites do
+# not hold byte-exact DOM+PNG equality on Linux: `clock` fails intermittently
+# and `assets` on one pixel of the font fixture. They keep running here, marked
+# known-linux-failure, so a regression is still visible without blocking a pull
+# request that touches spikes/**.
 on:
   workflow_dispatch:
     inputs:
@@ -36,22 +42,32 @@ jobs:
     # ~39 s each) plus browser provisioning stay well inside this even at
     # several times the local duration.
     timeout-minutes: 45
+    # A known Linux failure is reported but does not fail the run. Everything
+    # else, including a regression in a suite that passes on Linux, still fails
+    # it.
+    continue-on-error: ${{ matrix.known-linux-failure }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - suite: motion
             command: spike:motion
+            known-linux-failure: false
           - suite: three
             command: spike:three
+            known-linux-failure: false
           - suite: three-flags
             command: spike:three:flags
+            known-linux-failure: false
           - suite: clock
             command: spike:clock
+            known-linux-failure: true
           - suite: assets
             command: spike:assets
+            known-linux-failure: true
     env:
       REPETITIONS: ${{ inputs.repetitions || 5 }}
+      KNOWN_FAILURE: ${{ matrix.known-linux-failure }}
       LOG_DIR: .cache/spikes-linux
       # Keeps the console measurements greppable: Vitest's verbose reporter
       # drops ANSI escapes when NO_COLOR is set.
@@ -106,13 +122,18 @@ jobs:
       # Every repetition is a fresh process, so a suite that is flaky rather
       # than broken shows it. A failing repetition does not stop the loop; the
       # job fails after the last one, with every log retained. `set +e` keeps
-      # bash's default `-e -o pipefail` from aborting on the first child.
+      # bash's default `-e -o pipefail` from aborting on the first child. A
+      # known Linux failure annotates as a warning and points at the diagnosis.
       - name: Run ${{ matrix.suite }} ${{ inputs.repetitions || 5 }} times
         env:
           COMMAND: ${{ matrix.command }}
         run: |
           set +e
           failures=0
+          level=error
+          if [ "$KNOWN_FAILURE" = "true" ]; then level=warning; fi
+          DIAGNOSIS='Diagnosis: docs/contexts/render/knowledge'
+          DIAGNOSIS="${DIAGNOSIS}/20261031-linux-spike-qualification.md"
           for repetition in $(seq 1 "$REPETITIONS"); do
             log="${LOG_DIR}/${{ matrix.suite }}-${repetition}.log"
             start=$(date +%s%3N)
@@ -140,14 +161,18 @@ jobs:
               | tee -a "${LOG_DIR}/measurements.jsonl"
 
             if [ "$status" -ne 0 ]; then
-              printf '::error::%s run %s/%s exited %s\n' \
-                '${{ matrix.suite }}' "$repetition" "$REPETITIONS" "$status"
+              printf '::%s::%s run %s/%s exited %s\n' \
+                "$level" '${{ matrix.suite }}' "$repetition" \
+                "$REPETITIONS" "$status"
               failures=$(( failures + 1 ))
             fi
           done
           if [ "$failures" -ne 0 ]; then
-            printf '::error::%s of %s runs of %s failed\n' \
-              "$failures" "$REPETITIONS" '${{ matrix.suite }}'
+            printf '::%s::%s of %s runs of %s failed\n' \
+              "$level" "$failures" "$REPETITIONS" '${{ matrix.suite }}'
+            if [ "$KNOWN_FAILURE" = "true" ]; then
+              printf '::warning title=Known Linux failure::%s\n' "$DIAGNOSIS"
+            fi
             exit 1
           fi
 
@@ -165,6 +190,12 @@ jobs:
                 "| \(.repetition) | \(.exitCode) | \(.wallMs / 1000) "
                 + "| \(.tests) | \(.vitestDuration) | \(.renderer) |"
               ' "${LOG_DIR}/measurements.jsonl"
+              if [ "$KNOWN_FAILURE" = "true" ]; then
+                doc='docs/contexts/render/knowledge'
+                doc="${doc}/20261031-linux-spike-qualification.md"
+                echo
+                echo "Known Linux failure: ${doc}"
+              fi
             } | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::No measurements recorded for ${{ matrix.suite }}"
