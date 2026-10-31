@@ -1,0 +1,228 @@
+name: Spikes (Linux)
+
+# Qualification run for the four spike suites and the R3F flag matrix on the
+# runner image that check.yaml uses. Every other measurement in spikes/ is
+# macOS arm64; this workflow records the renderer backend, pass counts and
+# per-run wall time on Linux. The Linux results and their diagnoses are in
+# docs/contexts/render/knowledge/20261031-linux-spike-qualification.md.
+#
+# The spikes stay out of check.yaml, per the cross-context ADR
+# docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md. Two suites do
+# not hold byte-exact DOM+PNG equality on Linux: `clock` fails intermittently
+# and `assets` on one pixel of the font fixture. They keep running here, marked
+# known-linux-failure, so a regression is still visible without blocking a pull
+# request that touches spikes/**.
+on:
+  workflow_dispatch:
+    inputs:
+      repetitions:
+        description: 'Runs per spike suite'
+        type: number
+        default: 5
+        required: false
+  pull_request:
+    # The pull request that adds or changes a spike runs this; nothing else.
+    paths:
+      - 'spikes/**'
+      - '.github/workflows/spikes-linux.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  spike:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    # Bounded together with the repetitions guard below: a full macOS run of the
+    # four suites plus the flag matrix takes about 2 minutes, and the slowest
+    # suite on Linux (`clock`) took up to 52.67 s per repetition across the six
+    # qualification runs. The 35 repetitions the guard accepts are therefore at
+    # most ~31 minutes, plus about a minute of provisioning, inside this budget.
+    timeout-minutes: 45
+    # A known Linux failure is reported but does not fail the run. Everything
+    # else, including a regression in a suite that passes on Linux, still fails
+    # it.
+    continue-on-error: ${{ matrix.known-linux-failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: motion
+            command: spike:motion
+            known-linux-failure: false
+          - suite: three
+            command: spike:three
+            known-linux-failure: false
+          - suite: three-flags
+            command: spike:three:flags
+            known-linux-failure: false
+          - suite: clock
+            command: spike:clock
+            known-linux-failure: true
+          - suite: assets
+            command: spike:assets
+            known-linux-failure: true
+    env:
+      KNOWN_FAILURE: ${{ matrix.known-linux-failure }}
+      LOG_DIR: .cache/spikes-linux
+      # Keeps the console measurements greppable: Vitest's verbose reporter
+      # drops ANSI escapes when NO_COLOR is set.
+      NO_COLOR: '1'
+
+    steps:
+      # First step, so an invalid value fails in seconds instead of after the
+      # browser download. It reads the raw input: `inputs.repetitions || 5`
+      # would turn a dispatched 0 into the default 5 and never reach the guard.
+      - name: Check the repetitions input
+        env:
+          INPUT_REPETITIONS: ${{ inputs.repetitions }}
+        run: |
+          repetitions="${INPUT_REPETITIONS:-5}"
+          # What timeout-minutes covers: 35 repetitions of the slowest suite
+          # (`clock`, up to 52.67 s each in the six qualification runs) is ~31
+          # minutes, so a larger value could not finish in time.
+          max_repetitions=35
+          if ! [[ "$repetitions" =~ ^[1-9][0-9]?$ ]] ||
+            [ "$repetitions" -gt "$max_repetitions" ]; then
+            echo "::error::repetitions must be 1-${max_repetitions}," \
+              "got '$INPUT_REPETITIONS'"
+            exit 1
+          fi
+          echo "REPETITIONS=$repetitions" >> "$GITHUB_ENV"
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node & pnpm
+        uses: ./.github/actions/setup-node
+
+      # What a result is pinned to: the runner image, the toolchain and
+      # Playwright's Chromium build. The spike JSON also records the user agent
+      # and, where the fixture has a WebGL context, the unmasked renderer.
+      - name: Record the environment
+        run: |
+          mkdir -p "$LOG_DIR"
+          {
+            echo "runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            echo "os: $(uname -srm)"
+            echo "node: $(node --version)"
+            echo "pnpm: $(pnpm --version)"
+            echo "playwright: $(pnpm exec playwright --version)"
+            # The exact browser build the lockfile resolves, not the version.
+            pnpm exec playwright install --dry-run chromium | sed -n '1,2p'
+          } | tee "$LOG_DIR/environment.txt"
+
+      - name: Install Chromium for the spike suites
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Identical to the step in check.yaml, which needs it for the sandboxed
+      # render tests. It is inert for the spikes: no spike config sets
+      # chromiumSandbox: true, so Playwright adds --no-sandbox.
+      - name: Allow sandboxed Playwright Chromium on the CI runner
+        run: |
+          sudo apparmor_parser -r /dev/stdin <<EOF
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile motion-kit-playwright ${HOME}/.cache/ms-playwright/**/{chrome,chrome-headless-shell} flags=(unconfined) {
+            userns,
+          }
+          EOF
+
+      - name: Run ${{ matrix.suite }} ${{ inputs.repetitions || 5 }} times
+        env:
+          COMMAND: ${{ matrix.command }}
+        run: |
+          set +e
+          failures=0
+          level=error
+          if [ "$KNOWN_FAILURE" = "true" ]; then level=warning; fi
+          DIAGNOSIS='Diagnosis: docs/contexts/render/knowledge'
+          DIAGNOSIS="${DIAGNOSIS}/20261031-linux-spike-qualification.md"
+          for repetition in $(seq 1 "$REPETITIONS"); do
+            log="${LOG_DIR}/${{ matrix.suite }}-${repetition}.log"
+            start=$(date +%s%3N)
+            pnpm "$COMMAND" 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            wall=$(( $(date +%s%3N) - start ))
+
+            # The line-start summary carries the whole result, including the
+            # skipped part; a failing run's banner carries neither.
+            tests="$(
+              grep -m1 -oE '^ *Tests +[0-9]+ (passed|failed).*' "$log" |
+                tr -s ' ' | sed 's/^ //; s/ *$//'
+            )"
+            duration="$(grep -m1 -oE 'Duration +[^ ]+' "$log" | tr -s ' ')"
+            renderer="$(
+              grep -o '"renderer":"[^"]*"' "$log" |
+                sed 's/^"renderer":"//;s/"$//' | sort -u | paste -sd ';' -
+            )"
+            jq -cn \
+              --arg suite '${{ matrix.suite }}' \
+              --argjson repetition "$repetition" \
+              --argjson exitCode "$status" \
+              --argjson wallMs "$wall" \
+              --arg tests "$tests" \
+              --arg duration "$duration" \
+              --arg renderer "$renderer" \
+              '{suite: $suite, repetition: $repetition,
+                exitCode: $exitCode, wallMs: $wallMs, tests: $tests,
+                vitestDuration: $duration, renderer: $renderer}' \
+              | tee -a "${LOG_DIR}/measurements.jsonl"
+
+            if [ "$status" -ne 0 ]; then
+              printf '::%s::%s run %s/%s exited %s\n' \
+                "$level" '${{ matrix.suite }}' "$repetition" \
+                "$REPETITIONS" "$status"
+              failures=$(( failures + 1 ))
+            fi
+          done
+          if [ "$failures" -ne 0 ]; then
+            printf '::%s::%s of %s runs of %s failed\n' \
+              "$level" "$failures" "$REPETITIONS" '${{ matrix.suite }}'
+            if [ "$KNOWN_FAILURE" = "true" ]; then
+              printf '::warning title=Known Linux failure::%s\n' "$DIAGNOSIS"
+            fi
+            exit 1
+          fi
+
+      - name: Summarise the measurements
+        if: always()
+        run: |
+          if [ -f "${LOG_DIR}/measurements.jsonl" ]; then
+            {
+              echo "### ${{ matrix.suite }}"
+              echo
+              echo '| # | exit | wall s | tests | vitest | renderer |'
+              echo '| ---: | ---: | ---: | --- | --- | --- |'
+              # Wall time is the runner's clock; the suite JSON keeps the rest.
+              # `tests` keeps the whole summary line, so it can carry a `|`
+              # (`Tests 1 passed | 7 skipped (8)`); escape it here, where the
+              # row is built, and keep the raw value in measurements.jsonl.
+              jq -r '
+                "| \(.repetition) | \(.exitCode) | \(.wallMs / 1000) "
+                + "| \(.tests | gsub("\\|"; "\\|")) "
+                + "| \(.vitestDuration) | \(.renderer) |"
+              ' "${LOG_DIR}/measurements.jsonl"
+              if [ "$KNOWN_FAILURE" = "true" ]; then
+                doc='docs/contexts/render/knowledge'
+                doc="${doc}/20261031-linux-spike-qualification.md"
+                echo
+                echo "Known Linux failure: ${doc}"
+              fi
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No measurements recorded for ${{ matrix.suite }}"
+          fi
+
+      - name: Upload the spike logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spikes-linux-${{ matrix.suite }}
+          path: ${{ env.LOG_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
