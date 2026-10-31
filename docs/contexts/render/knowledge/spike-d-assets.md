@@ -78,7 +78,7 @@ The **11-test suite takes 54 screenshots**: 13 per type plus the two onload/deco
 
 No Lean source changed. Lean's linker emitted SDK minimum-version warnings (bundled libraries built for macOS 15 versus target 14); build and differential tests passed. No new npm dependency or lockfile change was needed: all tooling reuses existing exact pins. The OFL font's copyright/license and immutable provenance, and the original MIT image/model assets, are documented in the spike README. Only the non-shipped fixture/config receive narrow three/Node lint exceptions; production boundaries and exports stay unchanged.
 
-**The suite stays outside `pnpm test`** despite its short local runtime. Linux CI stability, required browser system libraries and CI runtime have not been measured; no browser job is added.
+**The suite stays outside `pnpm test`** despite its short local runtime, and outside the CI gates ([ADR](../../../decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)). Linux is qualified: 10 of 11 tests pass **5/5**; the font fixture fails on a single screenshot pixel in blank space with identical DOM, and no readiness difference was found ([record](20261031-linux-spike-qualification.md)).
 
 ## Residual risks for TASK-158
 
@@ -86,5 +86,5 @@ No Lean source changed. Lean's linker emitted SDK minimum-version warnings (bund
 - Font weights/styles/glyph coverage and lazy CSS fonts are unverified; assets outside the registry cannot silently be inferred ready.
 - The image is a small SVG, not a raster decode stress test. GLTF uses one embedded buffer and an unlit triangle: external dependencies, Draco/KTX2, skinning and textured models are unverified.
 - GPU upload errors beyond explicit context loss, asynchronous shader compilation, context recovery, queue pressure, multiple canvases and WebGPU are unverified. No fence cost or minimal fence was established.
-- No Linux, hardware-GPU, high-DPR, cross-browser/OS/process comparisons, sustained resource-leak stress, video or audio. The private Playwright font-wait switch must be revalidated on upgrades.
+- No hardware-GPU Linux run, high-DPR, cross-browser/OS/process comparisons, sustained resource-leak stress, video or audio. The private Playwright font-wait switch must be revalidated on upgrades.
 - The experiment's trusted local-server/SwiftShader setup is not a security policy for untrusted compositions. The accepted ADR fixes the strategy; TASK-158 owns its production implementation.
