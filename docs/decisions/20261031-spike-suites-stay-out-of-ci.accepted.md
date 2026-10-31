@@ -20,8 +20,9 @@ _Amended 2026-10-31 (TASK-177):_ five further runs (41207262712, 41219905051, 41
 41221304831, 41221810659) passed `clock` 4/5, 0/5, 3/5, 4/5 and 0/5 and reproduced `assets` on the same single pixel. The `clock` failure is
 attributed to the paused `<video>` presenting a picture that `currentTime` does not fix — the media
 frame accuracy the spike excludes — rather than to the clock, the seek order or the readiness chain:
-every failing comparison is DOM-identical and differs only inside the video rectangle. The decision
-below is unchanged.
+every failing comparison whose log carries the pixel diagnostic is DOM-identical and differs only
+inside the video rectangle, and the earlier ones are attributed to the same class by analogy. The
+decision below is unchanged.
 
 The production browser contract is already exercised on Linux: `check.yaml` runs the
 `composition-dom`, `loading` and `frame-transport` projects there, with the AppArmor user-namespace
@@ -43,10 +44,11 @@ first Linux browser coverage.
   mismatch; it gets no tolerance.
 - The two Linux failures stay open: neither is a readiness or determinism difference, and closing them
   means deciding what the fixture should compare, not loosening the comparison.
-  _Amended 2026-10-31 (TASK-177):_ `clock`'s failing comparisons differ only inside the paused video's
-  rectangle, so the choice is to mask the video out of the PNG comparison, to compare against a
-  reference taken with the same seek history, or to accept the limit; `assets` needs the same kind of
-  choice for its one pixel. Until one is taken, both keep byte-exact equality and stay `known-linux-failure`.
+  _Amended 2026-10-31 (TASK-177):_ the failing `clock` comparisons whose log carries the diagnostic
+  differ only inside the paused video's rectangle, so the choice is to mask the video out of the PNG
+  comparison, to compare against a reference taken with the same seek history, or to accept the limit;
+  `assets` needs the same kind of choice for its one pixel. Until one is taken, both keep byte-exact
+  equality and stay `known-linux-failure`.
 - Adopting a spike's technique into shipped code obliges the adopter to test the adopted contract on
   Linux. The spike is a record of an experiment, not that test.
 
@@ -58,9 +60,10 @@ first Linux browser coverage.
   failures cannot make that gate red forever.
 - `check.yaml` keeps its ~15 minute budget and its shipped-code focus; the qualification workflow
   carries the chrome download, the SwiftShader measurements and the artifacts.
-- The workflow is a second place that pins `actions/checkout` and `actions/upload-artifact`; both must
-  be bumped together with `check.yaml`'s copies. It reuses the local `./.github/actions/setup-node`
-  composite rather than pinning `actions/setup-node` again, so it must not bypass that action.
+- The workflow reuses `check.yaml`'s `actions/checkout` pin, so both copies must be bumped together,
+  and pins `actions/upload-artifact`, which no other workflow uses. It reuses the local
+  `./.github/actions/setup-node` composite rather than pinning `actions/setup-node` again, so it must
+  not bypass that action.
 - TASK-177's remaining work is a decision on the `assets` pixel and, for `clock`, a decision once a
   run reports the differing pixels of the readiness-gate recovery capture; not a CI change.
   _Amended 2026-10-31 (TASK-177):_ the diagnostic runs happened (41207262712, 41219905051,
