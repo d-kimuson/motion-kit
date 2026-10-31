@@ -13,7 +13,7 @@ muxing, and the determinism suite that keeps frame bytes independent of capture 
 in the repository lists what is in it and what is known to be limited.
 
 Not in 0.0.1: the preview UI, in-browser preview audio, audio-reactive visuals, video assets, the
-`/motion`, `/theme`, `/presets` and `/three` subpaths, and the `inspect`/`validate` commands. The
+`/motion`, `/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. The
 [package surface](#package-surface) says what is exported today; each later context gets its own
 subpath when it lands.
 
@@ -31,7 +31,8 @@ yarn add @kimuson/motion-kit react react-dom zod && yarn playwright install chro
 
 React 19 and ReactDOM 19 are peer dependencies of the package; Zod validates your Composition props in
 your own project, so you install it explicitly. The Chromium download is a one-time setup per machine,
-not part of every install.
+not part of every install. A 3D Composition (`@kimuson/motion-kit/three`) also installs `three` and
+`@react-three/fiber`, the package's optional peer dependencies.
 
 **Prerequisites.** Node.js runs the CLI (the package is ESM only) and, for video output, an
 **FFmpeg 6.0 or newer built with `libx264`** on `PATH`; a Composition that declares audio also needs
@@ -146,6 +147,7 @@ are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
 | [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                                   |
 | [CLI](docs/guide/cli.md)                         | The `render`, `frame`, `check` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
 | [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                            |
+| [Three.js](docs/guide/three.md)                  | `ThreeCanvas`, `CameraRig`, the peer dependencies, software WebGL and uncontrolled canvases.                                  |
 | [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                         |
 | [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                                     |
 | [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                               |
@@ -207,7 +209,7 @@ line to stderr and exits `130` (`SIGINT`), `143` (`SIGTERM`) or `129` (`SIGHUP`)
 
 ## Package surface
 
-Each context gets its own subpath, with `core` as the package root; only the three below are exported
+Each context gets its own subpath, with `core` as the package root; only the four below are exported
 today:
 
 - `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
@@ -216,8 +218,10 @@ today:
   Module functions and the Diagnostic types.
 - `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
+- `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types. `three` and
+  `@react-three/fiber` are optional peer dependencies you install; the root entry never loads them.
 
-`/browser`, `/motion`, `/theme`, `/presets` and `/three` are planned and do not exist yet; each gets
+`/browser`, `/motion`, `/theme` and `/presets` are planned and do not exist yet; each gets
 its own subpath when it lands.
 
 ## Determinism

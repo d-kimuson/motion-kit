@@ -10,7 +10,7 @@ The package is `@kimuson/motion-kit`: ESM only, MIT licensed, installable with a
 manager. A frame is a pure function of its index, which is what makes `--concurrency` change speed
 rather than output.
 
-This page is the entry point to the six guides beside it in `docs/guide/`. It ships in the npm
+This page is the entry point to the seven guides beside it in `docs/guide/`. It ships in the npm
 package too, so an installed copy reads the same from
 `node_modules/@kimuson/motion-kit/docs/index.md`.
 
@@ -20,6 +20,8 @@ package too, so an installed copy reads the same from
   (`node --version`).
 - **React 19 and ReactDOM 19** — peer dependencies; the Composition is your React tree
   (`npm ls react`).
+- **three and @react-three/fiber** — optional peer dependencies, only for a Composition that imports
+  `@kimuson/motion-kit/three` ([Three.js](guide/three.md)).
 - **Zod** — Composition props are validated by a schema in your project, so you install it
   explicitly.
 - **Chromium for Playwright** — captures the frames; `pnpm exec playwright install chromium`
@@ -162,6 +164,8 @@ the directory you run the command in, and `render` creates the directories its o
   diagnostic codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
+- [Three.js](guide/three.md) — `ThreeCanvas` and `CameraRig`, the peer dependencies, software WebGL
+  and what makes a canvas uncontrolled.
 - [Determinism](guide/determinism.md) — what "a frame is a pure function of time" guarantees, what
   breaks it, and how to check your own Composition.
 - [Examples](guide/examples.md) — the four reference videos, their commands, their placeholders and
@@ -175,7 +179,7 @@ Where to start: read [getting started](guide/getting-started.md) once end to end
 
 ## Package surface
 
-Only three subpaths are exported in 0.0.1:
+Only four subpaths are exported in 0.0.1:
 
 - `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
   timeline hooks (`useFrame`, `useTime`, `useSequence`, `useTimeline`), `Sequence`,
@@ -184,9 +188,11 @@ Only three subpaths are exported in 0.0.1:
 - `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their
   types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
+- `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types; `three` and
+  `@react-three/fiber` are optional peer dependencies you install.
 
 Not in 0.0.1: the preview UI, preview audio, audio-reactive visuals, video assets, the `/motion`,
-`/theme`, `/presets` and `/three` subpaths, and the `inspect`/`validate` commands. Motion is plain
+`/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. Motion is plain
 arithmetic on `useTime()` and `useSequence()` until `/motion` lands, which is what the reference
 examples do.
 

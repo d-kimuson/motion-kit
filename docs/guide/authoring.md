@@ -238,6 +238,42 @@ defineComposition({
 - Audio plays in the rendered `.mp4` only: there is no preview UI yet, and the frames route writes
   pictures without sound.
 
+## Three.js
+
+A Composition can render with Three.js through React Three Fiber. `ThreeCanvas` advances the R3F
+root from motion-kit time instead of the browser clock, and `CameraRig` gives the camera an absolute
+pose derived from time:
+
+```tsx
+import { useTime } from '@kimuson/motion-kit';
+import { CameraRig, ThreeCanvas } from '@kimuson/motion-kit/three';
+
+const Scene = () => {
+  const time = useTime();
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <ThreeCanvas>
+        <color attach="background" args={['#0b1020']} />
+        <CameraRig pose={(seconds) => ({ position: [0, 1, 5 + Math.sin(seconds)], fov: 45 })} />
+        <mesh rotation={[0, time * 0.6, 0]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial color="#2f6df6" />
+        </mesh>
+      </ThreeCanvas>
+    </div>
+  );
+};
+```
+
+- `three` and `@react-three/fiber` are optional peer dependencies you install; the rest of the
+  package never loads them.
+- The time hooks work inside `<Canvas>`, and every animated value has to come from one of them.
+- A `useFrame` subscriber makes that canvas **Tier C**: it renders, but the render reports
+  `seek.uncontrolled` and the determinism suite will not certify it.
+- With no GPU, render with `--software-webgl` so Chromium rasterises WebGL in software.
+
+The hooks, the settle order and what is not covered are in [Three.js](three.md).
+
 ## Styles and markup
 
 The Composition renders in Chromium at `width × height`, so the page is a normal browser page:
@@ -254,7 +290,10 @@ Everything worth naming is exported from the package root: `CompositionDefinitio
 `CompositionDescriptor`, `CompositionRegistry`, `SequenceProps`, `TransitionSeriesProps`,
 `TransitionSceneProps`, `TransitionProps`, `SequenceContext`, `TimelineContext`, `AssetDescriptor`,
 `FontAssetDescriptor`, `ImageAssetDescriptor`, `AudioTrack`, `Diagnostic`, `DiagnosticCode`, `Result`,
-`FrameRate`, `TimelineTime`, `RationalInput`.
+`FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`.
+
+`/three` names its own: `ThreeCanvas`, `ThreeCanvasProps`, `CameraRig`, `CameraRigProps`,
+`CameraPose`, `Vector3Tuple`.
 
 `Composition`, `CompositionContent` and `useCompositionFrame` are exported too, but they are the page
 bootstrap's own API: an entry never renders `Composition` itself.
@@ -262,8 +301,8 @@ bootstrap's own API: an entry never renders `Composition` itself.
 ## Not available in 0.0.1
 
 `interpolate`, `spring`, `keyframes`, easing, `Animate`, `Reveal` and `Stagger` (`/motion`);
-`defineTheme` and tokens (`/theme`); the scene presets (`/presets`); `ThreeCanvas` and React Three
-Fiber integration (`/three`); the preview UI; `inspect` and `validate`. Until `/motion` lands, motion
+`defineTheme` and tokens (`/theme`); the scene presets (`/presets`); the preview UI; `inspect` and
+`validate`. Until `/motion` lands, motion
 is plain arithmetic on `useTime()` / `useSequence()`, which is exactly what the
 [reference examples](examples.md) do.
 
@@ -271,4 +310,5 @@ is plain arithmetic on `useTime()` / `useSequence()`, which is exactly what the
 
 - [CLI](cli.md) — how `--props`, `--composition` and `--out` reach the registry.
 - [Determinism](determinism.md) — the rules that keep `useFrame()`-derived output reproducible.
+- [Three.js](three.md) — the 3D canvas, its absolute camera, and software WebGL.
 - [Examples](examples.md) — the same APIs in four complete videos.
