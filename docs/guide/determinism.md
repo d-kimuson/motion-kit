@@ -84,8 +84,8 @@ for you — they are authoring errors:
   advances manually. The warning exists so a later integration cannot claim determinism silently.
 - **WebGL, Three.js and video.** A `ThreeCanvas` is captured through the same pipeline and compared
   byte for byte across the suite's traversal modes in one environment, rendered with software WebGL
-  (`--software-webgl`). What that does not promise is in the next section, and it is stronger for a
-  GPU than for a DOM tree: a different GPU, driver or Chromium build may rasterise the same scene
+  (`--software-webgl`). Byte equality across machines, not guaranteed for a DOM tree (above), is even
+  less likely for a GPU: a different GPU, driver or Chromium build may rasterise the same scene
   differently. Video assets do not exist yet.
 
 ## A recorded limit: an image inside a `Sequence`
