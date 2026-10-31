@@ -37,9 +37,11 @@ first Linux browser coverage.
   suite for the requested repetitions and records the runner image, toolchain and Chromium build, the
   pass counts, the per-run wall time, the renderer backend and every log.
 - A pull request that touches `spikes/**` or that workflow runs it too. `clock` and `assets` are
-  marked `known-linux-failure`: they still run, fail their step and annotate, but the job is neutral,
-  and every annotation names the diagnosis. A new failure in a suite that passes on Linux still fails
-  the run.
+  marked `known-linux-failure`: they still run, fail their step and annotate, and
+  `continue-on-error` keeps the run green — the job still concludes `failure`, so the check list
+  shows it red — while one warning, `Known Linux failure`, names the diagnosis and the rest report
+  the failing step, the per-repetition exit codes and the run total. A new failure in a suite that
+  passes on Linux still fails the run.
 - Byte-exact DOM plus PNG equality stays the comparison rule of every spike. A Linux run reports the
   mismatch; it gets no tolerance.
 - The two Linux failures stay open: neither is a readiness or determinism difference, and closing them

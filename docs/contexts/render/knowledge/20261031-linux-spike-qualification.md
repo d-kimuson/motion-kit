@@ -41,8 +41,10 @@ every repetition log.
 
 ## Results against macOS arm64
 
-Wall time is around the whole `pnpm spike:*` process. Five repetitions per command per run; Vitest's
-own duration stays within 1 s of it except for `three-flags`, which forks a child process per profile.
+Wall time is around the whole `pnpm spike:*` process. Five repetitions per command per run; over the
+120 repetitions of `motion`, `three`, `clock` and `assets`, Vitest's own duration differs from it by
+at most 1.62 s, while `three-flags` forks a child process per profile and spends most of its wall time
+outside the test run.
 The `clock` baseline is the exception in the last column: it is a Vitest duration, measured on the
 same machine under the same command, because the macOS record kept no wall time for `clock`.
 
@@ -76,16 +78,16 @@ Every WebGL context on the runner is software. The unmasked device string differ
 (`SwiftShader Device (LLVM 10.0.0)` on macOS, `SwiftShader Device (Subzero)` on Linux); cross-OS pixel
 identity was never claimed, and none of these comparisons crosses machines.
 
-| Profile                         | Linux outcome                                      | macOS outcome              |
-| ------------------------------- | -------------------------------------------------- | -------------------------- |
-| `swiftshader` (suite default)   | SwiftShader (Subzero), 25/25 comparisons           | SwiftShader (LLVM), pass   |
-| `default` (Playwright defaults) | SwiftShader (Subzero), pass                        | SwiftShader fallback, pass |
-| `angle-only`                    | SwiftShader (Subzero), pass — no GPU on the runner | Apple M3 Pro / Metal, pass |
-| `swiftshader-no-opt-in`         | SwiftShader (Subzero), pass, **no warning**        | SwiftShader, pass          |
-| `disable-gpu`                   | SwiftShader fallback, pass                         | SwiftShader fallback, pass |
-| `desktop-gl`                    | SwiftShader fallback, pass — not hardware evidence | SwiftShader fallback, pass |
-| `disable-gpu-and-software`      | fail: `WebGL2 unavailable`                         | fail: expected             |
-| `disabled-webgl`                | fail: `WebGL2 unavailable` (expected)              | fail: expected             |
+| Profile                         | Linux outcome                                       | macOS outcome              |
+| ------------------------------- | --------------------------------------------------- | -------------------------- |
+| `swiftshader` (suite default)   | SwiftShader (Subzero), 25/25 comparisons            | SwiftShader (LLVM), pass   |
+| `default` (Playwright defaults) | SwiftShader (Subzero), pass                         | SwiftShader fallback, pass |
+| `angle-only`                    | SwiftShader (Subzero), pass — no GPU on the runner  | Apple M3 Pro / Metal, pass |
+| `swiftshader-no-opt-in`         | SwiftShader (Subzero), pass, **no warning**         | SwiftShader, pass          |
+| `disable-gpu`                   | SwiftShader (Subzero), pass                         | SwiftShader fallback, pass |
+| `desktop-gl`                    | SwiftShader (Subzero), pass — not hardware evidence | SwiftShader fallback, pass |
+| `disable-gpu-and-software`      | fail: `WebGL2 unavailable`                          | fail: expected             |
+| `disabled-webgl`                | fail: `WebGL2 unavailable` (expected)               | fail: expected             |
 
 The matrix command exited 0 in all five repetitions of all six runs: the canonical software run passed
 as SwiftShader and `disabled-webgl` rejected WebGL. `angle-only` is the only profile whose meaning
@@ -159,8 +161,8 @@ the single recovery capture, the one comparison the diagnostic re-captures:
    rectangle (`160×90` at `y 150`): `x 0–159`, `y 150–229` (5,545 pixels) for a 100 ms reference,
    `x 0–159`, `y 150–231` (6,893 pixels) for 250 ms, `x 0–159`, `y 150–233` (8,976 pixels) for 500 ms,
    `x 0–159`, `y 150–237` (9,697 pixels) for 750 ms, `x 0–159`, `y 150–239` (9,961 pixels) for
-   1000 ms, the same box with 9,484 pixels for 1500 ms and 9,235 pixels for 2000 ms. None of the DOM
-   boxes above `y 150` differs.
+   1000 ms, the same box with 9,484 pixels for 1500 ms and 9,235 pixels for 2000 ms. No differing
+   pixel lies above `y 150`.
 2. The compared DOM already carries every clock-derived value (`outerHTML` with the rAF box styles, the
    React value, `rafClock`, both CSS `currentTime`s, the computed transforms, `video.currentTime`,
    `seeking`, the microtask and the timer stamps), so `dom: true` says the clock state, the seek order
@@ -221,8 +223,9 @@ recovery capture, which additionally compares against the capture taken before t
 (equal pixels there pin a stale frame) and re-captures after two native animation frames (a match there
 says the paint converges; a mismatch says the difference is not paint timing). Neither observation
 decides the run: a throw from the extra capture or from its own deadline is reported inside the message
-instead of failing a comparison that passed. A passing run records the same fields with `diff: null`, so
-a failure is readable as a delta against a known-good frame. The message also names the repetition it
+instead of failing a comparison that passed. A comparison that passes records the same fields with
+`diff: null`; the expected `raf` and `cdp` mismatches and the four negative controls keep their delta,
+so a failure is readable as a delta against a known-good frame. The message also names the repetition it
 aborted. The comparisons are unchanged: byte equality of DOM and PNG, no tolerance, no disabled
 animation, no image threshold.
 
