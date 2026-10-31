@@ -66,7 +66,6 @@ jobs:
             command: spike:assets
             known-linux-failure: true
     env:
-      REPETITIONS: ${{ inputs.repetitions || 5 }}
       KNOWN_FAILURE: ${{ matrix.known-linux-failure }}
       LOG_DIR: .cache/spikes-linux
       # Keeps the console measurements greppable: Vitest's verbose reporter
@@ -74,6 +73,20 @@ jobs:
       NO_COLOR: '1'
 
     steps:
+      # First step, so an invalid value fails in seconds instead of after the
+      # browser download. It reads the raw input: `inputs.repetitions || 5`
+      # would turn a dispatched 0 into the default 5 and never reach the guard.
+      - name: Check the repetitions input
+        env:
+          INPUT_REPETITIONS: ${{ inputs.repetitions }}
+        run: |
+          repetitions="${INPUT_REPETITIONS:-5}"
+          if ! [[ "$repetitions" =~ ^[1-9][0-9]?$ ]]; then
+            echo "::error::repetitions must be 1-99, got '$INPUT_REPETITIONS'"
+            exit 1
+          fi
+          echo "REPETITIONS=$repetitions" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -112,18 +125,6 @@ jobs:
           }
           EOF
 
-      - name: Check the repetitions input
-        run: |
-          if ! [[ "$REPETITIONS" =~ ^[1-9][0-9]?$ ]]; then
-            echo "::error::repetitions must be 1-99, got '$REPETITIONS'"
-            exit 1
-          fi
-
-      # Every repetition is a fresh process, so a suite that is flaky rather
-      # than broken shows it. A failing repetition does not stop the loop; the
-      # job fails after the last one, with every log retained. `set +e` keeps
-      # bash's default `-e -o pipefail` from aborting on the first child. A
-      # known Linux failure annotates as a warning and points at the diagnosis.
       - name: Run ${{ matrix.suite }} ${{ inputs.repetitions || 5 }} times
         env:
           COMMAND: ${{ matrix.command }}
