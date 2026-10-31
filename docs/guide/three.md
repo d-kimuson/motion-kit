@@ -77,7 +77,9 @@ before the capture. Two rules keep that guarantee:
 - **Derive, do not integrate.** A value written from `useTime()` is a pure function of the frame. A
   value that adds a delta, eases towards a previous value, or reads a wall clock is history, and
   seeking cannot reconstruct history.
-- **Do not use `useFrame` in a canvas you want certified.** Any `useFrame` subscriber makes the
+- **Do not subscribe R3F's `useFrame` in a canvas you want certified.** Any `useFrame` subscriber
+  (from `@react-three/fiber`; motion-kit's own `useFrame()` returns the output frame index and is
+  unrelated) makes the
   canvas **Tier C**: it still renders, but the render reports the `seek.uncontrolled` warning and the
   determinism suite refuses to certify it. motion-kit cannot tell a harmless callback from a
   delta-integrating one, so it does not guess. `CameraRig` never subscribes.
@@ -104,7 +106,7 @@ cross-device byte equality as unproven, exactly as [determinism](determinism.md)
 Controls with damping (`OrbitControls`, `CameraControls`), physics, `AnimationMixer`, feedback or
 temporal postprocessing, shadow qualification, WebGPU, XR, asynchronous shader-compile errors, a
 render-target capture strategy and context-loss recovery are not part of this integration. A scene
-that needs one of them still renders, but its `useFrame` callback makes the canvas Tier C, and a lost
+that needs one of them still renders, but its R3F `useFrame` callback makes the canvas Tier C, and a lost
 WebGL context fails the frame as `render.page-error`.
 
 ## Related
