@@ -96,7 +96,10 @@ export const createAudioPlayer = (
   };
 };
 
-/** Per-project muted sources, kept in `localStorage` across reloads. */
+/**
+ * Per-project muted sources, kept in `localStorage` across reloads. Storage is per origin, so a
+ * session on another port starts with none.
+ */
 export const mutedSources = (
   storage: Pick<Storage, 'getItem' | 'setItem'>,
   projectRoot: string,

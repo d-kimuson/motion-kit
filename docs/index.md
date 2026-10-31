@@ -191,7 +191,7 @@ Only four subpaths are exported in 0.0.1:
 - `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types; `three` and
   `@react-three/fiber` are optional peer dependencies you install.
 
-Not in 0.0.1: audio-reactive visuals, video assets, the `/motion`,
+Not in 0.0.1: the preview UI, preview audio, audio-reactive visuals, video assets, the `/motion`,
 `/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. Motion is plain
 arithmetic on `useTime()` and `useSequence()` until `/motion` lands, which is what the reference
 examples do.

@@ -10,7 +10,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 - **Browser preview.** `motion-kit preview <entry>` serves a page on loopback where you play, scrub
   and step a Composition in your own browser, with its declared audio (a mute checkbox per source,
-  remembered per project root) and a timeline of its named Sequences and audio clips. Options:
+  remembered per project root for as long as the page's origin, and so its port, stays the same) and a timeline of its named Sequences and audio clips. Options:
   `--composition`, `--props`, `--preview-fps` (1 to 60, default 12), `--port`, `--project-root` and
   `--vite-config`. Readiness is the result: one envelope (`data: { format: 'preview', url }`) or the
   line `serving <url> (Ctrl-C to stop); ready`, then it runs until stopped, and a stop after readiness
