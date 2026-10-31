@@ -105,6 +105,9 @@ what a Ken Burns move or a slide transition needs.
 - `duration` must be nonnegative; zero renders nothing.
 - An ancestor's window clips visibility, not a descendant's declared interval: an inner `Sequence`
   that starts before its parent is still clipped by the parent.
+- `name` (optional, nonempty) labels the span for tools such as the preview timeline. Nested names
+  form a path like `intro > title`; unnamed Sequences add nothing. It never changes what renders.
+  `TransitionScene` accepts the same `name`.
 
 ## `TransitionSeries`
 

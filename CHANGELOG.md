@@ -8,6 +8,10 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **Named Sequences.** `Sequence` and `TransitionScene` accept an optional `name`. Named ancestors
+  form a path, and the runtime reports each mounted named Sequence as the frames it is visible in,
+  so a host such as the planned preview can show and anchor on shots instead of bare frame numbers.
+  Rendering is unchanged.
 - **Three.js canvas.** `@kimuson/motion-kit/three` exports `ThreeCanvas` and `CameraRig`. A canvas
   opens R3F with `frameloop="never"`, a stopped clock, DPR 1 and a preserved drawing buffer, and is
   advanced once per settled frame from motion-kit time; the frame is captured only after the scene has

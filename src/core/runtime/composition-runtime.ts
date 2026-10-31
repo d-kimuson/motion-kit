@@ -5,6 +5,7 @@ import { assetNotReadyDiagnostic, mergeFailureDiagnostics } from '../assets/diag
 import { loadRegisteredAsset, type AssetLoader } from '../assets/loaders.ts';
 import { createAssetRegistry, type AssetRegistry } from '../assets/registry.ts';
 import { type PreparedComposition } from '../composition/registry.ts';
+import { createSequenceDirectory, sequenceSpans } from '../sequence/directory.ts';
 import {
   frameToTime,
   toSeconds,
@@ -162,6 +163,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
   let wake = Promise.withResolvers<void>();
   const queue: Request[] = [];
   let notifyAssetChange = () => {};
+  const sequences = createSequenceDirectory();
   const registry = createAssetRegistry({
     load: readAssetLoader(options) ?? loadRegisteredAsset,
     onChange: () => notifyAssetChange(),
@@ -577,6 +579,9 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     registerIntegration,
     validateCapture,
     completeCapture,
+    /** Named Sequences register while mounted; read after a frame settles. */
+    registerSequence: sequences.register,
+    sequences: () => sequenceSpans(sequences.entries(), definition.frameRate),
     resettle,
     cancel,
     dispose,

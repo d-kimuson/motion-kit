@@ -1,7 +1,9 @@
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { sequenceSpanSchema } from '../../lib/loading-protocol.ts';
 import { defineComposition, defineCompositions } from '../composition/registry.ts';
+import { Sequence } from '../sequence/sequence.tsx';
 import { bootstrapComposition } from './browser-entry.ts';
 
 const reset = () => {
@@ -30,7 +32,11 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
       durationInFrames: 1,
       component: () => {
         renders++;
-        return <div>scene</div>;
+        return (
+          <Sequence name="shot" from={0} duration={{ numerator: 1001, denominator: 30000 }}>
+            <div>scene</div>
+          </Sequence>
+        );
       },
       schema: z.object({ text: z.string().default('default') }).transform((props) => {
         parses++;
@@ -60,6 +66,7 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
   expect(container.style.width).toBe('320px');
   expect(container.style.height).toBe('180px');
   expect(container.innerHTML).toBe('');
+  expect(api.sequences()).toEqual([]);
   expect(await api.settleFrame(0, { source: 'preview', requestId: 'wrong-mode' })).toEqual({
     status: 'aborted',
   });
@@ -76,6 +83,9 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
   expect(ready.status).toBe('ready');
   if (ready.status !== 'ready') throw new Error('Expected ready lease');
   expect(container.textContent).toBe('scene');
+  expect(sequenceSpanSchema.array().parse(api.sequences())).toEqual([
+    { path: ['shot'], startFrame: 0, endFrame: 1 },
+  ]);
   expect(api.validateCapture(ready.lease)).toEqual({ status: 'valid' });
   expect(api.completeCapture(ready.lease)).toEqual({ status: 'accepted' });
   expect(api.completeCapture(ready.lease)).toEqual({ status: 'aborted' });
