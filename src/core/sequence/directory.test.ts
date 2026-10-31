@@ -62,6 +62,23 @@ describe('sequenceSpans', () => {
     );
     expect(spans.map(({ path }) => path.join(' > '))).toEqual(['a', 'b', 'a > inner', 'late']);
   });
+
+  it('does not depend on registration order, including siblings that share a name', () => {
+    const entries = [
+      { path: ['shot'], interval: interval(0, 2) },
+      { path: ['shot'], interval: interval(0, 1) },
+      { path: ['shot', 'caption'], interval: interval(0, 1) },
+      { path: ['other'], interval: interval(0, 1) },
+    ];
+    const expected = [
+      { path: ['other'], startFrame: 0, endFrame: 30 },
+      { path: ['shot'], startFrame: 0, endFrame: 30 },
+      { path: ['shot'], startFrame: 0, endFrame: 60 },
+      { path: ['shot', 'caption'], startFrame: 0, endFrame: 30 },
+    ];
+    expect(sequenceSpans(entries, fps30)).toEqual(expected);
+    expect(sequenceSpans(entries.toReversed(), fps30)).toEqual(expected);
+  });
 });
 
 describe('activeSequences', () => {

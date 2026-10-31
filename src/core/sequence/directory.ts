@@ -55,7 +55,12 @@ export const sequenceSpans = (
       startFrame: Number(timeToFrameCeil(interval.start, fps)),
       endFrame: Number(timeToFrameCeil(interval.end, fps)),
     }))
-    .sort((a, b) => a.startFrame - b.startFrame || comparePath(a.path, b.path));
+    // A total order on the reported values, so registration (effect) order never shows. Siblings
+    // may share a name; spans equal in every field are indistinguishable.
+    .sort(
+      (a, b) =>
+        a.startFrame - b.startFrame || comparePath(a.path, b.path) || a.endFrame - b.endFrame,
+    );
 
 /** Named Sequences showing at a frame, outer before inner, in `sequenceSpans` order. */
 export const activeSequences = (

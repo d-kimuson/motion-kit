@@ -8,7 +8,7 @@ export {
   type MountCompositionOptions,
 } from './core/composition/registry.ts';
 /** An audio clip a Composition declares; the render muxes it onto the frame timeline. */
-export type { AudioTrack } from './lib/loading-protocol.ts';
+export type { AudioTrack, SequenceSpan } from './lib/loading-protocol.ts';
 export {
   createCompositionRuntime,
   type CompositionRuntime,

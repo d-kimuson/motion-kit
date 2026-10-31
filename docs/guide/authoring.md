@@ -263,8 +263,8 @@ The Composition renders in Chromium at `width × height`, so the page is a norma
 Everything worth naming is exported from the package root: `CompositionDefinition`,
 `CompositionDescriptor`, `CompositionRegistry`, `SequenceProps`, `TransitionSeriesProps`,
 `TransitionSceneProps`, `TransitionProps`, `SequenceContext`, `TimelineContext`, `AssetDescriptor`,
-`FontAssetDescriptor`, `ImageAssetDescriptor`, `AudioTrack`, `Diagnostic`, `DiagnosticCode`, `Result`,
-`FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`.
+`FontAssetDescriptor`, `ImageAssetDescriptor`, `AudioTrack`, `SequenceSpan`, `Diagnostic`, `DiagnosticCode`,
+`Result`, `FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`.
 
 `/three` names its own: `ThreeCanvas`, `ThreeCanvasProps`, `CameraRig`, `CameraRigProps`,
 `CameraPose`, `Vector3Tuple`.
