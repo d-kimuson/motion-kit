@@ -103,7 +103,7 @@ describe('canvas failure', () => {
     if (outcome.status !== 'failed') return;
     expect(outcome.diagnostics[0]).toMatchObject({ code: 'render.page-error', severity: 'error' });
     expect(outcome.diagnostics[0].message).toContain('context was lost');
-    expect(outcome.diagnostics[0].hint).toContain('recovery is not implemented');
+    expect(outcome.diagnostics[0].hint).toContain('not qualified');
     // Recovery is excluded (TASK-185): Chromium restores this context on a later GL use in this
     // environment, and no frame after the restore is qualified, so the test claims nothing about it.
   }, 60_000);
