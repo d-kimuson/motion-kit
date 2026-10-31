@@ -28,6 +28,18 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   WebGL (`--software-webgl`) and what makes a canvas uncontrolled. A `three-dom` Vitest project covers
   the canvas in Chromium with SwiftShader, and CI runs it as its own step.
 
+### Changed
+
+- **A Three.js frame fails when its shader cannot compile.** `ThreeCanvas` hooks
+  `renderer.debug.onShaderError`, so a `shaderMaterial` that does not compile or link fails the frame
+  with `render.page-error` — and every later frame of that canvas — instead of publishing a scene the
+  material was missing from. That is a behaviour change for a Composition with a broken shader: it
+  used to render with a console log and no material. Which advanced three behaviour is qualified, and
+  which stays excluded (damped controls, physics, temporal feedback, WebGPU, XR, context recovery), is
+  recorded in the [three qualification
+  ADR](docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md); the [Three.js
+  guide](docs/guide/three.md) lists what to use instead of each excluded item.
+
 ## 0.2.0 — 2026-10-29
 
 ### Added

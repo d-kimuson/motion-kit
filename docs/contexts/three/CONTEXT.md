@@ -1,6 +1,6 @@
 # three
 
-3D on the timeline. three is the only context that imports Three.js and React Three Fiber; it drives the R3F frame loop from motion-kit time instead of the browser clock. Its seekability guarantees are what Spike B establishes; the API that ships them is the [accepted capability ADR](adr/20261031-three-canvas-capability-api.accepted.md).
+3D on the timeline. three is the only context that imports Three.js and React Three Fiber; it drives the R3F frame loop from motion-kit time instead of the browser clock. Its seekability guarantees are what Spike B establishes; the API that ships them is the [accepted capability ADR](adr/20261031-three-canvas-capability-api.accepted.md), and the per-feature qualification (what is Tier B, what is Tier C, what is excluded) is the [accepted qualification ADR](adr/20261031-three-advanced-qualification.accepted.md).
 
 ## Ubiquitous Language
 
@@ -22,6 +22,10 @@
 - `CameraRig` writes every pose field on every committed frame; an omitted `fov`/`zoom` is the camera's value at mount, never the previous frame's.
 - A frame is captured only after the canvas's own Suspense boundary has committed the frame's generation and the root has a non-zero measured size. A fallback commit is not a canvas acknowledgement.
 - A canvas with no `useFrame` subscriber is Tier B; any subscriber makes it Tier C, reported as `seek.uncontrolled`. motion-kit's own components never register one, and an unknown canvas is never assumed seekable because it advances manually.
+- An `AnimationMixer` is Tier B when the scene calls `mixer.setTime` from `useTime()`, and Tier C when a `useFrame` callback integrates `mixer.update(delta)`.
+- Shadows are Tier B with the canvas's own shadow map, which stays enabled with `shadowMap.autoUpdate` at its default: every advance re-renders it.
+- A shader program that fails to compile or link fails the frame as `render.page-error`, and every later frame of that canvas with it. A canvas never publishes a frame whose program three could not link.
+- The canvas owns `renderer.debug.onShaderError` and `preserveDrawingBuffer`; both exist to make a frame observable rather than silently wrong or empty.
 - The tier is read through `IntegrationRegistration['seekability']` as a getter, evaluated when a host asks for warnings, not when the integration registers.
-- A lost WebGL context fails the frame as `render.page-error`; recovery is TASK-185.
+- A lost WebGL context fails the frame as `render.page-error`; recovery is excluded, so no frame rendered after a restored context is qualified.
 - `three` and `@react-three/fiber` are optional peer dependencies the user installs. The package root's browser graph never contains them.

@@ -164,8 +164,8 @@ the directory you run the command in, and `render` creates the directories its o
   diagnostic codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
-- [Three.js](guide/three.md) — `ThreeCanvas` and `CameraRig`, the peer dependencies, software WebGL
-  and what makes a canvas uncontrolled.
+- [Three.js](guide/three.md) — `ThreeCanvas` and `CameraRig`, the peer dependencies, software WebGL,
+  what is qualified or excluded, and what makes a canvas uncontrolled.
 - [Determinism](guide/determinism.md) — what "a frame is a pure function of time" guarantees, what
   breaks it, and how to check your own Composition.
 - [Examples](guide/examples.md) — the four reference videos, their commands, their placeholders and

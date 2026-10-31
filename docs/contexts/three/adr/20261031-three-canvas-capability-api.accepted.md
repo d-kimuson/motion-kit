@@ -73,6 +73,8 @@ The browser tests run in their own `three-dom` Vitest project, launched with `--
 
 Controls and damping, physics, `AnimationMixer`, feedback or temporal effects, shadow qualification, WebGPU, XR, asynchronous shader-compile errors, context recovery and a render-target GPU strategy are excluded here and recorded as TASK-185. This ADR also does not claim cross-GPU pixel equality, seekability for arbitrary R3F code, or that `gl.finish()` is the minimal barrier.
 
+_Amended 2026-10-31 (TASK-185):_ TASK-185 closes the exclusions above for `AnimationMixer`, shadows, multiple canvases and asynchronous shader-program errors with test-backed tiers, and keeps damping, physics, temporal feedback, WebGPU, XR and context recovery excluded with their reasons; the [qualification ADR](20261031-three-advanced-qualification.accepted.md) records the tier table and the shader-error decision.
+
 ## Consequences
 
 - A Three.js Composition is authored with the same time hooks as a DOM one, and the renderer captures it through the same frame pipeline. No three-specific transport, CLI flag or diagnostic code is added: a lost context reuses `render.page-error` and an uncontrolled canvas reuses `seek.uncontrolled`.

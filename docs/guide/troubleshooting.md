@@ -176,6 +176,12 @@ ones:
 
 A module-level exception in the entry (a throw while the entry is imported) surfaces the same way.
 
+A Three.js canvas reports this code when it could not draw the frame either: a shader program that
+does not compile or link (`"A shader program failed to compile or link while settling the frame."`, and
+every following frame with it), or a lost WebGL context (`"The WebGL context was lost while settling
+the frame."`). Neither case publishes a frame; fix the material, or restart the render. The
+[Three.js guide](three.md) says what a canvas supports.
+
 When the frame transport or page throws during capture, the message is `"The frame transport or
 page failed."` and, when the exception yields a usable message or name, `details.cause` preserves
 its sanitized `message`, plus its `name` and `code` when present. Use that evidence to investigate page, transport/CDP and browser
