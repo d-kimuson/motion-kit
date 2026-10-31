@@ -3,6 +3,7 @@ import {
   defineComposition,
   defineCompositions,
   type Result,
+  type Seekability,
 } from '@kimuson/motion-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -449,6 +450,30 @@ describe('Composition runtime ownership', () => {
       '/boundary.png (+1 query parameter, redacted)',
     ]);
     expect(new Set(sources).size).toBe(sources.length);
+    runtime.dispose();
+  });
+
+  it('evaluates a seekability getter for each warning request and keeps a plain tier', async () => {
+    const runtime = await setup();
+    let tier: Seekability = 'B';
+    const unregister = runtime.registerIntegration({
+      id: 'getter',
+      version: '1',
+      seekability: () => tier,
+      settle: () => Promise.resolve({ ok: true, value: undefined }),
+    });
+    runtime.registerIntegration({
+      id: 'plain',
+      version: '1',
+      seekability: 'A',
+      settle: () => Promise.resolve({ ok: true, value: undefined }),
+    });
+    expect(runtime.warnings()).toEqual([]);
+    tier = 'C';
+    expect(runtime.warnings()).toMatchObject([{ code: 'seek.uncontrolled', severity: 'warning' }]);
+    tier = 'B';
+    expect(runtime.warnings()).toEqual([]);
+    unregister();
     runtime.dispose();
   });
 
