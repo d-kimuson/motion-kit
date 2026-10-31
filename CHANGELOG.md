@@ -21,7 +21,9 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   a capability it discovers after mounting without re-registering. The type is exported as
   `Seekability`.
 - **The determinism suite can opt into software WebGL.** A `DeterminismComposition` accepts
-  `softwareWebGL: true`, which the suite forwards to its renderers.
+  `softwareWebGL: true`, which the suite forwards to its renderers. The suite lives in the repository
+  (`pnpm test --project frame-transport`) and is not a package export, so both the option and
+  `DeterminismComposition` are repository-only.
 - **[Three.js guide](docs/guide/three.md)** documents the subpath, the peer dependencies, software
   WebGL (`--software-webgl`) and what makes a canvas uncontrolled. A `three-dom` Vitest project covers
   the canvas in Chromium with SwiftShader, and CI runs it as its own step.
