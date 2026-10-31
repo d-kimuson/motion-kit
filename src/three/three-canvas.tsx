@@ -47,6 +47,26 @@ const adapter = (state: RootState): CanvasTarget => ({
   useFrameSubscribers: () => state.get().internal.subscribers.length,
 });
 
+/** three reports a failed program only through `debug.onShaderError`, and assigning that callback
+ * replaces its own report; the logs are reprinted here and the settlement gets a Diagnostic a host
+ * can act on. */
+const shaderErrorReporter =
+  (report: () => void) =>
+  (
+    gl: WebGLRenderingContext,
+    program: WebGLProgram,
+    vertexShader: WebGLShader,
+    fragmentShader: WebGLShader,
+  ): void => {
+    console.error(
+      'THREE.WebGLProgram: Shader Error',
+      gl.getProgramInfoLog(program),
+      gl.getShaderInfoLog(vertexShader),
+      gl.getShaderInfoLog(fragmentShader),
+    );
+    report();
+  };
+
 /** An R3F canvas whose frames are advanced from motion-kit time, once per settled frame. */
 export const ThreeCanvas = ({
   children,
@@ -62,14 +82,16 @@ export const ThreeCanvas = ({
     (generation: number) => settlement.reportGeneration(generation),
     [settlement],
   );
+  const reportShaderError = useCallback(() => settlement.reportShaderError(), [settlement]);
   const created = useCallback(
     (state: RootState) => {
       // frameloop="never" already stops R3F's loop; stop three's own loop explicitly too.
       state.gl.setAnimationLoop(null);
+      state.gl.debug.onShaderError = shaderErrorReporter(reportShaderError);
       settlement.reportTarget(adapter(state));
       onCreated?.(state);
     },
-    [onCreated, settlement],
+    [onCreated, reportShaderError, settlement],
   );
   useLayoutEffect(
     () =>

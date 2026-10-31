@@ -147,7 +147,7 @@ are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
 | [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                                   |
 | [CLI](docs/guide/cli.md)                         | The `render`, `frame`, `check` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
 | [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                            |
-| [Three.js](docs/guide/three.md)                  | `ThreeCanvas`, `CameraRig`, the peer dependencies, software WebGL and uncontrolled canvases.                                  |
+| [Three.js](docs/guide/three.md)                  | `ThreeCanvas`, `CameraRig`, the peer dependencies, software WebGL, qualified and excluded features.                           |
 | [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                         |
 | [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                                     |
 | [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                               |

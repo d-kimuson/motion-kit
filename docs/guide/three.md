@@ -92,6 +92,90 @@ gets a blank capture instead of an error. Two rules keep that guarantee:
 Assets loaded through R3F (`useLoader`) are covered by the canvas's own `Suspense` boundary: the
 frame is not captured until the scene has committed, so a texture cannot be captured half-loaded.
 
+## What is qualified, and what is not
+
+A frame the renderer can reproduce from its time alone is **Tier B**: rendering it first, last, or
+again gives the same bytes. Anything history-dependent is **Tier C**: it still renders, but the
+render reports the `seek.uncontrolled` warning and the determinism suite refuses to certify it. The
+table below is the author-facing summary; the [qualification
+ADR](../contexts/three/adr/20261031-three-advanced-qualification.accepted.md) has the test behind
+each row.
+
+| You want…                              | Write                                                                             | Tier       |
+| -------------------------------------- | --------------------------------------------------------------------------------- | ---------- |
+| transforms, materials, shader uniforms | compute the value from `useTime()`                                                | B          |
+| a camera, including an orbit or a push | `CameraRig` with a `pose` function of time                                        | B          |
+| a keyframe clip                        | `mixer.setTime(t)` from `useTime()` in a `useLayoutEffect`                        | B          |
+| shadows                                | `shadows` on the canvas, `castShadow` on a light, `receiveShadow` on the receiver | B          |
+| several canvases                       | one `<ThreeCanvas>` per root; each advances only its own                          | B per root |
+
+```tsx
+import { useTime } from '@kimuson/motion-kit';
+import { useThree } from '@react-three/fiber';
+import { useLayoutEffect, useMemo } from 'react';
+import { AnimationClip, AnimationMixer, NumberKeyframeTrack } from 'three';
+
+// The clip is a module constant, so the effect below does not depend on it.
+const clip = new AnimationClip('travel', 1, [
+  new NumberKeyframeTrack('mover.position[x]', [0, 0.2, 0.4], [-1.2, 0, 1.2]),
+]);
+
+const Clip = () => {
+  const time = useTime();
+  const scene = useThree((state) => state.scene);
+  const mixer = useMemo(() => new AnimationMixer(scene), [scene]);
+  useLayoutEffect(() => {
+    mixer.clipAction(clip).play();
+    mixer.setTime(time);
+  }, [mixer, time]);
+
+  return (
+    <mesh name="mover">
+      <boxGeometry args={[0.8, 0.8, 0.8]} />
+      <meshBasicMaterial color="#f6a02f" />
+    </mesh>
+  );
+};
+```
+
+`mixer.setTime(t)` is absolute: it resets the clip to `t` instead of adding a delta, so a seek lands
+on the frame's own pose. Keep the clip at least as long as your frame range — three disables a
+`LoopOnce` action when it reaches the clip's end, and that update applies no value at all.
+
+Shadows need the shadow map's default `autoUpdate`: every advance re-renders it. On three 0.186
+R3F's boolean `shadows` selects a shadow-map type three has removed, so it warns once and falls back
+to PCF; `shadows="percentage"` picks the same algorithm without the warning.
+
+### Excluded
+
+These render, but they are Tier C or unsupported, so do not claim determinism for them.
+
+| Instead of…                                                                                      | Why it is excluded                                                          | Use                                          |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------- |
+| `OrbitControls`, `CameraControls`, any damped camera                                             | damping interpolates from the previous pose, so a seek lands elsewhere      | `CameraRig`, with the easing inside `pose`   |
+| a physics engine                                                                                 | stepping is history-dependent; a seek would re-simulate from frame 0        | a function of time, or bake the motion       |
+| feedback and temporal effects (ping-pong targets, accumulation, motion blur from earlier frames) | the written value comes from a previous frame                               | write the effect from time only              |
+| `Math.random()` in a shader, or in a uniform written per frame                                   | an unseeded random draws a new value on every render                        | derive the value from `useTime()`            |
+| `AnimationMixer.update(delta)` in R3F `useFrame`                                                 | the mixer integrates the delta, so its state is not a function of the frame | `mixer.setTime(t)`                           |
+| `WebGPURenderer`                                                                                 | a canvas takes renderer parameters, not a renderer factory                  | WebGL, which is also what the capture fences |
+| WebXR                                                                                            | no presentation clock motion-kit controls                                   | —                                            |
+| recovering a lost WebGL context                                                                  | no restored frame is qualified                                              | restart the render                           |
+| a texture upload that fails (a corrupt image, a decode error)                                    | three reports an upload failure nowhere a canvas can observe                | fix the source; nothing fails the frame      |
+
+## Failures that are reported rather than published
+
+A frame is never captured when the canvas could not draw it and three reports the failure:
+
+- A shader program that does not compile or link fails the frame with `render.page-error` instead of
+  publishing a scene with the material missing, and every later frame fails with it. The Diagnostic
+  message is generic: the page console gets a reprint of the program and shader info logs, without
+  the material name, so it does not say which of several shader materials failed.
+- A lost WebGL context fails the frame the same way, with `render.page-error`.
+
+A texture upload that fails is the gap in that rule: three reports it nowhere a canvas can observe,
+so the frame is not guaranteed to fail and the case is excluded rather than claimed (see the
+[qualification ADR](../contexts/three/adr/20261031-three-advanced-qualification.accepted.md)).
+
 ## Software rendering
 
 CI runners and containers often have no GPU. Chromium then needs to be told to rasterise WebGL in
@@ -105,14 +189,6 @@ Without it Chromium may fall back on its own, and the warning it prints says tha
 deprecated. With it the render is reproducible on a machine without a GPU. One environment's pixels
 are not compared against another's: a GPU machine may rasterise the same scene differently, so treat
 cross-device byte equality as unproven, exactly as [determinism](determinism.md) says for DOM output.
-
-## Not covered yet
-
-Controls with damping (`OrbitControls`, `CameraControls`), physics, `AnimationMixer`, feedback or
-temporal postprocessing, shadow qualification, WebGPU, XR, asynchronous shader-compile errors, a
-render-target capture strategy and context-loss recovery are not part of this integration. A scene
-that needs one of them still renders, but its R3F `useFrame` callback makes the canvas Tier C, and a lost
-WebGL context fails the frame as `render.page-error`.
 
 ## Related
 

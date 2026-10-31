@@ -162,8 +162,7 @@ name the source as it was written, redacted:
 
 ## `render.page-error`
 
-The Composition declaration or the loaded registry is invalid. The message names the case; the common
-ones:
+The Composition declaration or the loaded registry is invalid, or — for a Three.js Composition — a canvas could not draw the frame. The message names the case; the common declaration ones:
 
 | Cause                                                                                                           | Fix                                                                                |
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -176,15 +175,20 @@ ones:
 
 A module-level exception in the entry (a throw while the entry is imported) surfaces the same way.
 
+A Three.js canvas reports this code when it could not draw the frame either: a shader program that
+does not compile or link (`"A shader program failed to compile or link while settling the frame."`, and
+every following frame with it), or a lost WebGL context (`"The WebGL context was lost while settling
+the frame."`). Neither case publishes the frame it failed: the shader failure keeps every later frame
+failed with it, and a lost context leaves the frames after it unqualified. Fix the material, or
+restart the render. The
+[Three.js guide](three.md) says what a canvas supports.
+
 When the frame transport or page throws during capture, the message is `"The frame transport or
 page failed."` and, when the exception yields a usable message or name, `details.cause` preserves
 its sanitized `message`, plus its `name` and `code` when present. Use that evidence to investigate page, transport/CDP and browser
 failures; the diagnostic does not classify which one failed. The cause drops stack frames, redacts
 URL credentials and machine-specific paths, and is bounded to 500 characters. Human-readable output
 keeps only the deterministic message and hint, so re-run with `--json` to inspect `details.cause` when present.
-
-A `ThreeCanvas` whose WebGL context is lost fails the frame with `"The WebGL context was lost while
-settling the frame."`. Restart the renderer; context recovery is not implemented yet.
 
 ## `composition.props-invalid`
 

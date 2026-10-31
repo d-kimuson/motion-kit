@@ -11,6 +11,7 @@ import {
   tick,
   within,
   type Mounted,
+  type RootCapture,
 } from './fixtures/harness.tsx';
 import { ThreeCanvas } from './three-canvas.tsx';
 
@@ -174,6 +175,64 @@ describe('ThreeCanvas', () => {
     } finally {
       removeEffect();
     }
+  }, 120_000);
+
+  it('reports one seek.uncontrolled when a Tier C canvas sits beside a Tier B canvas', async () => {
+    const captures: [RootCapture, RootCapture] = [{ state: undefined }, { state: undefined }];
+    const Integrator = () => {
+      useRenderFrame(() => {});
+      return null;
+    };
+    const instance = await open({
+      scene: () => (
+        <>
+          <ThreeCanvas
+            gl={gl}
+            onCreated={(state) => {
+              captures[0].state = state;
+            }}
+          >
+            <Scene />
+          </ThreeCanvas>
+          <ThreeCanvas
+            gl={gl}
+            onCreated={(state) => {
+              captures[1].state = state;
+            }}
+          >
+            <Scene />
+            <Integrator />
+          </ThreeCanvas>
+        </>
+      ),
+    });
+    expect(instance.runtime.warnings()).toEqual([]);
+    expect((await instance.settle(0)).status).toBe('ready');
+    // One Composition, one warning: the Tier B canvas adds none of its own.
+    expect(instance.runtime.warnings()).toMatchObject([
+      { code: 'seek.uncontrolled', severity: 'warning' },
+    ]);
+
+    const [tierB, tierC] = captures;
+    const reference = new Map<number, Uint8Array>();
+    for (const frame of [0, 5, 11]) {
+      expect((await instance.settle(frame)).status).toBe('ready');
+      reference.set(frame, pixelsOf(tierB));
+    }
+    for (const frame of [11, 0, 5, 5]) {
+      expect((await instance.settle(frame)).status).toBe('ready');
+      expect(mismatches(pixelsOf(tierB), reference.get(frame) ?? new Uint8Array())).toBe(0);
+    }
+    // Neither canvas advances on its own while the page is idle.
+    const held = pixelsOf(tierB);
+    await tick();
+    expect(mismatches(pixelsOf(tierB), held)).toBe(0);
+    expect(differsFromAllZeros(pixelsOf(tierB))).toBe(true);
+    // The Tier C canvas renders too; only its determinism is unclaimed.
+    expect(differsFromAllZeros(pixelsOf(tierC))).toBe(true);
+    expect(
+      mismatches(reference.get(0) ?? new Uint8Array(), reference.get(11) ?? new Uint8Array()),
+    ).toBeGreaterThan(0);
   }, 120_000);
 
   it('reports seek.uncontrolled when a useFrame subscriber makes the canvas Tier C', async () => {
