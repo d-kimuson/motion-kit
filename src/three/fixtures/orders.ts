@@ -1,0 +1,91 @@
+import { mismatches, mount, pixelsOf, type Mounted, type MountOptions } from './harness.tsx';
+
+export type BClaim = Readonly<{
+  /** The Composition's content. Every order mounts it fresh, so no mount is reused. */
+  scene: MountOptions['scene'];
+  /** The frames whose pixels must be reproduced. At least two, and they must render differently. */
+  frames: readonly number[];
+  /** Size and length overrides; `mount`'s defaults apply. */
+  mount?: Omit<MountOptions, 'scene' | 'initialSize'>;
+}>;
+
+/** What the sequential, shuffled/repeated and fresh-mount passes measured. */
+export type OrderCheck = Readonly<{
+  /** Pixels of every claimed frame, captured in sequential order by the first mount. */
+  reference: ReadonlyMap<number, Uint8Array>;
+  /** Byte differences when the claimed frames are replayed backwards and repeated on that mount. */
+  shuffledMismatches: readonly number[];
+  /** Byte differences when each claimed frame is the first frame a fresh mount renders. */
+  freshMismatches: readonly number[];
+  /** Byte differences between the first and the last claimed frame; zero means nothing moved. */
+  referenceDifference: number;
+}>;
+
+const pixelsAt = async (instance: Mounted, frame: number): Promise<Uint8Array> => {
+  const outcome = await instance.settle(frame);
+  if (outcome.status !== 'ready') throw new Error(`Frame ${frame} settled as ${outcome.status}.`);
+  return pixelsOf(instance.capture);
+};
+
+const differences = async (
+  instance: Mounted,
+  frames: readonly number[],
+  reference: ReadonlyMap<number, Uint8Array>,
+): Promise<number[]> => {
+  const compared: number[] = [];
+  for (const frame of frames) {
+    const expected = reference.get(frame);
+    if (expected === undefined) throw new Error(`No reference for frame ${frame}.`);
+    compared.push(mismatches(await pixelsAt(instance, frame), expected));
+  }
+  return compared;
+};
+
+/** Replay order for the shuffled pass: reversed, then the first and the last frame again. */
+const replayOrder = (frames: readonly number[]): readonly number[] => {
+  const first = frames.at(0);
+  const last = frames.at(-1);
+  if (first === undefined || last === undefined) throw new Error('A claim needs frames.');
+  return [...frames.toReversed(), first, last];
+};
+
+/** Measure a Tier B claim: identical pixels across sequential, shuffled/repeated and fresh-mount
+ * frame orders. It returns the measurements instead of asserting them, so each test states the
+ * claim it makes; the mounts it opens are disposed here, in both the pass and the failure path.
+ */
+export const orderCheck = async ({
+  scene,
+  frames,
+  mount: options,
+}: BClaim): Promise<OrderCheck> => {
+  if (frames.length < 2) throw new Error('A Tier B claim needs at least two frames.');
+  const open = () => mount({ scene, ...options });
+  const claimed = new Set(frames);
+  const reference = new Map<number, Uint8Array>();
+  const sequential = await open();
+  let shuffledMismatches: readonly number[] = [];
+  try {
+    for (let frame = 0; frame <= Math.max(...frames); frame++) {
+      const pixels = await pixelsAt(sequential, frame);
+      if (claimed.has(frame)) reference.set(frame, pixels);
+    }
+    shuffledMismatches = await differences(sequential, replayOrder(frames), reference);
+  } finally {
+    sequential.dispose();
+  }
+  const fresh = await open();
+  let freshMismatches: readonly number[] = [];
+  try {
+    freshMismatches = await differences(fresh, frames, reference);
+  } finally {
+    fresh.dispose();
+  }
+  const first = reference.get(frames[0] ?? 0) ?? new Uint8Array();
+  const last = reference.get(frames.at(-1) ?? 0) ?? new Uint8Array();
+  return {
+    reference,
+    shuffledMismatches,
+    freshMismatches,
+    referenceDifference: mismatches(first, last),
+  };
+};

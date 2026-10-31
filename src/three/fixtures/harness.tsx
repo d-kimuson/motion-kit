@@ -29,7 +29,11 @@ export type MountOptions = {
   readonly initialSize?: readonly [number, number];
 };
 
-export type RootCapture = { state: RootState | undefined };
+export type RootCapture = {
+  /** The R3F root the canvas created. It stays `undefined` until a frame has been settled, because
+   * R3F creates its root only after it has measured the canvas. */
+  state: RootState | undefined;
+};
 
 export type Mounted = {
   readonly runtime: CompositionRuntime;
