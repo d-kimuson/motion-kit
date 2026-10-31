@@ -28,6 +28,16 @@ const contextLost = (): Diagnostic => ({
   hint: 'Restart the renderer; context recovery is not implemented yet.',
 });
 
+/** A program that does not compile or link is silently skipped by the renderer, so the frame it
+ * produced is wrong without being reported anywhere else. It is sticky: three only checks the
+ * program on first use, and a frame after that first frame would otherwise be believed. */
+const shaderFailed = (): Diagnostic => ({
+  code: 'render.page-error',
+  severity: 'error',
+  message: 'A shader program failed to compile or link while settling the frame.',
+  hint: 'Fix the shader material; a program that does not link renders nothing, so the frame cannot be captured.',
+});
+
 const settled = { ok: true, value: undefined } as const;
 
 /** Per-canvas settlement state. The root and the committed frame generation arrive from
@@ -39,6 +49,8 @@ export type CanvasSettlement = Readonly<{
   generation: () => number | undefined;
   reportTarget: (target: CanvasTarget) => void;
   reportGeneration: (generation: number) => void;
+  /** The renderer's shader-program check failed; every later frame fails with it too. */
+  reportShaderError: () => void;
   /** Resolves true once the predicate holds, or false when the request is aborted. */
   when: (predicate: () => boolean, signal: AbortSignal) => Promise<boolean>;
   settle: (snapshot: FrameSnapshot, signal: AbortSignal) => Promise<Result<undefined>>;
@@ -47,6 +59,7 @@ export type CanvasSettlement = Readonly<{
 export const createCanvasSettlement = (): CanvasSettlement => {
   let target: CanvasTarget | undefined;
   let generation: number | undefined;
+  let shaderFailure: Diagnostic | undefined;
   const listeners = new Set<() => void>();
   const announce = () => {
     for (const listener of listeners) listener();
@@ -67,10 +80,12 @@ export const createCanvasSettlement = (): CanvasSettlement => {
   const draw = (snapshot: FrameSnapshot): Result<undefined> => {
     const current = target;
     if (current === undefined) return settled;
+    // The advance is what reaches the shader program's first use, so the check follows it.
     current.advance(toSeconds(snapshot.presentationTime));
     const context = current.context();
     context.finish();
-    return context.isContextLost() ? { ok: false, error: contextLost() } : settled;
+    if (context.isContextLost()) return { ok: false, error: contextLost() };
+    return shaderFailure === undefined ? settled : { ok: false, error: shaderFailure };
   };
   return Object.freeze({
     target: () => target,
@@ -82,6 +97,9 @@ export const createCanvasSettlement = (): CanvasSettlement => {
     reportGeneration: (next: number) => {
       generation = next;
       announce();
+    },
+    reportShaderError: () => {
+      shaderFailure ??= shaderFailed();
     },
     when,
     // Aborting resolves with ok: the runtime has already terminated the request and only

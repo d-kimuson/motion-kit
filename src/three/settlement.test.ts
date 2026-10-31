@@ -163,4 +163,28 @@ describe('canvas settlement', () => {
     expect(await pending).toEqual({ ok: true, value: undefined });
     expect(fake.calls).toEqual([]);
   });
+
+  it('fails every frame after a shader program failed, because three checks it only once', async () => {
+    const settlement = createCanvasSettlement();
+    const fake = fakeTarget();
+    settlement.reportTarget(fake.target);
+    settlement.reportGeneration(4);
+    settlement.reportShaderError();
+    const { signal } = new AbortController();
+
+    const first = await settlement.settle(snapshot(4), signal);
+    settlement.reportGeneration(5);
+    const second = await settlement.settle(snapshot(5), signal);
+
+    for (const outcome of [first, second]) {
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: { code: 'render.page-error', severity: 'error' },
+      });
+      if (outcome.ok) return;
+      expect(outcome.error.message).toContain('shader');
+    }
+    // The advance still runs: it is what reaches the program's first use.
+    expect(fake.advanced).toHaveLength(2);
+  });
 });
