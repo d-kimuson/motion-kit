@@ -66,9 +66,10 @@ first Linux browser coverage.
   not bypass that action.
 - TASK-177's remaining work is a decision on the `assets` pixel and, for `clock`, a decision once a
   run reports the differing pixels of the readiness-gate recovery capture; not a CI change.
-  _Amended 2026-10-31 (TASK-177):_ the diagnostic runs happened (41207262712, 41219905051,
-  41220801083, 41221304831, 41221810659) and named the failing comparisons and their rectangles — the
-  paused video's frame for `clock`, one pixel for `assets`. What remains is the decision for both, not a CI change.
+  _Amended 2026-10-31 (TASK-177):_ the four diagnostic runs (41219905051, 41220801083, 41221304831,
+  41221810659) happened and named the failing comparisons and their rectangles — the paused video's
+  frame for `clock`, one pixel for `assets`. The earlier failures are attributed to the same class by
+  analogy. What remains is the decision for both, not a CI change.
 
 ## Alternatives
 
