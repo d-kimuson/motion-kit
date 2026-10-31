@@ -17,6 +17,27 @@ assigning it disables three's own console report (`WebGLProgram.js`, `three/src/
 Confirmed by: `src/three/canvas-failure.browser.test.tsx` (an invalid vertex shader fails the frame
 without any `compileAsync` call) and by reading the 0.186 source.
 
+## `debug.onShaderError` carries no material identity
+
+`WebGLProgram.onFirstUse` calls `renderer.debug.onShaderError(gl, program, vertexShader,
+fragmentShader)` when the callback is a function, and emits its own report only in the `else` branch.
+That default report is the one that carries `Material Name`, `Material Type` and the
+`getShaderErrors()` annotated listings; the callback receives no material, so a callback that
+replaces the report can reprint the program and shader info logs and nothing more.
+
+Confirmed by: `three/src/renderers/webgl/WebGLProgram.js` (0.186) and the page console of
+`src/three/canvas-failure.browser.test.tsx`.
+
+## Nothing fails a frame for a failed texture upload
+
+`WebGLTextures` warns about some upload problems through the console (`Texture marked for update but
+no image data found.`, `... but image is incomplete`, an unsupported compressed format) and never
+checks `gl.getError()` after an upload, and `renderer.debug` has no upload callback. A failed upload
+therefore reaches neither the page's `console.error` path the shader check uses nor the canvas
+settlement; the material renders with an incomplete texture.
+
+Confirmed by: reading the 0.186 `WebGLTextures` source; no test claims it.
+
 ## `PCFSoftShadowMap` was removed
 
 `WebGLShadowMap` warns `PCFSoftShadowMap has been removed. Using PCFShadowMap instead.` and switches
