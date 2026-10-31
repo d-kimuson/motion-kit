@@ -392,27 +392,47 @@ const runComparison = async (parent: Page) => {
         });
         const againstReference = compare(png, reference);
         recoveredAfterRelease = dom === reference.dom && againstReference.png;
-        // `bad` is the same page one composite earlier: equal pixels pin a stale frame. The capture
-        // after two native animation frames then says whether the paint converges on the reference.
-        const againstPrerelease = compare(png, bad);
-        equalsPrerelease = { dom: dom === bad.dom, ...againstPrerelease };
-        await bounded(
-          fixture.page.evaluate(() => window.clockFixture.paintBarrier()),
-          'paint barrier',
-        );
-        const domAfterBarrier = await fixture.page.evaluate(() => window.clockFixture.snapshot());
-        const pngAfterBarrier = await fixture.page.screenshot({
-          clip: { x: 0, y: 0, width: 320, height: 240 },
-          animations: 'allow',
-        });
-        afterPaintBarrier = {
-          dom: domAfterBarrier === reference.dom,
-          ...compare(pngAfterBarrier, reference),
-          equalsPrerelease: pngAfterBarrier.equals(bad.png),
+        // Both observations describe the failure; neither may create one. `bad` is the same page one
+        // composite earlier, so equal pixels there pin a stale frame, and the capture after two native
+        // animation frames says whether the paint converges on the reference. A throw from the extra
+        // capture or from its deadline is reported in the message instead of aborting the run.
+        const diagnosticErrors: string[] = [];
+        const diagnose = async <T>(
+          label: string,
+          observe: () => Promise<T> | T,
+        ): Promise<T | null> => {
+          try {
+            return await observe();
+          } catch (error) {
+            diagnosticErrors.push(
+              `${label}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return null;
+          }
         };
+        equalsPrerelease = await diagnose('equalsPrerelease', () => ({
+          dom: dom === bad.dom,
+          ...compare(png, bad),
+        }));
+        afterPaintBarrier = await diagnose('afterPaintBarrier', async () => {
+          await bounded(
+            fixture.page.evaluate(() => window.clockFixture.paintBarrier()),
+            'paint barrier',
+          );
+          const domAfterBarrier = await fixture.page.evaluate(() => window.clockFixture.snapshot());
+          const pngAfterBarrier = await fixture.page.screenshot({
+            clip: { x: 0, y: 0, width: 320, height: 240 },
+            animations: 'allow',
+          });
+          return {
+            dom: domAfterBarrier === reference.dom,
+            ...compare(pngAfterBarrier, reference),
+            equalsPrerelease: pngAfterBarrier.equals(bad.png),
+          };
+        });
         requireThat(
           recoveredAfterRelease,
-          `Readiness gate did not recover reference frame: ${JSON.stringify({ dom: dom === reference.dom, ...againstReference, equalsPrerelease, afterPaintBarrier })}`,
+          `Readiness gate did not recover reference frame: ${JSON.stringify({ dom: dom === reference.dom, ...againstReference, equalsPrerelease, afterPaintBarrier, diagnosticErrors })}`,
         );
       }
       negative.push({

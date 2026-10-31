@@ -212,10 +212,12 @@ decoder (`src/render/check/png.ts`; no dependency is added) and reports the diff
 bounding box and three sample pixels. It is attached to every `order`/`fresh`/`hold` mismatch and to the
 recovery capture, which additionally compares against the capture taken before the gate was released
 (equal pixels there pin a stale frame) and re-captures after two native animation frames (a match there
-says the paint converges; a mismatch says the difference is not paint timing). A passing run records the
-same fields with `diff: null`, so a failure is readable as a delta against a known-good frame. The
-message also names the repetition it aborted. The comparisons are unchanged: byte equality of DOM and
-PNG, no tolerance, no disabled animation, no image threshold.
+says the paint converges; a mismatch says the difference is not paint timing). Neither observation
+decides the run: a throw from the extra capture or from its own deadline is reported inside the message
+instead of failing a comparison that passed. A passing run records the same fields with `diff: null`, so
+a failure is readable as a delta against a known-good frame. The message also names the repetition it
+aborted. The comparisons are unchanged: byte equality of DOM and PNG, no tolerance, no disabled
+animation, no image threshold.
 
 ## Residuals
 
