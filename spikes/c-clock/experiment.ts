@@ -243,10 +243,11 @@ const runComparison = async (parent: Page) => {
         animations: 'allow',
       });
       const heldState = await fixture.page.evaluate(() => window.clockFixture.inspect());
+      const holdPng = held.png.equals(heldPng);
       const hold = {
         dom: held.dom === heldDom,
-        png: held.png.equals(heldPng),
-        diff: held.png.equals(heldPng) ? null : pixelDifference(held.png, heldPng),
+        png: holdPng,
+        diff: holdPng ? null : pixelDifference(held.png, heldPng),
         extraRafCalls: heldState.rafCalls - held.state.rafCalls,
       };
       if (mechanism === 'own') {
@@ -255,7 +256,7 @@ const runComparison = async (parent: Page) => {
         const mismatches = [
           ...random.map((result) => ({ stage: 'order', ...result })),
           ...fresh.map((result) => ({ stage: 'fresh', ...result })),
-          { stage: 'hold', time: 500, dom: hold.dom, png: hold.png },
+          { stage: 'hold', time: 500, dom: hold.dom, png: hold.png, diff: hold.diff },
         ].filter((result) => !result.dom || !result.png);
         requireThat(
           mismatches.length === 0,
