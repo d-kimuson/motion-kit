@@ -1,4 +1,4 @@
-# Linux qualification of the four spike suites
+# Linux qualification of the spike suites and the R3F flag matrix
 
 The spike suites now have Linux measurements. On `ubuntu-latest`, five repetitions each:
 `motion` 5/5, `three` 5/5, `three-flags` 5/5, `assets` 0/5 and `clock` 1/5. The three passing suites
@@ -34,7 +34,7 @@ runs per command.
 
 | Suite               | Linux result                            | Linux wall    | Linux Vitest            | macOS baseline  |
 | ------------------- | --------------------------------------- | ------------- | ----------------------- | --------------- |
-| `spike:motion`      | **5/5**, 10 tests, 218 captures each    | 29.48–30.06 s | 29.02–29.55 s           | 29.38 / 29.42 s |
+| `spike:motion`      | **5/5**, 10 tests, 218 PNG captures     | 29.48–30.06 s | 29.02–29.55 s           | 29.38 / 29.42 s |
 | `spike:three`       | **5/5**, 8 tests, 81 PNG captures       | 11.84–12.97 s | 11.16–12.24 s           | 9.81 / 11.29 s  |
 | `spike:three:flags` | **5/5**, exit 0 each, 8 child processes | 43.86–46.21 s | first child 5.63–6.18 s | 32.42 s         |
 | `spike:clock`       | **1/5**                                 | 5.80–49.13 s  | 5.03–48.76 s            | 38.83 / 39.10 s |
@@ -54,9 +54,9 @@ runs per command.
 
 ## Renderer backend and the R3F flag matrix
 
-Every WebGL context on the runner is software. Both the LLVM and the Subzero SwiftShader device names
-appear in the reports because the same pinned Chromium ships different SwiftShader builds per
-platform; cross-OS pixel identity was never claimed, and none of these comparisons crosses machines.
+Every WebGL context on the runner is software. The unmasked device string differs per platform
+(`SwiftShader Device (LLVM 10.0.0)` on macOS, `SwiftShader Device (Subzero)` on Linux); cross-OS pixel
+identity was never claimed, and none of these comparisons crosses machines.
 
 | Profile                         | Linux outcome                                      | macOS outcome              |
 | ------------------------------- | -------------------------------------------------- | -------------------------- |
@@ -138,8 +138,9 @@ diagnostic names the mismatch.
 
 ## Residuals
 
-- One Linux image (`ubuntu26`, 20261026.180.1), one Chromium build and one SwiftShader backend. A
-  different runner image, a hardware GPU, or an ARM runner is unmeasured.
+- One dispatch with five repetitions per suite, one Linux image (`ubuntu26`, 20261026.180.1), one
+  Chromium build and one SwiftShader backend. A repeat dispatch, a different runner image, a hardware
+  GPU or an ARM runner is unmeasured; `clock` in particular would report differently on a repeat.
 - Both failures remain open. `assets` needs a decision about screenshot reproducibility for the font
   fixture (tolerance with a documented bound, or a capture path whose bytes are stable); `clock` needs
   the diagnostic re-run and then a decision.
