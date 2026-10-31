@@ -324,7 +324,7 @@ fetched or decoded is marked in the page and skipped.
 
 Saving a source file reloads the Composition in the page and keeps the playhead; there is no HMR, so
 component state restarts. A change to the Vite config or its dependencies ends the preview with
-`render.page-error` ("The Vite config <path> changed, so the preview stopped."). The timeline lists a named Sequence once
+`render.page-error` ("The Vite config vite.config.ts changed, so the preview stopped."). The timeline lists a named Sequence once
 the playhead has visited it, because the runtime reports a Sequence only while it is mounted.
 
 The preview is for authoring, not for sign-off: it samples frames at a low rate, mixes audio with Web

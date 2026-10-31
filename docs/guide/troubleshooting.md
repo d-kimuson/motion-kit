@@ -228,7 +228,7 @@ Anything else: keep the envelope and the stack, and report it.
 
 - **`render.page-error`: "Port N on 127.0.0.1 is already in use."** Another process listens on the
   `--port` you passed. Stop it, pick another port, or omit `--port` to get a free one.
-- **The preview ended with `render.page-error`: "The Vite config <path> changed, so the preview stopped.".** The
+- **The preview ended with `render.page-error`: "The Vite config vite.config.ts changed, so the preview stopped.".** The
   Vite config or something it imports changed, which a reload cannot pick up. Run `preview` again. The
   line is on stderr and the exit code is `1`; the earlier readiness envelope is the only stdout output.
 - **A Composition or props error appears in the page, not in the terminal.** `preview` does not load the

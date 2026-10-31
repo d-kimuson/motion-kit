@@ -55,7 +55,7 @@ The loading server serves the host bundle through two reserved ids, like the boo
 
 None of these exists in a renderer session. Composition, props and preview fps travel in the host page's query (`?composition=<id>&props=<json>&fps=<n>`, `previewQueryString`; defaults are left out), so the server keeps no selection state.
 
-A change to the Vite config or its dependencies still fails the session, because the module graph and plugins would no longer match: the service reports `render.page-error` ("The Vite config <path> changed, so the preview stopped.") and the command ends with exit 1. A requested `--port` that is taken is `render.page-error` ("Port N on 127.0.0.1 is already in use.", hint: stop the listener or choose another port); an omitted port is ephemeral and cannot be taken.
+A change to the Vite config or its dependencies still fails the session, because the module graph and plugins would no longer match: the service reports `render.page-error` ("The Vite config vite.config.ts changed, so the preview stopped.") and the command ends with exit 1. A requested `--port` that is taken is `render.page-error` ("Port N on 127.0.0.1 is already in use.", hint: stop the listener or choose another port); an omitted port is ephemeral and cannot be taken.
 
 ### Protocol
 

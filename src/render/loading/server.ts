@@ -2,7 +2,7 @@ import type { ResolvedConfig } from 'vite';
 
 import { existsSync } from 'node:fs';
 import { createServer as createHttpServer, type ServerResponse } from 'node:http';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
@@ -358,7 +358,7 @@ try {
           type: 'failure',
           error:
             input.mode === 'preview'
-              ? previewConfigChanged(path)
+              ? previewConfigChanged(relative(input.projectRoot, resolve(changed)))
               : loadingFailure('source changed; start a fresh session'),
         });
     });

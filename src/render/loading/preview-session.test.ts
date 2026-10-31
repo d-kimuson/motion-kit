@@ -142,7 +142,7 @@ it('ends the session when the Vite config changes', async () => {
   );
   expect(failed).toMatchObject({
     code: 'render.page-error',
-    message: `The Vite config ${join(root, 'vite.config.ts')} changed, so the preview stopped.`,
+    message: 'The Vite config vite.config.ts changed, so the preview stopped.',
   });
 });
 
