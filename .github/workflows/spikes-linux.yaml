@@ -141,7 +141,10 @@ jobs:
             status=${PIPESTATUS[0]}
             wall=$(( $(date +%s%3N) - start ))
 
-            tests="$(grep -m1 -oE 'Tests +[0-9]+[^|]*' "$log" | tr -s ' ')"
+            tests="$(
+              grep -m1 -oE 'Tests +[0-9]+ (passed|failed)[^|]*' "$log" |
+                tr -s ' '
+            )"
             duration="$(grep -m1 -oE 'Duration +[^ ]+' "$log" | tr -s ' ')"
             renderer="$(
               grep -o '"renderer":"[^"]*"' "$log" |
