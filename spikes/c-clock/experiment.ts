@@ -5,6 +5,8 @@ import fc from 'fast-check';
 
 import type { Fault, Mechanism } from './fixture.tsx';
 
+import { pixelDifference, type PixelDifference } from './pixels.ts';
+
 const wall = () => Number(process.hrtime.bigint()) / 1e6;
 const requireThat = (condition: boolean, message: string) => {
   if (!condition) throw new Error(message);
@@ -133,10 +135,21 @@ const open = async (parent: Page, mechanism: Mechanism) => {
   }
 };
 type Capture = Awaited<ReturnType<Awaited<ReturnType<typeof open>>['seek']>>;
-const equal = (left: Capture, right: Capture) => ({
-  dom: left.dom === right.dom,
-  png: left.png.equals(right.png),
-});
+// `diff` is filled only when the pixels differ: the pixels decide whether the clock drifted or the
+// screenshot did, and a failing run keeps nothing but the message that named it.
+const equal = (left: Capture, right: Capture) => {
+  const png = left.png.equals(right.png);
+  return {
+    dom: left.dom === right.dom,
+    png,
+    diff: png ? null : pixelDifference(left.png, right.png),
+  };
+};
+/** The pixel half of a comparison against an already captured reference. */
+const compare = (png: Buffer, reference: Capture) => {
+  const same = png.equals(reference.png);
+  return { png: same, diff: same ? null : pixelDifference(png, reference.png) };
+};
 const frames = [0, 100, 250, 500, 750, 1000, 1500, 2000];
 const seed = 145;
 const shuffled =
@@ -233,6 +246,7 @@ const runComparison = async (parent: Page) => {
       const hold = {
         dom: held.dom === heldDom,
         png: held.png.equals(heldPng),
+        diff: held.png.equals(heldPng) ? null : pixelDifference(held.png, heldPng),
         extraRafCalls: heldState.rafCalls - held.state.rafCalls,
       };
       if (mechanism === 'own') {
@@ -355,6 +369,16 @@ const runComparison = async (parent: Page) => {
         requireThat(bad.state.timer !== 500, 'Missing barrier not detected before screenshot');
       requireThat(!match.dom && !match.png, `${fault}: negative control not detected`);
       let recoveredAfterRelease: boolean | null = null;
+      // Filled only for `skip-barrier`. A failing run keeps nothing but the thrown message, so the
+      // fields say what the pixels were instead of only that they differed from the reference.
+      let equalsPrerelease: { dom: boolean; png: boolean; diff: PixelDifference | null } | null =
+        null;
+      let afterPaintBarrier: {
+        dom: boolean;
+        png: boolean;
+        diff: PixelDifference | null;
+        equalsPrerelease: boolean;
+      } | null = null;
       if (fault === 'skip-barrier') {
         await bounded(
           fixture.page.evaluate(() => window.clockFixture.release()),
@@ -365,10 +389,29 @@ const runComparison = async (parent: Page) => {
           clip: { x: 0, y: 0, width: 320, height: 240 },
           animations: 'allow',
         });
-        recoveredAfterRelease = dom === reference.dom && png.equals(reference.png);
+        const againstReference = compare(png, reference);
+        recoveredAfterRelease = dom === reference.dom && againstReference.png;
+        // `bad` is the same page one composite earlier: equal pixels pin a stale frame. The capture
+        // after two native animation frames then says whether the paint converges on the reference.
+        const againstPrerelease = compare(png, bad);
+        equalsPrerelease = { dom: dom === bad.dom, ...againstPrerelease };
+        await bounded(
+          fixture.page.evaluate(() => window.clockFixture.paintBarrier()),
+          'paint barrier',
+        );
+        const domAfterBarrier = await fixture.page.evaluate(() => window.clockFixture.snapshot());
+        const pngAfterBarrier = await fixture.page.screenshot({
+          clip: { x: 0, y: 0, width: 320, height: 240 },
+          animations: 'allow',
+        });
+        afterPaintBarrier = {
+          dom: domAfterBarrier === reference.dom,
+          ...compare(pngAfterBarrier, reference),
+          equalsPrerelease: pngAfterBarrier.equals(bad.png),
+        };
         requireThat(
           recoveredAfterRelease,
-          `Readiness gate did not recover reference frame: ${JSON.stringify({ dom: dom === reference.dom, png: png.equals(reference.png) })}`,
+          `Readiness gate did not recover reference frame: ${JSON.stringify({ dom: dom === reference.dom, ...againstReference, equalsPrerelease, afterPaintBarrier })}`,
         );
       }
       negative.push({
@@ -376,6 +419,8 @@ const runComparison = async (parent: Page) => {
         ...match,
         timerBeforeCapture: bad.state.timer,
         recoveredAfterRelease,
+        equalsPrerelease,
+        afterPaintBarrier,
       });
     } finally {
       await fixture.close();
@@ -405,7 +450,15 @@ const runRepetitions = async (parent: Page) => {
   // Repeat the unchanged comparison serially; do not treat frames as independent runs.
   const repetitions: Awaited<ReturnType<typeof runComparison>>[] = [];
   for (let repetition = 0; repetition < 3; repetition++)
-    repetitions.push(await runComparison(parent));
+    try {
+      repetitions.push(await runComparison(parent));
+    } catch (error) {
+      // The failing run keeps the message alone: name the repetition the failure aborted.
+      throw new Error(
+        `Repetition ${repetition + 1} of 3: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
   const costRanges = (['own', 'raf', 'cdp'] satisfies Mechanism[]).map((mechanism) => {
     const meansMs = repetitions.map((repetition) => {
       const result = repetition.results.find((candidate) => candidate.mechanism === mechanism);

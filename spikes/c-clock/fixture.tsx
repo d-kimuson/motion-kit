@@ -174,6 +174,17 @@ const settle = async (milliseconds: number, adapted: boolean) => {
   if (adapted && fault !== 'skip-video') await seekVideo(milliseconds);
   return inspect();
 };
+// Two native animation frames, for a diagnostic that asks whether the pixels are still one composite
+// behind the committed DOM. `own` and `raf` replace window.requestAnimationFrame, so the native
+// binding captured above is used; it is not a readiness barrier and no comparison depends on it.
+const paintBarrier = () =>
+  new Promise<void>((resolve) => {
+    nativeRaf(() => {
+      nativeRaf(() => {
+        resolve();
+      });
+    });
+  });
 const snapshot = () => {
   // Exclude observational wall clocks/callback counts; include actual markup and rendered state.
   const state = inspect();
@@ -195,6 +206,7 @@ window.clockFixture = {
   settle,
   inspect,
   snapshot,
+  paintBarrier,
   release: async () => {
     releasePending();
     await pending;
@@ -223,6 +235,7 @@ declare global {
       settle: typeof settle;
       inspect: typeof inspect;
       snapshot: typeof snapshot;
+      paintBarrier: typeof paintBarrier;
       release: () => Promise<void>;
       injectReact: (milliseconds: number) => number;
       resetOrigin: () => void;
