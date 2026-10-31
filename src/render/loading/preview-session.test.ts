@@ -28,6 +28,7 @@ const fixture = () => {
   writeFileSync(join(root, 'vite.config.ts'), 'export default {};');
   mkdirSync(join(root, 'audio'));
   writeFileSync(join(root, 'audio/voice.wav'), 'RIFF-not-really');
+  writeFileSync(join(root, 'audio/take #1?.wav'), 'RIFF-take');
   return root;
 };
 const open = async (root: string, port?: number) => {
@@ -83,7 +84,7 @@ const writeUntil = async <T>(settled: Promise<T>, write: () => void): Promise<T>
   return result;
 };
 
-it('serves the host page, the preview shell and audio under Vite fs policy', async () => {
+it('serves the host page, the preview shell and audio under the Vite fs policy', async () => {
   const root = fixture();
   const result = await open(root);
   if (!result.ok) throw new Error('Preview failed to start');
@@ -107,12 +108,15 @@ it('serves the host page, the preview shell and audio under Vite fs policy', asy
 
   const audio = new URL(config.audioUrl, url);
   audio.searchParams.set('src', 'audio/voice.wav');
-  const redirect = await fetch(audio, { redirect: 'manual' });
-  expect(redirect.status).toBe(302);
-  expect(redirect.headers.get('location')).toBe(`/@fs${join(root, 'audio/voice.wav')}`);
-  expect(await (await fetch(audio)).text()).toBe('RIFF-not-really');
+  const served = await fetch(audio);
+  expect(served.headers.get('cache-control')).toBe('no-store');
+  expect(await served.text()).toBe('RIFF-not-really');
+  audio.searchParams.set('src', 'audio/take #1?.wav');
+  expect(await (await fetch(audio)).text()).toBe('RIFF-take');
   audio.searchParams.set('src', '/etc/hosts');
   expect((await fetch(audio)).status).toBe(403);
+  audio.searchParams.set('src', 'audio/missing.wav');
+  expect((await fetch(audio)).status).toBe(404);
   audio.searchParams.delete('src');
   expect((await fetch(audio)).status).toBe(400);
 });
@@ -131,6 +135,23 @@ it('emits reload when a served module changes and serves the new source', async 
   );
   expect(event).toBe('event: reload\ndata: {}');
   expect(await (await fetch(module)).text()).toContain('second');
+});
+
+it('emits reload when an audio file the host fetched changes', async () => {
+  const root = fixture();
+  const result = await open(root);
+  if (!result.ok) throw new Error('Preview failed to start');
+  const audio = new URL('/__motion-kit/preview/audio', result.value.url);
+  audio.searchParams.set('src', 'audio/voice.wav');
+  expect(await (await fetch(audio)).text()).toBe('RIFF-not-really');
+  const event = await writeUntil(
+    nextEvent(new URL('/__motion-kit/preview/events', result.value.url).href, (text) =>
+      text.startsWith('event: reload'),
+    ),
+    () => writeFileSync(join(root, 'audio/voice.wav'), 'RIFF-replaced'),
+  );
+  expect(event).toBe('event: reload\ndata: {}');
+  expect(await (await fetch(audio)).text()).toBe('RIFF-replaced');
 });
 
 it('ends the session when the Vite config changes', async () => {

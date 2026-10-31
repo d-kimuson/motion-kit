@@ -317,12 +317,12 @@ motion-kit preview entry.tsx --composition teaser --preview-fps 15
 ```
 
 The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
-click on the timeline seek. The timecode shows `mm:ss.cc` and the frame number; when playback is slower
+click on the timeline seek. The keys work wherever the focus is on the page, except in an input. The timecode shows `mm:ss.cc` and the frame number; when playback is slower
 than the preview rate, `showing <n>` names the frame actually on screen. Each declared audio source has a
 mute checkbox, remembered per project root in the browser's `localStorage`. A source that cannot be
 fetched or decoded is marked in the page and skipped.
 
-Saving a source file reloads the Composition in the page and keeps the playhead; there is no HMR, so
+Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
 component state restarts. A change to the Vite config or its dependencies ends the preview with
 `render.page-error` ("The Vite config vite.config.ts changed, so the preview stopped."). The timeline lists a named Sequence once
 the playhead has visited it, because the runtime reports a Sequence only while it is mounted.

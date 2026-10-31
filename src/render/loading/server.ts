@@ -1,6 +1,6 @@
 import type { ResolvedConfig } from 'vite';
 
-import { existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createServer as createHttpServer, type ServerResponse } from 'node:http';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -271,6 +271,8 @@ try {
     audioUrl: `${previewPath}audio`,
   };
   const reloadStreams = new Set<ServerResponse>();
+  // Audio the host fetched is no module, so its changes reach the preview through this set.
+  const audioFiles = new Set<string>();
   const serveHtml = (response: ServerResponse, path: string, html: string) =>
     void server.transformIndexHtml(path, html).then(
       (transformed) => {
@@ -297,16 +299,34 @@ try {
       reloadStreams.add(response);
       response.on('close', () => reloadStreams.delete(response));
     } else if (path === preview.audioUrl) {
-      // Vite's /@fs/ route applies server.fs.allow, so preview reads no file Vite would refuse.
+      // Served here, not through /@fs/, whose URL decoding cannot reach a name with `#` or `?`.
+      // The same server.fs policy applies, so preview reads no file Vite would refuse.
       const src = url.searchParams.get('src');
       if (src === null || src === '') {
         response.statusCode = 400;
         response.end();
       } else {
-        response.writeHead(302, {
-          Location: `${base}@fs${encodeURI(vite.normalizePath(resolve(input.projectRoot, src)))}`,
-        });
-        response.end();
+        const file = vite.normalizePath(resolve(input.projectRoot, src));
+        if (!vite.isFileLoadingAllowed(server.config, file)) {
+          response.statusCode = 403;
+          response.end();
+        } else {
+          audioFiles.add(file);
+          server.watcher.add(file);
+          createReadStream(file)
+            .once('open', () =>
+              // A reload after the file changed must not get the old bytes from the HTTP cache.
+              response.writeHead(200, {
+                'Content-Type': 'application/octet-stream',
+                'Cache-Control': 'no-store',
+              }),
+            )
+            .once('error', () => {
+              response.statusCode = 404;
+              response.end();
+            })
+            .pipe(response);
+        }
       }
     } else return false;
     return true;
@@ -339,20 +359,37 @@ try {
   );
   const isModule = (path: string): boolean =>
     path === vite.normalizePath(entry) || server.moduleGraph.getModulesByFile(path) !== undefined;
-  // A preview reloads its realm on a module change, once per burst of watcher events. The Vite
-  // config and its dependencies decide the plugins and module graph, so they still end the session.
+  // A preview reloads its realm on a module or audio change, once per burst of watcher events. The
+  // Vite config and its dependencies decide the plugins and module graph, so they still end the
+  // session.
   let reloadTimer: ReturnType<typeof setTimeout> | undefined;
-  const reload = () => {
+  const changedFiles = new Set<string>();
+  // Vite invalidates a changed module only after its plugins' watchChange hooks settle, and a
+  // realm that reloads earlier would get the stale transform.
+  const invalidated = () =>
+    [...changedFiles].every((file) =>
+      [...(server.environments.client.moduleGraph.getModulesByFile(file) ?? [])].every(
+        (node) => node.transformResult === null,
+      ),
+    );
+  const announce = (attempt: number) => {
+    if (attempt < 40 && !invalidated()) {
+      reloadTimer = setTimeout(() => announce(attempt + 1), 25);
+      return;
+    }
+    changedFiles.clear();
+    for (const stream of reloadStreams) stream.write('event: reload\ndata: {}\n\n');
+  };
+  const reload = (file: string) => {
+    changedFiles.add(file);
     clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => {
-      for (const stream of reloadStreams) stream.write('event: reload\ndata: {}\n\n');
-    }, 50);
+    reloadTimer = setTimeout(() => announce(0), 50);
   };
   for (const event of ['change', 'unlink', 'add'] as const)
     server.watcher.on(event, (changed: string) => {
       const path = vite.normalizePath(changed);
       if (input.mode === 'preview' && !configFiles.has(path)) {
-        if (isModule(path)) reload();
+        if (isModule(path) || audioFiles.has(path)) reload(path);
       } else if (configFiles.has(path) || isModule(path))
         send({
           type: 'failure',

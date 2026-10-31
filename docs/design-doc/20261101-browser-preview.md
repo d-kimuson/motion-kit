@@ -6,10 +6,11 @@
 
 Verified by (all in the repository's test suite):
 
-- unit tests of the host's pure parts: playhead → requested frame, the audio schedule, the `mm:ss.cc` label, the single-flight presenter, timeline lanes (`src/preview/schedule.test.ts`), the preview query (`query.test.ts`), the audio player and muted-source storage (`audio.test.ts`), the realm handshake and requests (`connection.test.ts`), and the controller as a state machine over fakes (`controller.test.ts`);
+- unit tests of the host's pure parts: playhead → requested frame, the audio schedule, the `mm:ss.cc` label, the single-flight presenter, timeline lanes (`src/preview/schedule.test.ts`), the preview query (`query.test.ts`), the audio player and muted-source storage (`audio.test.ts`), the realm handshake and requests (`connection.test.ts`), and the controller as a state machine over fakes, including a realm that never starts and Play before the audio is decoded (`controller.test.ts`);
 - a browser test that a composition realm in preview host mode answers list, mount and show over a `MessagePort`, reports props and range failures as data, serves only the first port its parent transfers, and rejects renderer requests and leases (`src/core/runtime/preview-port.browser.test.tsx`);
-- a loading test that a preview session serves the host page, the preview shell and the audio route under Vite's fs policy, emits `reload` on a source change, ends when the Vite config changes, listens on a requested port and reports one that is taken, and removes its workspace on disposal (`src/render/loading/preview-session.test.ts`);
-- CLI tests of the `preview` arguments, the readiness envelope, the stop semantics and the built-artifact route (`src/cli/preview.test.ts`).
+- a loading test that a preview session serves the host page, the preview shell and the audio route under Vite's fs policy (file names with `#` and `?` included), emits `reload` on a source change and on a change to an audio file the host fetched, ends when the Vite config changes, listens on a requested port and reports one that is taken, and removes its workspace on disposal (`src/render/loading/preview-session.test.ts`);
+- CLI tests of the `preview` arguments, the readiness envelope and the stop semantics (`src/cli/preview.test.ts`);
+- a built-package test that `dist/cli.js preview` serves the host page whose module imports `dist/preview.js` (`src/cli/built-artifact.test.ts`).
 
 A QA Check in a real browser on an example Composition (scrub, play, audio with per-track mute, reload on edit) is a manual step and is not recorded by this document.
 
@@ -26,7 +27,7 @@ A QA Check in a real browser on an example Composition (scrub, play, audio with 
 
 ## Design
 
-_Amended 2026-11-01 (TASK-246):_ this document was written before the implementation and is reconciled with it below. The names are the ones in `src/`; [preview CONTEXT](../contexts/preview/CONTEXT.md) defines the terms.
+The names are the ones in `src/`; [preview CONTEXT](../contexts/preview/CONTEXT.md) defines the terms.
 
 ### Placement
 
@@ -46,12 +47,12 @@ The loading server serves the host bundle through two reserved ids, like the boo
 
 `openPreviewSession` forks the same loading child as the renderer with `mode: 'preview'` and an optional port, launches no browser, and returns `{ url, servicePid, failed, dispose }`. `url` is the host page, `failed` settles with the Diagnostic that ended the service after readiness, and a startup that exceeds the loading timeout (30 s) is `render.page-error`. The child's routes, under Vite's `base`:
 
-| Route                                | Serves                                                                                                                                                      |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `__motion-kit/?host=preview`         | The existing composition shell; the query fixes the realm's host mode.                                                                                      |
-| `__motion-kit/preview/`              | The host page: `previewShell`, the host bundle, and its configuration (`projectRoot`, `shellUrl`, `eventsUrl`, `audioUrl`) as inline JSON with `<` escaped. |
-| `__motion-kit/preview/events`        | Server-sent events; `reload` after a change to the entry or a module in Vite's graph, once per 50 ms burst of watcher events.                               |
-| `__motion-kit/preview/audio?src=<s>` | A 302 redirect to `@fs/<resolve(projectRoot, s)>`, so Vite's `server.fs.allow` decides what is readable; a missing or empty `src` is 400.                   |
+| Route                                | Serves                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `__motion-kit/?host=preview`         | The existing composition shell; the query fixes the realm's host mode.                                                                                                                                                                                                                                                                                                                    |
+| `__motion-kit/preview/`              | The host page: `previewShell`, the host bundle, and its configuration (`projectRoot`, `shellUrl`, `eventsUrl`, `audioUrl`) as inline JSON with `<` escaped.                                                                                                                                                                                                                               |
+| `__motion-kit/preview/events`        | Server-sent events; `reload` after a change to the entry, a module in Vite's graph or an audio file the host fetched, once per 50 ms burst of watcher events and only after Vite has invalidated the changed modules (it does so after its plugins' `watchChange` hooks settle).                                                                                                          |
+| `__motion-kit/preview/audio?src=<s>` | The bytes of `resolve(projectRoot, s)`, `Cache-Control: no-store`, when Vite's `isFileLoadingAllowed` (the `server.fs` allow and deny lists) accepts it; otherwise 403, a missing file 404, a missing or empty `src` 400. The route reads the file itself because Vite's `/@fs/` URL decoding cannot reach a name with `#` or `?`. A served file is watched, so its change is a `reload`. |
 
 None of these exists in a renderer session. Composition, props and preview fps travel in the host page's query (`?composition=<id>&props=<json>&fps=<n>`, `previewQueryString`; defaults are left out), so the server keeps no selection state.
 
@@ -97,7 +98,7 @@ type Playback =
   | { kind: 'playing'; anchorFrame: number; anchorTime: number };
 ```
 
-`createPreviewController` (`controller.ts`) owns `PreviewState` (session, playback, playhead, the last `ShowOutcome`, the spans seen since the last reload, muted sources and unplayable sources) and drives the realm, the audio player and the timer through injected dependencies; `view.tsx` only renders it. Selection: with `composition` in the query the host mounts it; without it a registry of one is mounted and a larger one shows a chooser, which records the choice in the page URL (`history.replaceState`) so a page reload keeps it. A `list`, `mount` or `show` failure is shown as a Diagnostic in the page.
+`createPreviewController` (`controller.ts`) owns `PreviewState` (session, playback, playhead, the last `ShowOutcome`, the spans seen since the last reload, muted sources and unplayable sources) and drives the realm, the audio player and the timer through injected dependencies; `view.tsx` only renders it. Selection: with `composition` in the query the host mounts it; without it a registry of one is mounted and a larger one shows a chooser, which records the choice in the page URL (`history.replaceState`) so a page reload keeps it. A `list`, `mount` or `show` failure is shown as a Diagnostic in the page. So is a realm frame that loads but does not announce itself within 1 s of its `load` event, because the entry failed to import or run (`render.page-error`, "The composition page loaded, but the entry did not start."); without it the page would stay on "Loading…".
 
 Pure functions in `src/preview/schedule.ts`, each unit-tested:
 
@@ -107,11 +108,11 @@ Pure functions in `src/preview/schedule.ts`, each unit-tested:
 - `wantFrame` / `frameAnswered`: the single-flight presenter.
 - `packLanes(intervals)`: timeline lanes for half-open intervals.
 
-Paused or scrubbing: show that exact frame. Playing: a timer at the preview fps (`--preview-fps`, 1-60, default 12) asks for `playheadFrame(...)`; the `AudioContext` clock is the playhead, because drift between picture and sound is what the ear notices. The last frame ends playback, and Play on the last frame starts again from frame 0. Controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a click on the timeline seek, and the timecode and frame number are shown.
+Paused or scrubbing: show that exact frame. Playing: a timer at the preview fps (`--preview-fps`, 1-60, default 12) asks for `playheadFrame(...)`; the `AudioContext` clock is the playhead, because drift between picture and sound is what the ear notices. The last frame ends playback, and Play on the last frame starts again from frame 0. Controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a click on the timeline seek, and the timecode and frame number are shown. The shortcuts are read on the host window wherever focus is, except in an input, and Space on a focused button only activates the button; the composition iframe takes no pointer input, so it never holds the focus. A seek lands on a whole frame (floored).
 
 ### Audio
 
-Web Audio decodes each distinct `src` once (`fetch` of the audio route, `decodeAudioData`), starts one `AudioBufferSourceNode` per scheduled clip through a `GainNode`, and rebuilds the schedule on play, seek, mute or reload. A source that cannot be fetched or decoded is marked unplayable in the UI and skipped; it does not fail the preview. Mute is per `src` and kept in `localStorage` under `motion-kit-preview:muted:<projectRoot>`, so BGM can be off while voices play. The `AudioContext` is resumed from the Play gesture.
+Web Audio decodes each distinct `src` once (`fetch` of the audio route, `decodeAudioData`), starts one `AudioBufferSourceNode` per scheduled clip through a `GainNode`, and rebuilds the schedule on play, seek, mute or reload. Play waits until the mounted Composition's sources are decoded, so no clip starts silent, and each reload drops the decoded buffers, so a replaced audio file is fetched again. A source that cannot be fetched or decoded is marked unplayable in the UI and skipped; it does not fail the preview. That includes an absolute `src` outside `server.fs.allow`, which the renderer reads but the preview does not serve; add its directory to `server.fs.allow` to hear it. Mute is per `src` and kept in `localStorage` under `motion-kit-preview:muted:<projectRoot>`, so BGM can be off while voices play. The `AudioContext` is resumed from the Play gesture.
 
 ### Timeline overlay
 
@@ -125,7 +126,6 @@ Rows under the scrubber show the named Sequences the realm has reported and the 
 
 - The comment-to-Markdown UI (TASK-245) is not built.
 - The timeline fills as spans are seen: a named Sequence appears once the playhead has been inside its ancestors, because the runtime reports a Sequence only while it is mounted. Scrub through the Composition once to see every shot.
-- The QA Check in a real browser is a manual step; no result is recorded here.
 - Nothing bounds a `show` beyond core's frame timeout; a page that hangs the main thread hangs the host page's iframe, not the CLI.
 
 ## Alternatives

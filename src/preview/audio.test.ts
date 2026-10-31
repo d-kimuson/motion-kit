@@ -66,6 +66,9 @@ it('decodes each source once and reports the ones that cannot play', async () =>
   expect(await player.prepare(['voice.wav', 'bad.wav', 'voice.wav'])).toEqual(['bad.wav']);
   expect(await player.prepare(['voice.wav'])).toEqual([]);
   expect(loads).toEqual(['voice.wav', 'bad.wav']);
+  player.forget();
+  expect(await player.prepare(['voice.wav'])).toEqual([]);
+  expect(loads).toEqual(['voice.wav', 'bad.wav', 'voice.wav']);
 });
 
 it('starts clips on the context clock, muted ones silent, and stops the previous ones', async () => {

@@ -17,6 +17,8 @@ export type AudioPlayer = Readonly<{
   /** Mute or unmute the clips already playing from `src`. */
   setMuted: (src: string, muted: boolean) => void;
   stop: () => void;
+  /** Drop every decoded source, so the next `prepare` fetches the files again. */
+  forget: () => void;
 }>;
 
 type Voice = Readonly<{
@@ -87,6 +89,10 @@ export const createAudioPlayer = (
         if (voice.src === src) voice.gain.gain.value = muted ? 0 : voice.level;
     },
     stop,
+    forget: () => {
+      buffers.clear();
+      decoded.clear();
+    },
   };
 };
 

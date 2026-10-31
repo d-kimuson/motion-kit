@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react';
@@ -19,7 +18,7 @@ const styles = `
 body { margin: 0; background: #111; color: #ddd; }
 .mk-host { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; }
 .mk-stage { position: relative; overflow: hidden; display: grid; place-items: center; background: #000; }
-.mk-frame { border: 0; transform-origin: center; background: #000; }
+.mk-frame { border: 0; transform-origin: center; background: #000; pointer-events: none; }
 .mk-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: #111d; padding: 24px; }
 .mk-panel { max-width: 640px; }
 .mk-panel h2 { margin: 0 0 8px; font-size: 15px; }
@@ -84,7 +83,7 @@ const Timeline = ({
   const audioLanes = packLanes(clips);
   const seek = (event: MouseEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
-    controller.seek(((event.clientX - box.left) / box.width) * duration);
+    controller.seek(Math.floor(((event.clientX - box.left) / box.width) * duration));
   };
   return (
     <div className="mk-timeline" onClick={seek}>
@@ -242,19 +241,25 @@ export const PreviewView = ({
     void controller.reload();
     return () => controller.dispose();
   }, [controller]);
-  const onKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement)
-      return;
-    const delta = event.shiftKey ? 10 : 1;
-    if (event.key === ' ') {
-      event.preventDefault();
-      if (state.playback.kind === 'playing') controller.pause();
-      else void controller.play();
-    } else if (event.key === 'ArrowLeft') controller.step(-delta);
-    else if (event.key === 'ArrowRight') controller.step(delta);
-  };
+  // Shortcuts work wherever focus is on the page; the realm frame takes no input (see .mk-frame).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement) return;
+      // Space on a focused button activates it; the shortcut would toggle playback a second time.
+      if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
+      const delta = event.shiftKey ? 10 : 1;
+      if (event.key === ' ') {
+        event.preventDefault();
+        if (controller.state().playback.kind === 'playing') controller.pause();
+        else void controller.play();
+      } else if (event.key === 'ArrowLeft') controller.step(-delta);
+      else if (event.key === 'ArrowRight') controller.step(delta);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [controller]);
   return (
-    <div className="mk-host" tabIndex={-1} onKeyDown={onKey}>
+    <div className="mk-host">
       <style>{styles}</style>
       <div className="mk-stage" ref={stage}>
         <iframe

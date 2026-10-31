@@ -38,7 +38,10 @@ export type PreviewState = Readonly<{
 
 export type PreviewDependencies = Readonly<{
   query: PreviewQuery;
-  /** Load (or reload) the realm frame and connect to it. */
+  /**
+   * Load (or reload) the realm frame and connect to it. Rejects without `signal` aborting when the
+   * frame loaded but its realm never announced itself.
+   */
   connect: (signal: AbortSignal) => Promise<Realm>;
   audio: AudioPlayer;
   /** The `AudioContext` clock in seconds; `resume` must run inside a user gesture. */
@@ -75,6 +78,12 @@ const accumulate = (spans: readonly SequenceSpan[], seen: readonly SequenceSpan[
   ...seen.filter((span) => !spans.some((known) => sameSpan(known, span))),
 ];
 const lastFrame = (descriptor: LoadingDescriptor) => Math.max(descriptor.durationInFrames - 1, 0);
+const realmDidNotStart: Diagnostic = {
+  code: 'render.page-error',
+  severity: 'error',
+  message: 'The composition page loaded, but the entry did not start.',
+  hint: 'Read the error in the browser console or the terminal running motion-kit preview, then save a fix; the preview reloads on its own.',
+};
 
 /** The preview host's state and the realm, audio and timer it drives; the view only renders it. */
 export const createPreviewController = (deps: PreviewDependencies): PreviewController => {
@@ -97,6 +106,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   let presenter: Presenter = idlePresenter;
   let stopTicking: (() => void) | undefined;
   let compositionId = deps.query.compositionId;
+  // Playback waits for the mounted Composition's audio, so no clip starts before it is decoded.
+  let prepared: Promise<void> = Promise.resolve();
 
   const present = (frame: number | undefined) => {
     if (frame === undefined || realm === undefined) return;
@@ -125,6 +136,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     present(step.send);
   };
   const ready = () => (state.session.kind === 'ready' ? state.session : undefined);
+  const playing = () => state.playback.kind === 'playing';
 
   const halt = () => {
     stopTicking?.();
@@ -180,8 +192,12 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     compositionId = descriptor.id;
     update({ session: { kind: 'ready', descriptor, fps: fps.value } });
     want(Math.min(state.playhead, lastFrame(descriptor)));
-    const unplayable = await deps.audio.prepare((descriptor.audio ?? []).map((track) => track.src));
-    if (current === realm) update({ unplayable });
+    prepared = deps.audio
+      .prepare((descriptor.audio ?? []).map((track) => track.src))
+      .then((unplayable) => {
+        if (current === realm) update({ unplayable });
+      });
+    await prepared;
   };
 
   const reload = async () => {
@@ -190,6 +206,9 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     realm?.close();
     realm = undefined;
     presenter = idlePresenter;
+    prepared = Promise.resolve();
+    // A reload follows a source change, which may be an audio file the cache still holds.
+    deps.audio.forget();
     const controller = new AbortController();
     connection = controller;
     update({ session: { kind: 'connecting' }, shown: undefined, spans: [] });
@@ -197,6 +216,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     try {
       current = await deps.connect(controller.signal);
     } catch {
+      if (!controller.signal.aborted)
+        update({ session: { kind: 'failed', diagnostic: realmDidNotStart } });
       return;
     }
     if (controller.signal.aborted) {
@@ -215,7 +236,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   const seek = (frame: number) => {
     const session = ready();
     if (session === undefined) return;
-    const target = Math.min(Math.max(Math.round(frame), 0), lastFrame(session.descriptor));
+    const target = Math.min(Math.max(Math.floor(frame), 0), lastFrame(session.descriptor));
     if (state.playback.kind === 'playing') run(target);
     else {
       update({ playback: { kind: 'paused', frame: target } });
@@ -240,7 +261,9 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     play: async () => {
       const session = ready();
       if (session === undefined || state.playback.kind === 'playing') return;
-      await deps.clock.resume();
+      await Promise.all([deps.clock.resume(), prepared]);
+      // A reload or another play may have happened while the audio was decoding.
+      if (ready() !== session || playing()) return;
       run(state.playhead >= lastFrame(session.descriptor) ? 0 : state.playhead);
     },
     pause: () => {

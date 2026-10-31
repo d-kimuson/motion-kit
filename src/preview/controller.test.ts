@@ -71,7 +71,13 @@ const fakeRealm = (compositions: readonly LoadingDescriptor[]) => {
 };
 
 const setup = (
-  options: { compositions?: readonly LoadingDescriptor[]; compositionId?: string } = {},
+  options: {
+    compositions?: readonly LoadingDescriptor[];
+    compositionId?: string;
+    /** The realm frame loads but never announces itself. */
+    silent?: boolean;
+    prepare?: AudioPlayer['prepare'];
+  } = {},
 ) => {
   const realms: ReturnType<typeof fakeRealm>[] = [];
   const started: { clips: readonly ScheduledClip[]; muted: ReadonlySet<string> }[] = [];
@@ -80,13 +86,18 @@ const setup = (
   const chosen: string[] = [];
   let now = 100;
   let tick: (() => void) | undefined;
+  let forgotten = 0;
   const audio: AudioPlayer = {
-    prepare: (srcs) => Promise.resolve(srcs.filter((src) => src.startsWith('bad'))),
+    prepare:
+      options.prepare ?? ((srcs) => Promise.resolve(srcs.filter((src) => src.startsWith('bad')))),
     start: (clips, muted) => {
       started.push({ clips, muted });
     },
     setMuted: (src, muted) => events.push(`${muted ? 'mute' : 'unmute'} ${src}`),
     stop: () => events.push('stop'),
+    forget: () => {
+      forgotten += 1;
+    },
   };
   const deps: PreviewDependencies = {
     query: {
@@ -95,6 +106,7 @@ const setup = (
       ...(options.compositionId === undefined ? {} : { compositionId: options.compositionId }),
     },
     connect: () => {
+      if (options.silent === true) return Promise.reject(new Error('Preview realm closed'));
       const realm = fakeRealm(
         options.compositions ?? [clip('clip', [{ src: 'voice.wav' }, { src: 'bad.wav' }])],
       );
@@ -128,6 +140,7 @@ const setup = (
       tick?.();
     },
     ticking: () => tick !== undefined,
+    forgotten: () => forgotten,
   };
 };
 
@@ -259,6 +272,8 @@ it('reconnects on reload, keeping the Composition and playhead but not the spans
   await host.controller.play();
   await host.controller.reload();
   expect(host.realms[0]?.closed()).toBe(true);
+  // The audio files may be what changed, so each reload decodes them again.
+  expect(host.forgotten()).toBe(2);
   expect(host.realms[1]?.mounts).toEqual([{ compositionId: 'b', props: { title: 'hi' } }]);
   expect(host.controller.state()).toMatchObject({
     playhead: 40,
@@ -271,4 +286,47 @@ it('reconnects on reload, keeping the Composition and playhead but not the spans
   await flush();
   expect(host.controller.state().shown).toBeUndefined();
   expect(host.realms[1]?.shows.map((show) => show.frame)).toEqual([40]);
+});
+
+it('reports a realm that never announced itself instead of loading forever', async () => {
+  const host = setup({ silent: true });
+  await host.controller.reload();
+  expect(host.controller.state().session).toMatchObject({
+    kind: 'failed',
+    diagnostic: {
+      code: 'render.page-error',
+      message: 'The composition page loaded, but the entry did not start.',
+    },
+  });
+});
+
+it('starts playback only after the audio is decoded, so no clip plays silent', async () => {
+  let decoded: (unplayable: readonly string[]) => void = () => {};
+  const host = setup({
+    prepare: () =>
+      new Promise((resolve) => {
+        decoded = resolve;
+      }),
+  });
+  void host.controller.reload();
+  await flush();
+  expect(host.controller.state().session).toMatchObject({ kind: 'ready' });
+  const playing = host.controller.play();
+  await flush();
+  expect(host.controller.state().playback.kind).toBe('paused');
+  expect(host.started).toEqual([]);
+  decoded([]);
+  await playing;
+  expect(host.controller.state().playback.kind).toBe('playing');
+  expect(host.started).toHaveLength(1);
+});
+
+it('seeks to whole frames', async () => {
+  const host = setup();
+  await host.controller.reload();
+  host.controller.seek(12.9);
+  expect(host.controller.state()).toMatchObject({
+    playhead: 12,
+    playback: { kind: 'paused', frame: 12 },
+  });
 });
