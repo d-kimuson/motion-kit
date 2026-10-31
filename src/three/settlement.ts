@@ -25,7 +25,7 @@ const contextLost = (): Diagnostic => ({
   code: 'render.page-error',
   severity: 'error',
   message: 'The WebGL context was lost while settling the frame.',
-  hint: 'Restart the renderer; recovery from a lost context is not qualified, so a frame after it is not rendered.',
+  hint: 'Restart the renderer; frames rendered after a lost context are not qualified.',
 });
 
 /** A program that does not compile or link is silently skipped by the renderer, so the frame it
