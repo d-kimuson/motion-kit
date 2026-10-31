@@ -1,16 +1,17 @@
 # Linux qualification of the spike suites and the R3F flag matrix
 
-The spike suites now have Linux measurements from four runs of
+The spike suites now have Linux measurements from five runs of
 `.github/workflows/spikes-linux.yaml` on `ubuntu-latest`, five repetitions per suite each:
 [41204901232](https://github.com/kimuson/motion-kit/actions/runs/41204901232),
 [41207262712](https://github.com/kimuson/motion-kit/actions/runs/41207262712),
-[41219905051](https://github.com/kimuson/motion-kit/actions/runs/41219905051) and
-[41220801083](https://github.com/kimuson/motion-kit/actions/runs/41220801083) (all `pull_request`
-events on PR #65). `motion` passed 5/5 in all four, `three` 5/5, `three-flags` 5/5, `assets` 0/5 and
-`clock` 1/5, 4/5, 0/5, 3/5. The three passing suites reproduce their macOS results, including exact
+[41219905051](https://github.com/kimuson/motion-kit/actions/runs/41219905051),
+[41220801083](https://github.com/kimuson/motion-kit/actions/runs/41220801083) and
+[41221304831](https://github.com/kimuson/motion-kit/actions/runs/41221304831) (all `pull_request`
+events on PR #65). `motion` passed 5/5 in all five, `three` 5/5, `three-flags` 5/5, `assets` 0/5 and
+`clock` 1/5, 4/5, 0/5, 3/5, 4/5. The three passing suites reproduce their macOS results, including exact
 DOM and PNG equality, on ANGLE's SwiftShader (Subzero) Vulkan backend. Neither open failure is a
 missing readiness barrier: `assets` is a single screenshot pixel in the font fixture, unchanged across
-all four runs, and `clock` is the paused `<video>` presenting a picture that its `currentTime` does not
+all five runs, and `clock` is the paused `<video>` presenting a picture that its `currentTime` does not
 fix — the one comparison the clock spike excludes from its own scope. The suites stay out of
 `check.yaml` ([ADR](../../../decisions/20261031-spike-suites-stay-out-of-ci.accepted.md));
 `.github/workflows/spikes-linux.yaml` is the on-demand harness.
@@ -57,7 +58,7 @@ own duration stays within 1 s of it except for `three-flags`, which forks a chil
   `clock` ranged 36.12–52.67 s against 38.83–39.10 s on macOS. Wall time is therefore a runner-load
   observation, not a platform measurement, and only the pass counts carry the qualification. `assets`
   is not comparable at all: the failing test aborts before its fresh-fixture and Suspense phases.
-- `three` reproduced every macOS comparison on Linux in all four runs: 14/14 seeded random, 10/10
+- `three` reproduced every macOS comparison on Linux in all five runs: 14/14 seeded random, 10/10
   fresh roots, 1/1 held frames, four `finish`/`readback`/`rAF`/`none` barriers 7/7 each, zero readback
   byte mismatches, and all four history-dependent negative controls mismatching in DOM and PNG. The
   non-preserved-buffer probe also behaved as on macOS: both screenshots matched the reference and the
@@ -104,8 +105,8 @@ observation.
 
 The font case fails at the first reordered comparison (`frame 2`, the first entry of `[2,0,1,2]`,
 inside the same fixture page that produced the baseline) with identical serialized DOM and a PNG that
-differs in **exactly one pixel**. Runs 41207262712 and 41219905051 reproduced it at the same test,
-position and value in all five repetitions each, decoded from the logged `Expected`/`Received` base64:
+differs in **exactly one pixel**. The four later runs reproduced it at the same test, position and
+value in all five repetitions each, decoded from the logged `Expected`/`Received` base64:
 
 |                        | Value                                                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -114,7 +115,7 @@ position and value in all five repetitions each, decoded from the logged `Expect
 | Re-capture             | `rgb(255,255,247)` (blue channel 8 lower)                                                                                 |
 | Changed pixels / bytes | 1 pixel; 1 of 172,800 channel values (the 320×180 crop is encoded as 8-bit RGB, not RGBA)                                 |
 | Non-white content      | baseline 2,541 pixels in box `x 23–223`, `y 13–47`; re-capture 2,542 in `x 11–223` — the one extra is the differing pixel |
-| Reproducibility        | same position and value in all five repetitions of all four runs                                                          |
+| Reproducibility        | same position and value in all five repetitions of all five runs                                                          |
 
 The other ten tests pass, including 4/4 named asset failures, 4/4 never-settling diagnostics and the
 texture context-loss diagnostic, so the readiness behaviour the spike exists to prove is unaffected:
