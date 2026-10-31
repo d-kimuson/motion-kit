@@ -28,6 +28,9 @@ export type ThreeCanvasProps = Omit<CanvasProps, 'frameloop' | 'gl' | 'dpr'> & {
 - Children are wrapped in the canvas's own `<Suspense fallback={null}>`, with a generation probe as the **last child inside that same boundary**. The probe reads `useCompositionFrame().generation` and reports it from `useLayoutEffect`, so it commits only after every sibling — including R3F `useLoader` assets — has resolved. A suspending child therefore keeps the boundary on its fallback and no generation is reported.
 - Each mounted canvas registers one integration through `useCompositionRuntime().registerIntegration`, with the id `three-canvas:${useId()}`. That is the whole ownership model: a canvas advances its own root and never calls `runGlobalEffects`, never advances another canvas.
 - `settle(snapshot, signal)` waits until the R3F root exists **and** has a non-zero measured size, then until the probe has reported `snapshot.generation`, then calls `state.advance(toSeconds(snapshot.presentationTime), false)` exactly once, then `gl.finish()`. A lost context returns a failed `Result` carrying `render.page-error`; recovery is TASK-185. Every wait is woken by the abort signal and resolves without a Diagnostic, because the runtime has already terminated that request and only reads the result of a live one. A stale generation never satisfies a wait.
+
+  _Amended 2026-10-31 (TASK-185):_ recovery is excluded, not pending — no frame rendered after a restored context is qualified, so a Composition that loses its context restarts the render. TASK-185 is closed for this paragraph: the [qualification ADR](20261031-three-advanced-qualification.accepted.md) records the excluded tier and the tests behind the lost-context and failed-shader-program failures.
+
 - Unmounting unregisters the integration. R3F owns renderer disposal.
 
 The frame budget that bounds a wait is the runtime's `frameTimeoutMs` (default 30 s), not a canvas timer. A canvas never resolves a readiness wait by itself.
@@ -41,6 +44,9 @@ The frame budget that bounds a wait is the runtime's `frameTimeoutMs` (default 3
 - motion-kit's own components never register a `useFrame` callback, so `CameraRig` does not make a canvas Tier C.
 - The classification itself is a pure function of the subscriber count, in `src/three/seekability.ts`, unit-tested separately from the React wiring.
 - The count comes from R3F's typed but internal `RootState.internal.subscribers`. It is not a public R3F contract: an R3F upgrade must re-check it. TASK-185 already asks to recheck R3F clock and lifecycle semantics on upgrade; this is part of that.
+
+  _Amended 2026-10-31 (TASK-185):_ TASK-185 is closed for this bullet, and the re-check is a test rather than a task: `r3f-contract.browser.test.tsx` fails on an R3F upgrade that changes the subscriber count, the clock or the lifecycle behaviour the integration reads. The [qualification ADR](20261031-three-advanced-qualification.accepted.md#upgrades) lists what it pins.
+
 - `warnings()` is read after settlement, when the root exists. A canvas that has not mounted yet reports B because it cannot have rendered anything, and no capture is published before settlement.
 
 ### `CameraRig`
@@ -81,7 +87,10 @@ _Amended 2026-10-31 (TASK-185):_ TASK-185 closes the exclusions above for `Anima
 - An R3F canvas costs two extra waits per frame (root/size, generation), a `gl.finish()` and one `advance()`. Not using `useFrame` is now a documented authoring rule rather than a style preference, because it changes whether the Composition can be certified.
 - Tier C is decided by the presence of any `useFrame` subscriber, so a Canvas that legitimately needs a post-render callback (`useFrame` with zero state) is still Tier C. That is deliberate: motion-kit cannot distinguish it from a delta integrator.
 - The `seekability` getter keeps the registration stable, so R3F root readiness does not bump `resourceRevision` and does not force a re-settlement.
-- `RootState.internal.subscribers` is the one place this integration depends on R3F internals. TASK-185 must re-check it together with the clock and lifecycle behavior on an R3F upgrade, and add a test if the shape changes.
+- `RootState.internal.subscribers` is the one place this integration depends on R3F internals. `r3f-contract.browser.test.tsx` re-checks it together with the clock and lifecycle behavior, so an R3F upgrade that changes the shape fails a test instead of a render.
+
+  _Amended 2026-10-31 (TASK-185):_ TASK-185 is closed for this bullet: it asked for that test and the test now exists. The [qualification ADR](20261031-three-advanced-qualification.accepted.md#upgrades) lists what it asserts.
+
 - The `three-dom` project adds browser time to `pnpm test`: about 4 s for the canvas and camera tests on macOS arm64 with SwiftShader, and CI runs it as its own step, apart from the Composition DOM step. The two determinism Compositions run in the `frame-transport` project, not in `three-dom`.
 
 ## Alternatives
