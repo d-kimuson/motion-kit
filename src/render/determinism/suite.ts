@@ -28,6 +28,8 @@ export type DeterminismComposition = {
   readonly props?: Record<string, string | number | boolean | null>;
   /** Files copied into the temporary project's `public/` directory. `to` is relative. */
   readonly staticFiles?: readonly { readonly from: string; readonly to: string }[];
+  /** Opt into software WebGL for a Composition that needs a GPU-free renderer. */
+  readonly softwareWebGL?: boolean;
 };
 
 export type DeterminismSuite = {
@@ -269,6 +271,7 @@ const rendererOptions = (directory: string, composition: DeterminismSuite['compo
   entry: 'entry.ts',
   compositionId: composition.compositionId,
   ...(composition.props === undefined ? {} : { props: composition.props }),
+  ...(composition.softwareWebGL === true ? { softwareWebGL: true } : {}),
   frameTimeoutMs: 10_000,
 });
 

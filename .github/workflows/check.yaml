@@ -82,6 +82,9 @@ jobs:
       - name: Run Composition DOM tests
         run: pnpm test --project composition-dom
 
+      - name: Run Three.js canvas tests
+        run: pnpm test --project three-dom
+
       - name: Run supervised loading-session tests
         run: pnpm test --project loading
 

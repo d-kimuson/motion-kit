@@ -21,15 +21,15 @@ const isAssetRegistry = (value: unknown): value is AssetRegistry =>
   'retain' in value &&
   'pending' in value;
 /** Realm wrappers may copy enumerable fields. The registry travels with the object. */
-export const assetsOf = (runtime: object): AssetRegistry => {
-  if ('assetRegistry' in runtime && isAssetRegistry(runtime.assetRegistry))
-    return runtime.assetRegistry;
+export const assetsOf = (runtime: Record<string, unknown>): AssetRegistry => {
+  if ('assetRegistry' in runtime && isAssetRegistry(runtime['assetRegistry']))
+    return runtime['assetRegistry'];
   const found = assetRegistries.get(runtime);
   if (found === undefined) throw new Error('Asset registry is owned by a Composition runtime.');
   return found;
 };
 const isAssetLoader = (value: unknown): value is AssetLoader => typeof value === 'function';
-const readAssetLoader = (options: object): AssetLoader | undefined => {
+const readAssetLoader = (options: Record<string, unknown>): AssetLoader | undefined => {
   const value: unknown = Object.getOwnPropertyDescriptor(options, 'assetLoader')?.value;
   return isAssetLoader(value) ? value : undefined;
 };
@@ -62,6 +62,8 @@ export type CaptureValidation =
 export type CaptureCompletion =
   | Exclude<CaptureValidation, { status: 'valid' }>
   | { status: 'accepted' };
+/** A is stateless evaluation, B a verified integration path, C uncontrolled time or history. */
+export type Seekability = 'A' | 'B' | 'C';
 export type ContentRegistration = Readonly<{
   id: string;
   getVersion: () => string;
@@ -72,7 +74,9 @@ export type ContentRegistration = Readonly<{
 export type IntegrationRegistration = Readonly<{
   id: string;
   version: string;
-  seekability: 'A' | 'B' | 'C';
+  /** A getter is evaluated when a host asks for warnings, so a registration can report the
+   * capability it discovered after mounting (for example an R3F root's subscriber count). */
+  seekability: Seekability | (() => Seekability);
   settle: (snapshot: FrameSnapshot, signal: AbortSignal) => Promise<Result<undefined>>;
   dispose?: () => void;
   /** TASK-158/integrations report only current required acquisition/decode/upload work. */
@@ -582,7 +586,11 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     },
     warnings: (): Diagnostic[] =>
       [...integrations.values()]
-        .filter((entry) => entry.seekability === 'C')
+        .filter(
+          (entry) =>
+            (typeof entry.seekability === 'function' ? entry.seekability() : entry.seekability) ===
+            'C',
+        )
         .map(() => ({
           code: 'seek.uncontrolled',
           severity: 'warning',

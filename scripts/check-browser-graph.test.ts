@@ -28,6 +28,8 @@ describe('resolved package-root browser graph', () => {
     expect(graph.some((file) => file.includes('/dist/render.js'))).toBe(false);
     expect(graph.some((file) => file.includes('/dist/cli.js'))).toBe(false);
     expect(graph.some((file) => file.includes('/dist/agent.js'))).toBe(false);
+    // `/three` is a separate optional subpath; the root must never reach Three.js or R3F.
+    expect(graph.some((file) => file.includes('/dist/three.js'))).toBe(false);
   }, 60_000);
 
   it('checks the internal browser entry and emitted wrapper using production loading resolution', async () => {
@@ -86,7 +88,7 @@ describe('resolved package-root browser graph', () => {
 });
 
 describe('package layout and dist resolution', () => {
-  it('pins types and import to dist for ., ./render and ./agent', () => {
+  it('pins types and import to dist for ., ./render, ./agent and ./three', () => {
     expect(packageExports?.['.']).toEqual({
       types: './dist/index.d.ts',
       import: './dist/index.js',
@@ -99,10 +101,15 @@ describe('package layout and dist resolution', () => {
       types: './dist/agent.d.ts',
       import: './dist/agent.js',
     });
+    expect(packageExports?.['./three']).toEqual({
+      types: './dist/three.d.ts',
+      import: './dist/three.js',
+    });
   });
 
-  it('resolves the root and ./render to dist from Node', () => {
+  it('resolves the root, ./render and ./three to dist from Node', () => {
     expect(import.meta.resolve('@kimuson/motion-kit')).toMatch(/[/\\]dist[/\\]index\.js$/);
     expect(import.meta.resolve('@kimuson/motion-kit/render')).toMatch(/[/\\]dist[/\\]render\.js$/);
+    expect(import.meta.resolve('@kimuson/motion-kit/three')).toMatch(/[/\\]dist[/\\]three\.js$/);
   });
 });
