@@ -162,8 +162,7 @@ name the source as it was written, redacted:
 
 ## `render.page-error`
 
-The Composition declaration or the loaded registry is invalid. The message names the case; the common
-ones:
+The Composition declaration or the loaded registry is invalid, or — for a Three.js Composition — a canvas could not draw the frame. The message names the case; the common declaration ones:
 
 | Cause                                                                                                           | Fix                                                                                |
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |

@@ -33,7 +33,9 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 - **A Three.js frame fails when its shader cannot compile.** `ThreeCanvas` hooks
   `renderer.debug.onShaderError`, so a `shaderMaterial` that does not compile or link fails the frame
   with `render.page-error` — and every later frame of that canvas — instead of publishing a scene the
-  material was missing from. That is a behaviour change for a Composition with a broken shader: it
+  material was missing from. The page console then carries a reprint of the program and shader info
+  logs without the material name, so a Composition with several shader materials has to identify the
+  failing one itself. That is a behaviour change for a Composition with a broken shader: it
   used to render with a console log and no material. Which advanced three behaviour is qualified, and
   which stays excluded (damped controls, physics, temporal feedback, WebGPU, XR, context recovery), is
   recorded in the [three qualification

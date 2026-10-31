@@ -110,6 +110,16 @@ each row.
 | several canvases                       | one `<ThreeCanvas>` per root; each advances only its own                          | B per root |
 
 ```tsx
+import { useTime } from '@kimuson/motion-kit';
+import { useThree } from '@react-three/fiber';
+import { useLayoutEffect, useMemo } from 'react';
+import { AnimationClip, AnimationMixer, NumberKeyframeTrack } from 'three';
+
+// The clip is a module constant, so the effect below does not depend on it.
+const clip = new AnimationClip('travel', 1, [
+  new NumberKeyframeTrack('mover.position[x]', [0, 0.2, 0.4], [-1.2, 0, 1.2]),
+]);
+
 const Clip = () => {
   const time = useTime();
   const scene = useThree((state) => state.scene);
@@ -118,7 +128,13 @@ const Clip = () => {
     mixer.clipAction(clip).play();
     mixer.setTime(time);
   }, [mixer, time]);
-  return <mesh name="mover">…</mesh>;
+
+  return (
+    <mesh name="mover">
+      <boxGeometry args={[0.8, 0.8, 0.8]} />
+      <meshBasicMaterial color="#f6a02f" />
+    </mesh>
+  );
 };
 ```
 
@@ -139,19 +155,26 @@ These render, but they are Tier C or unsupported, so do not claim determinism fo
 | `OrbitControls`, `CameraControls`, any damped camera                                             | damping interpolates from the previous pose, so a seek lands elsewhere      | `CameraRig`, with the easing inside `pose`   |
 | a physics engine                                                                                 | stepping is history-dependent; a seek would re-simulate from frame 0        | a function of time, or bake the motion       |
 | feedback and temporal effects (ping-pong targets, accumulation, motion blur from earlier frames) | the written value comes from a previous frame                               | write the effect from time only              |
+| `Math.random()` in a shader, or in a uniform written per frame                                   | an unseeded random draws a new value on every render                        | derive the value from `useTime()`            |
 | `AnimationMixer.update(delta)` in R3F `useFrame`                                                 | the mixer integrates the delta, so its state is not a function of the frame | `mixer.setTime(t)`                           |
 | `WebGPURenderer`                                                                                 | a canvas takes renderer parameters, not a renderer factory                  | WebGL, which is also what the capture fences |
 | WebXR                                                                                            | no presentation clock motion-kit controls                                   | —                                            |
 | recovering a lost WebGL context                                                                  | no restored frame is qualified                                              | restart the render                           |
+| a texture upload that fails (a corrupt image, a decode error)                                    | three reports an upload failure nowhere a canvas can observe                | fix the source; nothing fails the frame      |
 
 ## Failures that are reported rather than published
 
-A frame is never captured when the canvas could not draw it correctly:
+A frame is never captured when the canvas could not draw it and three reports the failure:
 
 - A shader program that does not compile or link fails the frame with `render.page-error` instead of
-  publishing a scene with the material missing, and every later frame fails with it. The message
-  names the shader; three's own log stays in the page console.
+  publishing a scene with the material missing, and every later frame fails with it. The Diagnostic
+  message is generic: the page console gets a reprint of the program and shader info logs, without
+  the material name, so it does not say which of several shader materials failed.
 - A lost WebGL context fails the frame the same way, with `render.page-error`.
+
+A texture upload that fails is the gap in that rule: three reports it nowhere a canvas can observe,
+so the frame is not guaranteed to fail and the case is excluded rather than claimed (see the
+[qualification ADR](../contexts/three/adr/20261031-three-advanced-qualification.accepted.md)).
 
 ## Software rendering
 
