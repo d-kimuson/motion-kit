@@ -79,6 +79,19 @@ describe('sequenceSpans', () => {
     expect(sequenceSpans(entries, fps30)).toEqual(expected);
     expect(sequenceSpans(entries.toReversed(), fps30)).toEqual(expected);
   });
+
+  it('compares paths segment by segment, whatever characters a name holds', () => {
+    const entries = [
+      { path: ['a\u0000b', 'c'], interval: interval(0, 1) },
+      { path: ['a', 'b\u0000c'], interval: interval(0, 1) },
+    ];
+    const paths = (order: typeof entries) => sequenceSpans(order, fps30).map(({ path }) => path);
+    expect(paths(entries)).toEqual([
+      ['a', 'b\u0000c'],
+      ['a\u0000b', 'c'],
+    ]);
+    expect(paths(entries.toReversed())).toEqual(paths(entries));
+  });
 });
 
 describe('activeSequences', () => {

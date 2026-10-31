@@ -36,9 +36,14 @@ export const createSequenceDirectory = () => {
   };
 };
 
+// Outer before inner, then segment by segment; a name may contain any character.
 const comparePath = (a: readonly string[], b: readonly string[]): number => {
-  const joined = (path: readonly string[]) => path.join('\u0000');
-  return a.length - b.length || (joined(a) < joined(b) ? -1 : joined(a) > joined(b) ? 1 : 0);
+  if (a.length !== b.length) return a.length - b.length;
+  for (const [index, segment] of a.entries()) {
+    const other = b[index] ?? '';
+    if (segment !== other) return segment < other ? -1 : 1;
+  }
+  return 0;
 };
 
 /**

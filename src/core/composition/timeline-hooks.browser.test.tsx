@@ -17,6 +17,7 @@ import {
   type RationalInput,
   type Result,
   type SequenceContext,
+  type SequenceSpan,
   type TimelineContext,
 } from '@kimuson/motion-kit';
 import fc from 'fast-check';
@@ -26,7 +27,6 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { type SequenceSpan } from '../../lib/loading-protocol.ts';
 import { activeSequences } from '../sequence/directory.ts';
 
 const unwrap = <T,>(result: Result<T>): T => {
@@ -625,6 +625,7 @@ describe('named Sequences', () => {
         </>
       ),
       async ({ seek, runtime }) => {
+        expectTypeOf(runtime.sequences()).toEqualTypeOf<readonly SequenceSpan[]>();
         await seek(0);
         expect(runtime.sequences()).toEqual([
           { path: ['intro'], startFrame: 0, endFrame: 60 },
