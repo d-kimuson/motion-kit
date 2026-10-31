@@ -1,18 +1,25 @@
 import { type SequenceSpan } from '../../lib/loading-protocol.ts';
-import { compareTime, timeToFrameCeil, type FrameRate } from '../timeline/time.ts';
+import {
+  compareTime,
+  timeToFrameCeil,
+  type FrameRate,
+  type TimelineTime,
+} from '../timeline/time.ts';
 import { type SequenceInterval } from './interval.ts';
 
 /** A named Sequence the mounted tree renders: its named-ancestor path and visible interval. */
 export type NamedSequence = Readonly<{ path: readonly string[]; interval: SequenceInterval }>;
 
-/** Intersect a child with what its ancestors show; a disjoint child is empty at the clip start. */
+const later = (a: TimelineTime, b: TimelineTime) => (compareTime(a, b) < 0 ? b : a);
+const earlier = (a: TimelineTime, b: TimelineTime) => (compareTime(a, b) > 0 ? b : a);
+
+/** Intersect a child with what its ancestors show; a disjoint child is empty at the nearer edge. */
 export const clipSequence = (
   sequence: SequenceInterval,
   clip: SequenceInterval,
 ): SequenceInterval => {
-  const start = compareTime(sequence.start, clip.start) < 0 ? clip.start : sequence.start;
-  const end = compareTime(sequence.end, clip.end) > 0 ? clip.end : sequence.end;
-  return Object.freeze({ start, end: compareTime(end, start) < 0 ? start : end });
+  const start = earlier(later(sequence.start, clip.start), clip.end);
+  return Object.freeze({ start, end: later(earlier(sequence.end, clip.end), start) });
 };
 
 /** Mutable registrations owned by one Composition runtime; the tree registers in layout effects. */

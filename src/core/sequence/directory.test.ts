@@ -103,9 +103,9 @@ describe('clipSequence', () => {
     expect(clipSequence(interval(1, 2), interval(2, 4))).toEqual(interval(2, 1));
   });
 
-  it('collapses a disjoint child to an empty interval at the clip start', () => {
-    const clipped = clipSequence(interval(0, 1), interval(5, 1));
-    expect(clipped.start).toEqual(clipped.end);
+  it('collapses a disjoint child to an empty interval at the nearer clip edge', () => {
+    expect(clipSequence(interval(0, 1), interval(5, 1))).toEqual(interval(5, 0));
+    expect(clipSequence(interval(8, 1), interval(5, 1))).toEqual(interval(6, 0));
   });
 });
 
