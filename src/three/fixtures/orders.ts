@@ -1,7 +1,8 @@
 import { mismatches, mount, pixelsOf, type Mounted, type MountOptions } from './harness.tsx';
 
 export type BClaim = Readonly<{
-  /** The Composition's content. Every order mounts it fresh, so no mount is reused. */
+  /** The Composition's content. The sequential and shuffled/repeated passes share their mount; the
+   * fresh-mount pass opens one mount per claimed frame. */
   scene: MountOptions['scene'];
   /** The frames whose pixels must be reproduced. At least two, and they must render differently. */
   frames: readonly number[];
@@ -15,7 +16,8 @@ export type OrderCheck = Readonly<{
   reference: ReadonlyMap<number, Uint8Array>;
   /** Byte differences when the claimed frames are replayed backwards and repeated on that mount. */
   shuffledMismatches: readonly number[];
-  /** Byte differences when each claimed frame is the first frame a fresh mount renders. */
+  /** Byte differences when each claimed frame is the first frame a fresh mount renders; one mount is
+   * opened per claimed frame, so no earlier frame of that mount can leave state behind. */
   freshMismatches: readonly number[];
   /** Byte differences between the first and the last claimed frame; zero means nothing moved. */
   referenceDifference: number;
@@ -50,8 +52,11 @@ const replayOrder = (frames: readonly number[]): readonly number[] => {
 };
 
 /** Measure a Tier B claim: identical pixels across sequential, shuffled/repeated and fresh-mount
- * frame orders. It returns the measurements instead of asserting them, so each test states the
- * claim it makes; the mounts it opens are disposed here, in both the pass and the failure path.
+ * frame orders. The first pass renders frames 0 to the last claimed frame in order on one mount, the
+ * second replays the claimed frames backwards and repeated on that same mount, and the third renders
+ * each claimed frame as the first frame of its own fresh mount. It returns the measurements instead
+ * of asserting them, so each test states the claim it makes; every mount it opens is disposed here,
+ * in both the pass and the failure path.
  */
 export const orderCheck = async ({
   scene,
@@ -73,12 +78,16 @@ export const orderCheck = async ({
   } finally {
     sequential.dispose();
   }
-  const fresh = await open();
-  let freshMismatches: readonly number[] = [];
-  try {
-    freshMismatches = await differences(fresh, frames, reference);
-  } finally {
-    fresh.dispose();
+  const freshMismatches: number[] = [];
+  for (const frame of frames) {
+    const expected = reference.get(frame);
+    if (expected === undefined) throw new Error(`No reference for frame ${frame}.`);
+    const fresh = await open();
+    try {
+      freshMismatches.push(mismatches(await pixelsAt(fresh, frame), expected));
+    } finally {
+      fresh.dispose();
+    }
   }
   const first = reference.get(frames[0] ?? 0) ?? new Uint8Array();
   const last = reference.get(frames.at(-1) ?? 0) ?? new Uint8Array();

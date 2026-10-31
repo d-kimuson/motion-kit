@@ -1,6 +1,6 @@
 import { useTime } from '@kimuson/motion-kit';
 import { useFrame as useRenderFrame, useThree } from '@react-three/fiber';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Vector3 } from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -11,6 +11,7 @@ import {
   type Mounted,
   type RootCapture,
 } from './fixtures/harness.tsx';
+import { orderCheck } from './fixtures/orders.ts';
 import { ThreeCanvas } from './three-canvas.tsx';
 
 // The negative control behind the "controls and damping" exclusion: a camera that eases towards a
@@ -25,26 +26,26 @@ afterEach(() => {
 });
 
 const open = async (): Promise<{ instance: Mounted; capture: RootCapture }> => {
-  const instance = await mount({
-    scene: (capture) => (
-      <ThreeCanvas
-        gl={gl}
-        onCreated={(state) => {
-          capture.state = state;
-        }}
-      >
-        <color attach="background" args={['#102030']} />
-        <Damped />
-        <mesh>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshBasicMaterial color="#2f6df6" />
-        </mesh>
-      </ThreeCanvas>
-    ),
-  });
+  const instance = await mount({ scene });
   mounted.push(instance);
   return { instance, capture: instance.capture };
 };
+
+const scene = (capture: RootCapture): ReactNode => (
+  <ThreeCanvas
+    gl={gl}
+    onCreated={(state) => {
+      capture.state = state;
+    }}
+  >
+    <color attach="background" args={['#102030']} />
+    <Damped />
+    <mesh>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color="#2f6df6" />
+    </mesh>
+  </ThreeCanvas>
+);
 
 /** An `OrbitControls`-shaped damping loop: the next pose is a fraction of the way from the current
  * one to a target that moves with time. */
@@ -74,5 +75,12 @@ describe('camera damping', () => {
     expect((await fresh.instance.settle(9)).status).toBe('ready');
     expect(fresh.instance.runtime.warnings()).toMatchObject([{ code: 'seek.uncontrolled' }]);
     expect(mismatches(pixelsOf(sequential.capture), pixelsOf(fresh.capture))).toBeGreaterThan(0);
+  }, 120_000);
+
+  // The negative control for the fresh-mount pass itself: a history-dependent scene must make it
+  // report a mismatch, or a Tier B claim that passes through it proves nothing about fresh seeks.
+  it('makes the Tier B order check report a fresh-mount mismatch', async () => {
+    const check = await orderCheck({ frames: [0, 5, 9], scene });
+    expect(check.freshMismatches.some((count) => count > 0)).toBe(true);
   }, 120_000);
 });
