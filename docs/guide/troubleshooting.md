@@ -183,6 +183,9 @@ failures; the diagnostic does not classify which one failed. The cause drops sta
 URL credentials and machine-specific paths, and is bounded to 500 characters. Human-readable output
 keeps only the deterministic message and hint, so re-run with `--json` to inspect `details.cause` when present.
 
+A `ThreeCanvas` whose WebGL context is lost fails the frame with `"The WebGL context was lost while
+settling the frame."`. Restart the renderer; context recovery is not implemented yet.
+
 ## `composition.props-invalid`
 
 Props did not validate, or a requested frame is outside the Composition:

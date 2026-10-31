@@ -9,6 +9,7 @@ export default defineConfig({
     index: 'src/index.ts',
     render: 'src/render/index.ts',
     agent: 'src/agent/cli-output.ts',
+    three: 'src/three/index.ts',
     cli: 'src/cli/main.js',
     // Private build outputs referenced by the renderer's loading pipeline at
     // runtime; `./browser` becomes a public subpath with TASK-190.

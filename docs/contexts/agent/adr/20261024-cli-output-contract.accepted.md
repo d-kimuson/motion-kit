@@ -132,6 +132,8 @@ The three new codes are additive errors (`schemaVersion` stays `1`). `check.fram
 
 The invocation resolver collects the new value-taking options alongside the existing ones: `--frame`, `--predecessor`, `--history`, `--channel-tolerance` and `--changed-ratio`. `--exact` is a boolean flag and conflicts with either tolerance option (`cli.invalid-arguments`). Exit codes follow the existing contract: a pass is `0`; a differing or otherwise uncertified check is `1` because its diagnostics are domain findings; invalid arguments are `2`; an internal failure is `3`; cancellation emits no envelope and exits `130`/`143`/`129` as before. An out-of-range sampled or predecessor frame is reported after the descriptor is known as `composition.props-invalid`, exit `1`.
 
+_Amended 2026-10-31 (TASK-184):_ `three` joins the docs topics, so `motion-kit docs --list` names eight in the fixed order (`index`, `getting-started`, `cli`, `authoring`, `three`, `determinism`, `examples`, `troubleshooting`) and `motion-kit docs three` prints `docs/guide/three.md`. This supersedes the seven-topic list in the 2026-10-29 (docs subcommand) amendment; the envelope, the exit codes and `schemaVersion` are unchanged, because the set of topics it enumerates is data, not a new field.
+
 ## Consequences
 
 Every CLI failure remains a Diagnostic. Callers can branch on `ok`, inspect stable codes, and act on hints without parsing human text. All future commands use this contract unchanged; the CLI must enforce transport, exit codes, semantic messages, and safe exception conversion in addition to schema validation.

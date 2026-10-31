@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
-import { EnvelopeSchema, type Envelope } from '../agent/cli-output.ts';
+import { EnvelopeSchema, DocsTopicSchema, type Envelope } from '../agent/cli-output.ts';
 import { currentDate } from '../lib/clock.ts';
 import { runCli } from './cli.ts';
 
@@ -299,6 +299,11 @@ const docsTopicRows = [
   {
     id: 'authoring',
     summary: 'Compositions, props, time hooks, sequences, transitions, assets, and audio.',
+  },
+  {
+    id: 'three',
+    summary:
+      'Three.js scenes with React Three Fiber, the peer dependencies, and what breaks determinism.',
   },
   { id: 'determinism', summary: 'What a pure function of time guarantees and what breaks it.' },
   {
@@ -762,6 +767,13 @@ describe('motion-kit CLI', () => {
     expect(result.stdout).toBe(
       readFileSync(new URL('../../docs/guide/cli.md', import.meta.url), 'utf8'),
     );
+  });
+
+  it('ships a guide file for every docs topic except index', () => {
+    const missing = DocsTopicSchema.options
+      .filter((topic) => topic !== 'index')
+      .filter((topic) => !existsSync(new URL(`../../docs/guide/${topic}.md`, import.meta.url)));
+    expect(missing).toEqual([]);
   });
 
   it('lists every topic in the documented order with its summary', async () => {

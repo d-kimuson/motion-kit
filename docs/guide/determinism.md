@@ -27,8 +27,8 @@ This page states what that guarantee covers, what it does not, and how to check 
   conditions produces the same files.
 - **The shapes the suite covers:** DOM text with a `useAsset` font, CSS transform driven by the
   frame, SVG path geometry, canvas 2D drawing (with sustained passes), `Sequence` boundaries,
-  `TransitionSeries` overlaps with `useTransitionProgress`, and nested `Suspense` around font and
-  image assets.
+  `TransitionSeries` overlaps with `useTransitionProgress`, nested `Suspense` around font and image
+  assets, and a Three.js `ThreeCanvas` with a `CameraRig` through software WebGL.
 
 ## What breaks it
 
@@ -79,10 +79,14 @@ for you — they are authoring errors:
   for byte.
 - **Integrations with uncontrolled time.** An integration that registers uncontrolled time (Tier C)
   makes the render emit a `seek.uncontrolled` warning, and the determinism suite refuses to certify
-  that Composition instead of pretending. No such integration ships in 0.0.1; the warning exists so a
-  later one cannot claim determinism silently.
-- **WebGL, Three.js and video.** No Three.js example ships in 0.0.1 (`/three` is a later phase), and
-  video assets do not exist yet, so neither is covered.
+  that Composition instead of pretending. A Three.js canvas is Tier B while it has no `useFrame`
+  subscriber, and Tier C the moment it has one; nothing infers a canvas seekable from the fact that it
+  advances manually. The warning exists so a later integration cannot claim determinism silently.
+- **WebGL, Three.js and video.** A `ThreeCanvas` is captured through the same pipeline and compared
+  byte for byte across the suite's traversal modes in one environment, rendered with software WebGL
+  (`--software-webgl`). Byte equality across machines, not guaranteed for a DOM tree (above), is even
+  less likely for a GPU: a different GPU, driver or Chromium build may rasterise the same scene
+  differently. Video assets do not exist yet.
 
 ## A recorded limit: an image inside a `Sequence`
 

@@ -4,6 +4,30 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## Unreleased
+
+### Added
+
+- **Three.js canvas.** `@kimuson/motion-kit/three` exports `ThreeCanvas` and `CameraRig`. A canvas
+  opens R3F with `frameloop="never"`, a stopped clock, DPR 1 and a preserved drawing buffer, and is
+  advanced once per settled frame from motion-kit time; the frame is captured only after the scene has
+  committed that frame's generation and the GPU has finished. `CameraRig` writes an absolute camera
+  pose from `useTime()` on every frame, so seeking backwards reproduces a fresh pose instead of
+  carrying history. `three` and `@react-three/fiber` are optional peer dependencies the user installs,
+  and the package root never loads them. A canvas with any `useFrame` subscriber is Tier C: it renders
+  but reports `seek.uncontrolled`, and the determinism suite refuses to certify it.
+- **`Seekability` is reportable lazily.** `IntegrationRegistration['seekability']` accepts
+  `'A' | 'B' | 'C'` or a getter, evaluated when a host asks for warnings, so an integration can report
+  a capability it discovers after mounting without re-registering. The type is exported as
+  `Seekability`.
+- **The determinism suite can opt into software WebGL.** A `DeterminismComposition` accepts
+  `softwareWebGL: true`, which the suite forwards to its renderers. The suite lives in the repository
+  (`pnpm test --project frame-transport`) and is not a package export, so both the option and
+  `DeterminismComposition` are repository-only.
+- **[Three.js guide](docs/guide/three.md)** documents the subpath, the peer dependencies, software
+  WebGL (`--software-webgl`) and what makes a canvas uncontrolled. A `three-dom` Vitest project covers
+  the canvas in Chromium with SwiftShader, and CI runs it as its own step.
+
 ## 0.2.0 — 2026-10-29
 
 ### Added

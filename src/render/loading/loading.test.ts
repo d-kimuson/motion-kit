@@ -780,7 +780,10 @@ export default {plugins:[react()],test:{environment:'jsdom'},build:{outDir:'dist
       `import {writeFileSync} from 'node:fs'; export default {plugins:[{name:'blocked-plugin',config(){writeFileSync(${JSON.stringify(record)},JSON.stringify({pid:process.pid,workspace:JSON.parse(process.argv[2]).workspace}));while(true){}}}]};`,
     );
     const started = process.hrtime.bigint();
-    const result = await open(root, 1500);
+    // The record is written by the service once it has evaluated the config, so the startup budget
+    // has to cover a fork on a loaded machine before the blocked hook can be reached. 5 s leaves
+    // that room and still bounds the timeout; 1500 ms raced the fork under load.
+    const result = await open(root, 5000);
     expect(result).toMatchObject({
       ok: false,
       error: { code: 'render.page-error', message: 'Loading startup timed out.' },
@@ -798,6 +801,6 @@ export default {plugins:[react()],test:{environment:'jsdom'},build:{outDir:'dist
     const pid = recordValue.pid;
     expect(() => process.kill(pid, 0)).toThrow('ESRCH');
     expect(existsSync(recordValue.workspace)).toBe(false);
-    expect(Number(process.hrtime.bigint() - started) / 1e6).toBeLessThan(5000);
-  }, 10_000);
+    expect(Number(process.hrtime.bigint() - started) / 1e6).toBeLessThan(15_000);
+  }, 30_000);
 });

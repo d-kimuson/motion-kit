@@ -23,7 +23,8 @@
     "paths": {
       "@kimuson/motion-kit": ["./src/index.ts"],
       "@kimuson/motion-kit/render": ["./src/render/index.ts"],
-      "@kimuson/motion-kit/agent": ["./src/agent/cli-output.ts"]
+      "@kimuson/motion-kit/agent": ["./src/agent/cli-output.ts"],
+      "@kimuson/motion-kit/three": ["./src/three/index.ts"]
     },
 
     // TypeChecking

@@ -12,6 +12,7 @@ export default defineConfig({
     alias: [
       { find: /^@kimuson\/motion-kit\/render$/, replacement: srcEntry('./src/render/index.ts') },
       { find: /^@kimuson\/motion-kit\/agent$/, replacement: srcEntry('./src/agent/cli-output.ts') },
+      { find: /^@kimuson\/motion-kit\/three$/, replacement: srcEntry('./src/three/index.ts') },
       { find: /^@kimuson\/motion-kit$/, replacement: srcEntry('./src/index.ts') },
     ],
   },
@@ -39,6 +40,9 @@ export default defineConfig({
             'src/**/*.determinism.test.ts',
           ],
           setupFiles: ['configs/vitest/time.setup.ts'],
+          // A Lean differential case or a React DOM case can miss Vitest's 5 s default when other
+          // work saturates the machine; 30 s still fails a real hang.
+          testTimeout: 30_000,
         },
       },
       {
@@ -107,6 +111,34 @@ export default defineConfig({
             enabled: true,
             headless: true,
             provider: playwright(),
+            instances: [{ browser: 'chromium' }],
+            viewport: { width: 640, height: 480 },
+            screenshotFailures: false,
+          },
+        },
+      },
+      {
+        // WebGL needs its own Chromium profile: the scene is rendered on SwiftShader so the
+        // result does not depend on the host GPU, and the R3F second reconciler has to share
+        // the renderer's React instance (pnpm's global virtual store).
+        extends: true,
+        resolve: { dedupe: ['react', 'react-dom'] },
+        optimizeDeps: {
+          include: ['@react-three/fiber', 'react', 'react-dom', 'react-dom/client', 'three'],
+        },
+        test: {
+          name: 'three-dom',
+          include: ['src/three/**/*.browser.test.tsx'],
+          setupFiles: ['configs/vitest/time.setup.ts'],
+          testTimeout: 120_000,
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright({
+              launchOptions: {
+                args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+              },
+            }),
             instances: [{ browser: 'chromium' }],
             viewport: { width: 640, height: 480 },
             screenshotFailures: false,

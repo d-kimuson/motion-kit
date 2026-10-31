@@ -12,7 +12,7 @@ How to run a QA Check that verifies a change by executing it, and the map of def
 | Wrong motion values (interpolate, spring, keyframes, easing endpoints and monotonicity)       | —     | —      | ○             | ◎                | —         | —             | —        |
 | Wrong theme resolution (priority props > nested > composition > default)                      | —     | —      | ◎             | —                | —         | —             | —        |
 | Preset schema and type mismatch                                                               | ◎     | —      | ○             | —                | —         | —             | —        |
-| Rendering and capture in a real browser (readiness, fonts, WebGL)                             | —     | —      | —             | —                | —         | —             | —        |
+| Rendering and capture in a real browser (readiness, fonts, WebGL)                             | —     | —      | ◎             | —                | —         | —             | —        |
 | Environment differences (Chromium build, FFmpeg build, GPU)                                   | —     | —      | —             | —                | —         | —             | —        |
 | Public API drift (exports, prop names, subpath contents)                                      | ○     | —      | —             | —                | —         | —             | —        |
 | Gaps in the spec, unexpected use cases                                                        | —     | —      | —             | —                | —         | —             | —        |
@@ -20,6 +20,8 @@ How to run a QA Check that verifies a change by executing it, and the map of def
 | Committed secret                                                                              | —     | —      | —             | —                | —         | —             | ◎        |
 
 ◎ mainly caught by, ○ partly caught by, — not caught.
+
+The `composition-dom` and `three-dom` projects are Vitest browser projects, so the browser row is marked under Unit; `three-dom` runs headless Chromium on SwiftShader. An integration test that drives the Composition runtime must complete every capture it settles: call `completeCapture(lease)`, and while it returns `resettle`, call `resettle(lease)` again. A settled but uncompleted request keeps exclusive ownership, so the next `settleFrame` only queues and aborts after the 30 s `queueTimeoutMs` default. `src/three/fixtures/harness.tsx` shows the loop.
 
 ## Exploratory testing focus
 

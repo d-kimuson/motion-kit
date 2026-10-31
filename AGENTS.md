@@ -40,7 +40,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 └── .github/                   # CI (check.yaml) and composite setup actions
 ```
 
-Only `src/lib`, `src/core`, and `src/agent` exist today; the other `src/` directories are created when their context gets its first code.
+Only `src/theme` and `src/presets` have no code yet; they are created when the context gets its first code.
 
 ## Feedback Loop
 
@@ -51,7 +51,7 @@ Only `src/lib`, `src/core`, and `src/agent` exist today; the other `src/` direct
 | `pnpm typecheck`                         | TypeScript (`tsconfig.json`, strictest)                                                                                                                                                                                                                                                                              | Always                                                                                            |
 | `lake build`                             | Lean proofs under `src/core` and the `spec-oracle` binary the differential tests need                                                                                                                                                                                                                                | A `*.lean` file changed, or `.lake/` is missing (fresh clone or new worktree); before `pnpm test` |
 | `node scripts/lean-spec.ts doc src/core` | Regenerates `<name>.lean.md` next to each Lean spec                                                                                                                                                                                                                                                                  | A `*.lean` file changed; commit the regenerated docs                                              |
-| `pnpm test`                              | vitest unit tests, property-based tests, and Lean differential tests (`*.oracle.test.ts`)                                                                                                                                                                                                                            | Always                                                                                            |
+| `pnpm test`                              | vitest: unit and property-based tests, Lean differential (`*.oracle.test.ts`) and PNG determinism (`*.determinism.test.ts`) suites, and the `composition-dom` / `three-dom` browser projects (headless Chromium, `three-dom` on SwiftShader)                                                                         | Always                                                                                            |
 
 CI (`.github/workflows/check.yaml`) runs `pnpm lint`, `pnpm typecheck`, `lake build` (via `leanprover/lean-action`), and `pnpm test` on pushes to `main` and on pull requests, plus a gitleaks scan of the history. The pre-commit hook (`lefthook.yml`) fixes staged files with oxlint/oxfmt and runs gitleaks on the staged changes.
 

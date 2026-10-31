@@ -53,6 +53,7 @@ export const DocsTopicSchema = z.enum([
   'getting-started',
   'cli',
   'authoring',
+  'three',
   'determinism',
   'examples',
   'troubleshooting',

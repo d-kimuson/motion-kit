@@ -35,7 +35,7 @@ motion-kit docs [topic] [--list] [--json]
 repository or a network. With no topic it prints `docs/index.md`; with a topic it prints that file
 verbatim, without a pager, colour or reformatting. `--list` prints one topic per line, id and
 summary. The topics and their order are `index`, `getting-started`, `cli`, `authoring`,
-`determinism`, `examples`, `troubleshooting`; an unknown topic, or `--list` with a topic, is
+`three`, `determinism`, `examples`, `troubleshooting`; an unknown topic, or `--list` with a topic, is
 `cli.invalid-arguments` (exit 2) with the topics in the hint.
 
 `motion-kit` is the bin the package installs (`bin.motion-kit` → `dist/cli.js`), so with pnpm a

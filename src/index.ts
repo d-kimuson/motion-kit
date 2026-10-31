@@ -21,6 +21,7 @@ export {
   type ContentRegistration,
   type IntegrationRegistration,
   type HostSource,
+  type Seekability,
 } from './core/runtime/composition-runtime.ts';
 export {
   Composition,

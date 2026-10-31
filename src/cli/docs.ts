@@ -18,6 +18,8 @@ const summaries: Readonly<Record<DocsTopic, string>> = {
   'getting-started': 'Install, write a first entry, and render it.',
   cli: 'Commands, flags, the JSON envelope, diagnostics, and exit codes.',
   authoring: 'Compositions, props, time hooks, sequences, transitions, assets, and audio.',
+  three:
+    'Three.js scenes with React Three Fiber, the peer dependencies, and what breaks determinism.',
   determinism: 'What a pure function of time guarantees and what breaks it.',
   examples: 'The reference videos, their commands, placeholders, and asset policy.',
   troubleshooting: 'What to do for each diagnostic code.',
