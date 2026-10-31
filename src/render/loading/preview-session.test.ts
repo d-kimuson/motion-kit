@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { get } from 'node:http';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -117,8 +118,30 @@ it('serves the host page, the preview shell and audio under the Vite fs policy',
   expect((await fetch(audio)).status).toBe(403);
   audio.searchParams.set('src', 'audio/missing.wav');
   expect((await fetch(audio)).status).toBe(404);
+  audio.searchParams.set('src', 'audio');
+  expect((await fetch(audio)).status).toBe(404);
   audio.searchParams.delete('src');
   expect((await fetch(audio)).status).toBe(400);
+});
+
+/** A GET whose Host header names another site, as a DNS-rebound page sends. */
+const statusFromForeignHost = (url: URL) =>
+  new Promise<number | undefined>((settle, fail) => {
+    get(url, { headers: { host: 'rebound.example' } }, (response) => {
+      response.resume();
+      settle(response.statusCode);
+    }).on('error', fail);
+  });
+
+it('refuses the preview routes to a foreign Host', async () => {
+  const result = await open(fixture());
+  if (!result.ok) throw new Error('Preview failed to start');
+  const { url } = result.value;
+  const audio = new URL('/__motion-kit/preview/audio?src=audio/voice.wav', url);
+  const events = new URL('/__motion-kit/preview/events', url);
+  for (const route of [new URL(url), audio, events]) {
+    expect(await statusFromForeignHost(route)).toBe(403);
+  }
 });
 
 it('emits reload when a served module changes and serves the new source', async () => {

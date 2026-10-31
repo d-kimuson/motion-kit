@@ -1,8 +1,10 @@
 import type { ResolvedConfig } from 'vite';
 
 import { createReadStream, existsSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { createServer as createHttpServer, type ServerResponse } from 'node:http';
 import { join, relative, resolve } from 'node:path';
+import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
@@ -286,9 +288,21 @@ try {
       },
     );
   // Preview routes exist only in a preview session; the renderer's server stays as it was.
-  const servePreview = (path: string, url: URL, response: ServerResponse): boolean => {
+  const servePreview = (
+    path: string,
+    url: URL,
+    host: string | undefined,
+    response: ServerResponse,
+  ): boolean => {
     if (input.mode !== 'preview') return false;
-    if (path === previewPath) serveHtml(response, previewPath, previewShell(preview));
+    if (path !== previewPath && path !== preview.eventsUrl && path !== preview.audioUrl)
+      return false;
+    // These routes answer ahead of Vite's middlewares, so they make Vite's Host check their own.
+    // Without it, DNS rebinding would let any page the user opens read what the audio route serves.
+    if (!loopbackHost(host)) {
+      response.statusCode = 403;
+      response.end();
+    } else if (path === previewPath) serveHtml(response, previewPath, previewShell(preview));
     else if (path === preview.eventsUrl) {
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -310,31 +324,42 @@ try {
         if (!vite.isFileLoadingAllowed(server.config, file)) {
           response.statusCode = 403;
           response.end();
-        } else {
-          audioFiles.add(file);
-          server.watcher.add(file);
-          createReadStream(file)
-            .once('open', () =>
+        } else
+          void stat(file).then(
+            (stats) => {
+              if (!stats.isFile()) {
+                response.statusCode = 404;
+                response.end();
+                return;
+              }
+              audioFiles.add(file);
+              server.watcher.add(file);
               // A reload after the file changed must not get the old bytes from the HTTP cache.
               response.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
                 'Cache-Control': 'no-store',
-              }),
-            )
-            .once('error', () => {
+              });
+              // pipeline closes the file when the host drops the fetch, as a reload does.
+              pipeline(createReadStream(file), response, () => {});
+            },
+            () => {
               response.statusCode = 404;
               response.end();
-            })
-            .pipe(response);
-        }
+            },
+          );
       }
-    } else return false;
+    }
     return true;
+  };
+  const loopbackHost = (host: string | undefined): boolean => {
+    const address = http.address();
+    if (address === null || typeof address === 'string') return false;
+    return host === `127.0.0.1:${address.port}` || host === `localhost:${address.port}`;
   };
   const http = createHttpServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     if (url.pathname === shellPath) serveHtml(response, shellPath, htmlShell());
-    else if (servePreview(url.pathname, url, response)) return;
+    else if (servePreview(url.pathname, url, request.headers.host, response)) return;
     else
       server.middlewares(request, response, () => {
         response.statusCode = 404;

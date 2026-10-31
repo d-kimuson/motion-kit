@@ -17,15 +17,24 @@ const clip = (id: string, audio?: LoadingDescriptor['audio']): LoadingDescriptor
 });
 const flush = () => new Promise((done) => setTimeout(done, 0));
 
-/** A realm whose `show` answers only when the test releases it. */
-const fakeRealm = (compositions: readonly LoadingDescriptor[]) => {
+/**
+ * A realm whose `show` answers only when the test releases it.
+ * With `hold`, `mount` stays pending until the realm closes and then rejects, as a closed port does.
+ */
+const fakeRealm = (compositions: readonly LoadingDescriptor[], hold = false) => {
   const shows: { frame: number; answer: (outcome?: ShowOutcome) => void }[] = [];
   const mounts: { compositionId: string | undefined; props: unknown }[] = [];
   let closed = false;
+  let reject: ((error: Error) => void) | undefined;
   const realm: Realm = {
     list: () => Promise.resolve({ ok: true, value: compositions }),
     mount: (compositionId, props) => {
       mounts.push({ compositionId, props });
+      if (hold) {
+        return new Promise((_resolve, fail) => {
+          reject = fail;
+        });
+      }
       const descriptor = compositions.find(
         (item) => item.id === (compositionId ?? compositions[0]?.id),
       );
@@ -65,6 +74,7 @@ const fakeRealm = (compositions: readonly LoadingDescriptor[]) => {
       }),
     close: () => {
       closed = true;
+      reject?.(new Error('Preview realm closed'));
     },
   };
   return { realm, shows, mounts, closed: () => closed };
@@ -77,6 +87,8 @@ const setup = (
     /** The realm frame loads but never announces itself. */
     silent?: boolean;
     prepare?: AudioPlayer['prepare'];
+    /** The first realm's mount stays pending until that realm closes. */
+    holdFirstMount?: boolean;
   } = {},
 ) => {
   const realms: ReturnType<typeof fakeRealm>[] = [];
@@ -109,6 +121,7 @@ const setup = (
       if (options.silent === true) return Promise.reject(new Error('Preview realm closed'));
       const realm = fakeRealm(
         options.compositions ?? [clip('clip', [{ src: 'voice.wav' }, { src: 'bad.wav' }])],
+        options.holdFirstMount === true && realms.length === 0,
       );
       realms.push(realm);
       return Promise.resolve(realm.realm);
@@ -252,6 +265,28 @@ it('offers a choice among several Compositions and records the one chosen', asyn
   await host.controller.choose('b');
   expect(host.chosen).toEqual(['b']);
   expect(host.controller.state().session).toMatchObject({ kind: 'ready', descriptor: { id: 'b' } });
+});
+
+it('keeps the chosen Composition across a reload after its mount failed', async () => {
+  const host = setup({ compositions: [clip('a'), clip('b')] });
+  await host.controller.reload();
+  await host.controller.choose('gone');
+  expect(host.controller.state().session).toMatchObject({ kind: 'failed' });
+  await host.controller.reload();
+  expect(host.realms[1]?.mounts).toEqual([{ compositionId: 'gone', props: { title: 'hi' } }]);
+});
+
+it('settles a mount the next reload interrupted without rejecting', async () => {
+  const host = setup({ holdFirstMount: true });
+  const interrupted = host.controller.reload();
+  await flush();
+  await host.controller.reload();
+  await expect(interrupted).resolves.toBeUndefined();
+  expect(host.realms[0]?.closed()).toBe(true);
+  expect(host.controller.state().session).toMatchObject({
+    kind: 'ready',
+    descriptor: { id: 'clip' },
+  });
 });
 
 it('reports a failed mount as the session state', async () => {

@@ -176,9 +176,13 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     }, 1000 / deps.query.fps);
   };
 
+  // A request rejects only when its realm closed for a reload, whose successor takes over.
+  const unlessClosed = <T>(request: Promise<T>): Promise<T | undefined> =>
+    request.catch(() => undefined);
+
   const mount = async (current: Realm, id: string | undefined) => {
-    const mounted = await current.mount(id, deps.query.props);
-    if (current !== realm) return;
+    const mounted = await unlessClosed(current.mount(id, deps.query.props));
+    if (mounted === undefined || current !== realm) return;
     if (!mounted.ok) {
       update({ session: { kind: 'failed', diagnostic: mounted.error } });
       return;
@@ -226,8 +230,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     }
     realm = current;
     if (compositionId !== undefined) return mount(current, compositionId);
-    const listed = await current.list();
-    if (current !== realm) return;
+    const listed = await unlessClosed(current.list());
+    if (listed === undefined || current !== realm) return;
     if (!listed.ok) update({ session: { kind: 'failed', diagnostic: listed.error } });
     else if (listed.value.length === 1) await mount(current, listed.value[0]?.id);
     else update({ session: { kind: 'choosing', compositions: listed.value } });
@@ -255,6 +259,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       const current = realm;
       if (current === undefined || state.session.kind !== 'choosing') return;
       deps.choose(id);
+      // Remembered before mounting, so a reload while fixing a failed mount keeps the choice.
+      compositionId = id;
       update({ session: { kind: 'connecting' } });
       await mount(current, id);
     },

@@ -81,7 +81,7 @@ export const previewHostConfigSchema = z.object({
   shellUrl: z.string(),
   /** Server-sent events: `reload` after a served module changed. */
   eventsUrl: z.string(),
-  /** Takes `?src=<AudioTrack src>` and redirects to the file under Vite's fs policy. */
+  /** Takes `?src=<AudioTrack src>` and answers with the file's bytes when Vite's fs policy allows it. */
   audioUrl: z.string(),
 });
 export type PreviewHostConfig = z.infer<typeof previewHostConfigSchema>;
