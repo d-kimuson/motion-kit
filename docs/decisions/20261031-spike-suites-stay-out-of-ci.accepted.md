@@ -58,8 +58,9 @@ first Linux browser coverage.
   failures cannot make that gate red forever.
 - `check.yaml` keeps its ~15 minute budget and its shipped-code focus; the qualification workflow
   carries the chrome download, the SwiftShader measurements and the artifacts.
-- The workflow is a second place that pins `actions/checkout`, `setup-node` and
-  `upload-artifact`; both must be bumped together.
+- The workflow is a second place that pins `actions/checkout` and `actions/upload-artifact`; both must
+  be bumped together with `check.yaml`'s copies. It reuses the local `./.github/actions/setup-node`
+  composite rather than pinning `actions/setup-node` again, so it must not bypass that action.
 - TASK-177's remaining work is a decision on the `assets` pixel and, for `clock`, a decision once a
   run reports the differing pixels of the readiness-gate recovery capture; not a CI change.
   _Amended 2026-10-31 (TASK-177):_ the diagnostic runs happened (41207262712, 41219905051,
