@@ -142,9 +142,11 @@ jobs:
             status=${PIPESTATUS[0]}
             wall=$(( $(date +%s%3N) - start ))
 
+            # The line-start summary carries the whole result, including the
+            # skipped part; a failing run's banner carries neither.
             tests="$(
-              grep -m1 -oE 'Tests +[0-9]+ (passed|failed)[^|]*' "$log" |
-                tr -s ' '
+              grep -m1 -oE '^ *Tests +[0-9]+ (passed|failed).*' "$log" |
+                tr -s ' ' | sed 's/^ //; s/ *$//'
             )"
             duration="$(grep -m1 -oE 'Duration +[^ ]+' "$log" | tr -s ' ')"
             renderer="$(
