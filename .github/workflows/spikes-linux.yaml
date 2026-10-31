@@ -119,9 +119,9 @@ jobs:
       - name: Install Chromium for the spike suites
         run: pnpm exec playwright install --with-deps chromium
 
-      # Ubuntu restricts user namespaces for downloaded executables. Allow only
-      # the test browser to create them; do not disable Chromium's sandbox.
-      # Identical to the step in check.yaml.
+      # Identical to the step in check.yaml, which needs it for the sandboxed
+      # render tests. It is inert for the spikes: no spike config sets
+      # chromiumSandbox: true, so Playwright adds --no-sandbox.
       - name: Allow sandboxed Playwright Chromium on the CI runner
         run: |
           sudo apparmor_parser -r /dev/stdin <<EOF

@@ -23,14 +23,14 @@ Previous records ([A](../../motion/knowledge/spike-a-seekability.md), [B](../../
 
 ## Environment
 
-| Item            | Value                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------- |
-| Runner          | `ubuntu-latest`: image `ubuntu26`, `ImageVersion` `20261026.180.1`                                            |
-| OS              | Linux 7.0.0-1017-azure x86_64                                                                                 |
-| Node / pnpm     | 26.12.0 / 12.15.0 (`.node-version`, `packageManager`)                                                         |
-| Playwright      | 1.64.1; Chrome for Testing **156.0.8078.4** (`playwright chromium v1248`)                                     |
-| WebGL backend   | `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)`                |
-| Browser install | `playwright install --with-deps chromium` plus the AppArmor userns profile from `check.yaml`; sandbox enabled |
+| Item            | Value                                                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Runner          | `ubuntu-latest`: image `ubuntu26`, `ImageVersion` `20261026.180.1`                                                                                                                                                       |
+| OS              | Linux 7.0.0-1017-azure x86_64                                                                                                                                                                                            |
+| Node / pnpm     | 26.12.0 / 12.15.0 (`.node-version`, `packageManager`)                                                                                                                                                                    |
+| Playwright      | 1.64.1; Chrome for Testing **156.0.8078.4** (`playwright chromium v1248`)                                                                                                                                                |
+| WebGL backend   | `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)`                                                                                                                           |
+| Browser install | `playwright install --with-deps chromium`, plus the AppArmor userns profile from `check.yaml`, which is inert here: no spike config sets `chromiumSandbox: true`, so Playwright launches every suite with `--no-sandbox` |
 
 All six runs report this image, toolchain and Chromium build: their thirty `environment.txt` files are
 identical. The reproduction is

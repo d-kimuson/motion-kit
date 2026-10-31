@@ -117,7 +117,7 @@ The original optional inspection PNG visibly contains all five aligned blue rows
 
 Each repetition has **111 captures**: 31 per candidate (28 timed, one raw, two held), sixteen negative-control frames and two gate-recovery frames (the recovery capture and the post-paint re-capture). With the optional inspection PNG it has 112 captures (the same path is overwritten per repetition). The command captures **333 images**, or 336 with inspection. One JSON report contains all three `repetitions`, including individual costs and sequential observations, plus `costRanges` with each mechanism's `meansMs`, `minMeanMs` and `maxMeanMs`; preserve stdout when reproducing measurements.
 
-This script remains **outside `pnpm test`** and the CI gates ([ADR](../../../decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)); three repetitions now take about 39 s locally. Linux was qualified by the first of six runs: **1 of 5** passed (48.76 s); its four failures carry no verdict and the later runs attribute them by analogy only ([record](../../render/knowledge/20261031-linux-spike-qualification.md)). The package exports/files are unchanged; `spikes/` is not shipped.
+This script remains **outside `pnpm test`** and the CI gates ([ADR](../../../decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)); three repetitions now take about 39 s locally. Linux was qualified by the first of six runs: **1 of 5** passed (49.13 s wall); its four failures carry no verdict and the later runs attribute them by analogy only ([record](../../render/knowledge/20261031-linux-spike-qualification.md)). The package exports/files are unchanged; `spikes/` is not shipped.
 
 ## Verification and residuals
 
