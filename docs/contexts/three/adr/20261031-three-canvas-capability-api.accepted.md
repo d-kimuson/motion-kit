@@ -16,12 +16,14 @@ Content inside a `ThreeCanvas` reads motion-kit time with the existing core hook
 
 ```ts
 export type ThreeCanvasProps = Omit<CanvasProps, 'frameloop' | 'gl' | 'dpr'> & {
-  gl?: Omit<WebGLRendererParameters, 'preserveDrawingBuffer' | 'canvas'>;
+  gl?: Omit<WebGLRendererParameters, 'preserveDrawingBuffer' | 'canvas' | 'context'>;
   dpr?: number;
 };
 ```
 
 - Renders R3F `<Canvas frameloop="never" dpr={dpr ?? 1}>` with `gl={{ ...gl, preserveDrawingBuffer: true }}`, calls `renderer.setAnimationLoop(null)` after creation and chains the caller's `onCreated`. Every other `CanvasProps` field passes through: motion-kit does not restrict what three or R3F can express. A renderer factory is not accepted, and `preserveDrawingBuffer` is not configurable, because capture reads the default framebuffer (R2 has not validated an alternative).
+
+  _Amended 2026-10-31 (TASK-184):_ a pre-made WebGL `context` is not accepted either, so `gl` omits `'context'` as well as `'preserveDrawingBuffer'` and `'canvas'`. Three renders into a supplied context's own canvas and its attributes are fixed when it is created, so the forced `preserveDrawingBuffer: true` would not reach that buffer and the capture could be blank without a Diagnostic.
 
 - Children are wrapped in the canvas's own `<Suspense fallback={null}>`, with a generation probe as the **last child inside that same boundary**. The probe reads `useCompositionFrame().generation` and reports it from `useLayoutEffect`, so it commits only after every sibling — including R3F `useLoader` assets — has resolved. A suspending child therefore keeps the boundary on its fallback and no generation is reported.
 - Each mounted canvas registers one integration through `useCompositionRuntime().registerIntegration`, with the id `three-canvas:${useId()}`. That is the whole ownership model: a canvas advances its own root and never calls `runGlobalEffects`, never advances another canvas.

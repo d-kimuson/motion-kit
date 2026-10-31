@@ -73,7 +73,8 @@ const Spinner = () => {
 
 `ThreeCanvas` opens the canvas with `frameloop="never"`, a stopped R3F clock, `dpr` 1 and
 `preserveDrawingBuffer: true`, then advances the root once per settled frame and waits for the GPU
-before the capture. Two rules keep that guarantee:
+before the capture. It accepts neither a renderer factory nor a pre-made WebGL context: either would
+fix the drawing buffer's attributes before motion-kit can force `preserveDrawingBuffer`. Two rules keep that guarantee:
 
 - **Derive, do not integrate.** A value written from `useTime()` is a pure function of the frame. A
   value that adds a delta, eases towards a previous value, or reads a wall clock is history, and

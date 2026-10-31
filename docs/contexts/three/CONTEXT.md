@@ -18,7 +18,7 @@
 - The R3F clock never runs on its own; every frame is advanced from the timeline.
 - A canvas advances only its own root (`advance(seconds, false)`): never global effects, never another canvas.
 - Nothing outside `src/three` imports `three` or `@react-three/*` (lint-enforced).
-- `preserveDrawingBuffer` is always true and `dpr` defaults to 1, so a capture reads the buffer the frame was drawn into and does not depend on the host display.
+- `preserveDrawingBuffer` is always true and `dpr` defaults to 1, so a capture reads the buffer the frame was drawn into and does not depend on the host display. A renderer factory and a pre-made WebGL `context` are rejected (`ThreeCanvasProps['gl']` omits both), because either would fix the buffer before it can be forced.
 - `CameraRig` writes every pose field on every committed frame; an omitted `fov`/`zoom` is the camera's value at mount, never the previous frame's.
 - A frame is captured only after the canvas's own Suspense boundary has committed the frame's generation and the root has a non-zero measured size. A fallback commit is not a canvas acknowledgement.
 - A canvas with no `useFrame` subscriber is Tier B; any subscriber makes it Tier C, reported as `seek.uncontrolled`. motion-kit's own components never register one, and an unknown canvas is never assumed seekable because it advances manually.
