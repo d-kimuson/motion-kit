@@ -2,7 +2,11 @@ import type { ResolvedConfig } from 'vite';
 
 import { createReadStream, existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { createServer as createHttpServer, type ServerResponse } from 'node:http';
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import { join, relative, resolve } from 'node:path';
 import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
@@ -131,6 +135,8 @@ try {
   configPath = loaded?.path ?? configPath;
   const config = loaded?.config ?? {};
   let enforceOwned: (() => void) | undefined;
+  // Set once the dev server exists; answers true for a request it handled.
+  let previewRoutes: ((request: IncomingMessage, response: ServerResponse) => boolean) | undefined;
   const resolved = await vite.resolveConfig(
     {
       ...config,
@@ -139,6 +145,16 @@ try {
       mode: 'development',
       plugins: [
         loadingPlugin(entry),
+        {
+          name: 'motion-kit-preview-routes',
+          // A middleware added here runs right after Vite's own Host check (server.allowedHosts),
+          // so a DNS-rebound page cannot read the preview routes.
+          configureServer(server) {
+            server.middlewares.use((request, response, next) => {
+              if (previewRoutes?.(request, response) !== true) next();
+            });
+          },
+        },
         ...(await namedPlugins(config.plugins ?? [], report)),
         {
           name: 'motion-kit-loading-policy',
@@ -288,21 +304,13 @@ try {
       },
     );
   // Preview routes exist only in a preview session; the renderer's server stays as it was.
-  const servePreview = (
-    path: string,
-    url: URL,
-    host: string | undefined,
-    response: ServerResponse,
-  ): boolean => {
+  const servePreview = (request: IncomingMessage, response: ServerResponse): boolean => {
     if (input.mode !== 'preview') return false;
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const path = url.pathname;
     if (path !== previewPath && path !== preview.eventsUrl && path !== preview.audioUrl)
       return false;
-    // These routes answer ahead of Vite's middlewares, so they make Vite's Host check their own.
-    // Without it, DNS rebinding would let any page the user opens read what the audio route serves.
-    if (!loopbackHost(host)) {
-      response.statusCode = 403;
-      response.end();
-    } else if (path === previewPath) serveHtml(response, previewPath, previewShell(preview));
+    if (path === previewPath) serveHtml(response, previewPath, previewShell(preview));
     else if (path === preview.eventsUrl) {
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -351,15 +359,10 @@ try {
     }
     return true;
   };
-  const loopbackHost = (host: string | undefined): boolean => {
-    const address = http.address();
-    if (address === null || typeof address === 'string') return false;
-    return host === `127.0.0.1:${address.port}` || host === `localhost:${address.port}`;
-  };
+  previewRoutes = servePreview;
   const http = createHttpServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     if (url.pathname === shellPath) serveHtml(response, shellPath, htmlShell());
-    else if (servePreview(url.pathname, url, request.headers.host, response)) return;
     else
       server.middlewares(request, response, () => {
         response.statusCode = 404;

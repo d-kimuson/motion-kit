@@ -17,7 +17,7 @@ if (!isFileLoadingAllowed(server.config, file)) {
 // then read `file` and respond with its bytes
 ```
 
-`isFileLoadingAllowed` applies the `server.fs` allow and deny lists. It does not check the `Host` header: Vite does that in its own middlewares, so a route answering ahead of them must reject a non-loopback `Host` itself, or DNS rebinding lets any page read what it serves. The preview audio route in `src/render/loading/server.ts` does both.
+`isFileLoadingAllowed` applies the `server.fs` allow and deny lists. It does not check the `Host` header; Vite does that in its own middlewares. Add the route with `server.middlewares.use` inside a plugin's `configureServer` hook, which runs right after Vite's Host check, not ahead of Vite's middlewares, or DNS rebinding lets any page read what it serves. The preview audio route in `src/render/loading/server.ts` does both.
 
 ## Why Not Fixed
 

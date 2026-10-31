@@ -124,24 +124,27 @@ it('serves the host page, the preview shell and audio under the Vite fs policy',
   expect((await fetch(audio)).status).toBe(400);
 });
 
-/** A GET whose Host header names another site, as a DNS-rebound page sends. */
-const statusFromForeignHost = (url: URL) =>
+/** A GET with the given Host header; a DNS-rebound page sends its own site's name. */
+const statusFromHost = (url: URL, host: string) =>
   new Promise<number | undefined>((settle, fail) => {
-    get(url, { headers: { host: 'rebound.example' } }, (response) => {
+    get(url, { headers: { host } }, (response) => {
       response.resume();
       settle(response.statusCode);
     }).on('error', fail);
   });
 
-it('refuses the preview routes to a foreign Host', async () => {
+it("applies Vite's Host check to the preview routes", async () => {
   const result = await open(fixture());
   if (!result.ok) throw new Error('Preview failed to start');
   const { url } = result.value;
   const audio = new URL('/__motion-kit/preview/audio?src=audio/voice.wav', url);
   const events = new URL('/__motion-kit/preview/events', url);
   for (const route of [new URL(url), audio, events]) {
-    expect(await statusFromForeignHost(route)).toBe(403);
+    expect(await statusFromHost(route, 'rebound.example')).toBe(403);
   }
+  // A port forward changes the port in the Host, which Vite accepts for a loopback name.
+  expect(await statusFromHost(audio, 'localhost:9000')).toBe(200);
+  expect(await statusFromHost(audio, '[::1]:9000')).toBe(200);
 });
 
 it('emits reload when a served module changes and serves the new source', async () => {
