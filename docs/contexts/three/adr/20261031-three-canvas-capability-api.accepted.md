@@ -80,7 +80,7 @@ Controls and damping, physics, `AnimationMixer`, feedback or temporal effects, s
 - Tier C is decided by the presence of any `useFrame` subscriber, so a Canvas that legitimately needs a post-render callback (`useFrame` with zero state) is still Tier C. That is deliberate: motion-kit cannot distinguish it from a delta integrator.
 - The `seekability` getter keeps the registration stable, so R3F root readiness does not bump `resourceRevision` and does not force a re-settlement.
 - `RootState.internal.subscribers` is the one place this integration depends on R3F internals. TASK-185 must re-check it together with the clock and lifecycle behavior on an R3F upgrade, and add a test if the shape changes.
-- The `three-dom` project adds browser time to `pnpm test`: about 4 s for the canvas and camera tests and 13 s for the two determinism Compositions on macOS arm64 with SwiftShader. CI runs it as its own step, apart from the Composition DOM step.
+- The `three-dom` project adds browser time to `pnpm test`: about 4 s for the canvas and camera tests on macOS arm64 with SwiftShader, and CI runs it as its own step, apart from the Composition DOM step. The two determinism Compositions run in the `frame-transport` project, not in `three-dom`.
 
 ## Alternatives
 

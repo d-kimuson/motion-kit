@@ -11,7 +11,7 @@
 | Camera Pose       | `CameraPose`               | The absolute camera state one frame asks for: position, `lookAt`, `up`, and optionally `fov`/`zoom`.                      |
 | Manual Advance    | `advance(time)`            | Rendering one R3F frame at a given time, the only way the scene progresses.                                               |
 | Canvas Settlement | `settle(snapshot, signal)` | The canvas's readiness and render work for one frame generation: root and size, committed generation, advance, GPU fence. |
-| Generation Probe  | `GenerationProbe`          | The last child of a canvas's own Suspense boundary; it reports the frame generation of the commit it committed in.        |
+| Generation Probe  | `GenerationProbe`          | The last child of a canvas's own Suspense boundary; it reports the frame generation of the commit it belongs to.          |
 
 ## Invariants
 
