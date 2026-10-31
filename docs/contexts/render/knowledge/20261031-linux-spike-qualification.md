@@ -97,9 +97,10 @@ changes across platforms — it selected Metal on the Mac and selects software r
 
 The macOS record ([swiftshader warning](../../agent/knowledge/20261029-swiftshader-warning.md)) shows
 `Automatic fallback to software WebGL has been deprecated…` when Playwright's
-`--enable-unsafe-swiftshader` is absent. On Linux it appeared **zero times in all 25 runs** of run 1,
-including `swiftshader-no-opt-in`, which removes the switch from both the spike's arguments and
-Playwright's defaults, and still measured SwiftShader and rendered correctly. The logs carry the page
+`--enable-unsafe-swiftshader` is absent. On Linux it appeared **zero times**: no log of the six runs carries it. That includes all 30
+`three-flags` repetitions, each of which runs `swiftshader-no-opt-in`. That profile removes the
+switch from both the spike's arguments and Playwright's defaults, and it still measured SwiftShader
+and rendered correctly. The logs carry the page
 console — the channel on which macOS recorded the warning — but not Chromium's process stderr, so the
 absence is a console observation, not a claim about every stderr line the browser emits. The warning is
 therefore a property of the platform's Chromium build, not of software rendering as such; it cannot be
