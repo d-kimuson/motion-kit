@@ -300,6 +300,11 @@ const docsTopicRows = [
     id: 'authoring',
     summary: 'Compositions, props, time hooks, sequences, transitions, assets, and audio.',
   },
+  {
+    id: 'three',
+    summary:
+      'Three.js scenes with React Three Fiber, the peer dependencies, and what breaks determinism.',
+  },
   { id: 'determinism', summary: 'What a pure function of time guarantees and what breaks it.' },
   {
     id: 'examples',
