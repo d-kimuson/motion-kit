@@ -1,0 +1,58 @@
+import { z } from 'zod';
+
+import { type Result } from '../lib/result.ts';
+
+/** Playback samples this many frames per second unless the query says otherwise. */
+export const defaultPreviewFps = 12;
+
+/** The selection a preview host page carries in its query, so the server keeps none. */
+export type PreviewQuery = Readonly<{
+  compositionId?: string;
+  props: Readonly<Record<string, unknown>>;
+  fps: number;
+}>;
+
+const fpsSchema = z.coerce.number().int().min(1).max(60);
+const propsSchema = z.record(z.string(), z.unknown());
+const invalid = (message: string, hint: string): Result<never> => ({
+  ok: false,
+  error: { code: 'cli.invalid-arguments', severity: 'error', message, hint },
+});
+
+export const parsePreviewQuery = (search: string): Result<PreviewQuery> => {
+  const params = new URLSearchParams(search);
+  const compositionId = params.get('composition') ?? undefined;
+  const fpsText = params.get('fps');
+  const fps = fpsSchema.safeParse(fpsText ?? defaultPreviewFps);
+  if (!fps.success)
+    return invalid(`Preview fps "${fpsText ?? ''}" is invalid.`, 'Use an integer from 1 to 60.');
+  const propsText = params.get('props');
+  let props: unknown = {};
+  if (propsText !== null)
+    try {
+      props = JSON.parse(propsText);
+    } catch {
+      return invalid('Preview props are not valid JSON.', 'Pass props as a JSON object.');
+    }
+  const record = propsSchema.safeParse(props);
+  if (!record.success)
+    return invalid('Preview props must be a JSON object.', 'Pass props as a JSON object.');
+  return {
+    ok: true,
+    value: {
+      ...(compositionId === undefined ? {} : { compositionId }),
+      props: record.data,
+      fps: fps.data,
+    },
+  };
+};
+
+/** The query `parsePreviewQuery` reads back; defaults are left out. */
+export const previewQueryString = (query: PreviewQuery): string => {
+  const params = new URLSearchParams();
+  if (query.compositionId !== undefined) params.set('composition', query.compositionId);
+  if (Object.keys(query.props).length > 0) params.set('props', JSON.stringify(query.props));
+  if (query.fps !== defaultPreviewFps) params.set('fps', String(query.fps));
+  const text = params.toString();
+  return text === '' ? '' : `?${text}`;
+};

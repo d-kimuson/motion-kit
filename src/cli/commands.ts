@@ -76,6 +76,18 @@ const checkCommand = new Command('check')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
+const previewCommand = new Command('preview')
+  .argument('<entry>')
+  .option('--composition <id>')
+  .option('--props <json>')
+  .option('--preview-fps <n>', 'frames sampled per second while playing (default: 12)')
+  .option('--port <n>', 'loopback port to listen on (default: an ephemeral one)')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--json')
+  .exitOverride()
+  .configureOutput({ outputError: () => {} });
+
 const docsCommand = new Command('docs')
   .argument('[topic]')
   .option('--list')
@@ -83,11 +95,14 @@ const docsCommand = new Command('docs')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-export const commands: Readonly<Record<'render' | 'frame' | 'docs' | 'check', Command>> = {
+export const commands: Readonly<
+  Record<'render' | 'frame' | 'docs' | 'check' | 'preview', Command>
+> = {
   render: renderCommand,
   frame: frameCommand,
   docs: docsCommand,
   check: checkCommand,
+  preview: previewCommand,
 };
 
 /** The long names of the options `command` declares as taking a value (`--opt <value>`). */
@@ -100,7 +115,7 @@ const valueTakingLongs = (command: Command): string[] =>
  * The options that consume the following argv token as their value, derived from the declarations
  * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`,
  * `--concurrency`, `--frame`, `--predecessor`, `--history`, `--channel-tolerance`, `--changed-ratio`,
- * `--project-root` and `--vite-config` today, while boolean flags take none.
+ * `--preview-fps`, `--port`, `--project-root` and `--vite-config` today, while boolean flags take none.
  *
  * Only long names are collected: `--opt <value>` is the form the resolver skips. A value-taking
  * option declared with a short alias (`-o <value>`) would slip past it, so none has one today, and

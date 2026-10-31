@@ -6,6 +6,13 @@ export const loadingFailure = (operation: string): Diagnostic => ({
   message: `Loading ${operation} failed.`,
   hint: `Check ${operation} and the project configuration; the loader uses bundled Vite 7.3.7.`,
 });
+/** A preview's Vite config decides its plugins and module graph, so a change to it ends the preview. */
+export const previewConfigChanged = (config: string): Diagnostic => ({
+  code: 'render.page-error',
+  severity: 'error',
+  message: `The Vite config ${config} changed, so the preview stopped.`,
+  hint: 'Run motion-kit preview again to load the new configuration.',
+});
 export const configFailure = (name: string, config: string): Diagnostic => ({
   code: 'render.page-error',
   severity: 'error',
@@ -62,3 +69,10 @@ export class LoadingConfigError extends Error {
     this.key = key;
   }
 }
+/** A requested loopback port is taken; an ephemeral port never is. */
+export const portFailure = (port: number): Diagnostic => ({
+  code: 'render.page-error',
+  severity: 'error',
+  message: `Port ${port} on 127.0.0.1 is already in use.`,
+  hint: 'Stop the process listening on it, or choose another port.',
+});

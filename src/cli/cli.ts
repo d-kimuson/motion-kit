@@ -10,14 +10,17 @@ import {
   type DocsData,
   type Envelope,
   type FrameData,
+  type PreviewData,
   type RenderData,
 } from '../agent/cli-output.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
+import { defaultPreviewFps, previewQueryString } from '../preview/query.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { checkComposition, checkReportPassed } from '../render/check/check.ts';
 import { defaultCheckComparison, type CheckComparison } from '../render/check/compare.ts';
+import { openPreviewSession } from '../render/loading/preview-session.ts';
 import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
 import { renderVideo } from '../render/render-video.ts';
 import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
@@ -26,6 +29,7 @@ import {
   type CheckArgs,
   type DocsArgs,
   type FrameArgs,
+  type PreviewArgs,
   type RenderArgs,
 } from './args.ts';
 import { commands } from './commands.ts';
@@ -70,14 +74,19 @@ type ParseOutcome =
   | { readonly kind: 'usage' }
   | {
       readonly kind: 'invalid';
-      readonly command: 'render' | 'frame' | 'docs' | 'check';
+      readonly command: CommandName;
       readonly json: boolean;
       readonly hint: string;
     }
   | { readonly kind: 'args'; readonly value: Record<string, unknown> };
 
-const isCommandName = (value: unknown): value is 'render' | 'frame' | 'docs' | 'check' =>
-  value === 'render' || value === 'frame' || value === 'docs' || value === 'check';
+type CommandName = 'render' | 'frame' | 'docs' | 'check' | 'preview';
+const isCommandName = (value: unknown): value is CommandName =>
+  value === 'render' ||
+  value === 'frame' ||
+  value === 'docs' ||
+  value === 'check' ||
+  value === 'preview';
 
 /**
  * Why argv named no command the CLI can run. Each hint says what the caller can do next: `--json`
@@ -98,7 +107,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
     return diagnostic(
       'cli.invalid-arguments',
       `The ${command} subcommand is not implemented yet.`,
-      `${command} is not implemented yet; use render, frame, docs or check.`,
+      `${command} is not implemented yet; use render, frame, docs, check or preview.`,
     );
   return invalidArguments(`Put the subcommand first: motion-kit ${command} [options].`);
 };
@@ -189,6 +198,21 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         json,
       },
     };
+  if (command === 'preview')
+    return {
+      kind: 'args',
+      value: {
+        command,
+        entry: parsable.processedArgs[0],
+        composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        props: options['props'],
+        previewFps: options['previewFps'],
+        port: options['port'],
+        json,
+      },
+    };
   return {
     kind: 'args',
     value: {
@@ -201,7 +225,7 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
 };
 
 /** Every outcome that becomes an envelope: a result, or a failure carrying Diagnostics. */
-type EnvelopeData = RenderData | FrameData | DocsData | CheckData;
+type EnvelopeData = RenderData | FrameData | DocsData | CheckData | PreviewData;
 type EnvelopeOutcome =
   | {
       readonly ok: true;
@@ -757,6 +781,8 @@ const summarize = (envelope: Envelope): string => {
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
       return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
     }
+    if (envelope.command === 'preview')
+      return `serving ${envelope.data.url} (Ctrl-C to stop); ready`;
     if (envelope.command === 'frame') {
       const data = envelope.data;
       return data.format === 'png'
@@ -782,6 +808,69 @@ const emit = (envelope: Envelope, json: boolean): number => {
   if (json) process.stdout.write(`${JSON.stringify(envelope)}\n`);
   else printHuman(envelope);
   return code;
+};
+
+/**
+ * Serve the preview until the caller stops it (agent ADR, amended by TASK-246). Readiness is the
+ * result: its envelope is written once the host page is listening, and the process keeps serving.
+ * A stop after that is the normal end (exit 0); a stop before it is a cancellation like any other.
+ * A failure after readiness cannot be a second envelope, so it is one stderr line and exit 1.
+ */
+const runPreview = async (
+  args: PreviewArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+  durationMs: () => number,
+): Promise<number> => {
+  const aborted = (): number => {
+    process.stderr.write('preview aborted; nothing is being served\n');
+    return abortedExitCode(signal);
+  };
+  if (signal.aborted) return aborted();
+  if (!isFile(resolve(config.projectRoot, args.entry)))
+    return emit(
+      buildEnvelope('preview', failure([entryNotFound(args.entry)]), durationMs()),
+      args.json,
+    );
+  const opened = await openPreviewSession({
+    projectRoot: config.projectRoot,
+    entry: args.entry,
+    ...(config.viteConfig === undefined ? {} : { viteConfig: config.viteConfig }),
+    ...(args.port === undefined ? {} : { port: args.port }),
+    signal,
+  });
+  if (!opened.ok)
+    return 'aborted' in opened
+      ? aborted()
+      : emit(buildEnvelope('preview', failure([opened.error]), durationMs()), args.json);
+  const session = opened.value;
+  try {
+    const url = `${session.url}${previewQueryString({
+      ...(args.composition === undefined ? {} : { compositionId: args.composition }),
+      props: args.props ?? {},
+      fps: args.previewFps ?? defaultPreviewFps,
+    })}`;
+    emit(
+      buildEnvelope(
+        'preview',
+        { ok: true, data: { format: 'preview', url }, diagnostics: [] },
+        durationMs(),
+      ),
+      args.json,
+    );
+    const stopped = Promise.withResolvers<undefined>();
+    const onAbort = () => stopped.resolve(undefined);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    const ended = await Promise.race([session.failed, stopped.promise]);
+    signal.removeEventListener('abort', onAbort);
+    if (ended === undefined) return 0;
+    const hint = ended.hint === undefined ? '' : ` — ${ended.hint}`;
+    process.stderr.write(`${ended.severity}: ${ended.code}: ${ended.message}${hint}\n`);
+    return 1;
+  } finally {
+    await session.dispose();
+  }
 };
 
 /** Every signal a caller stops a run with; each one means the same thing to the CLI. */
@@ -846,12 +935,14 @@ const usageText = `${[
   '  check         sample frames for determinism (requires --frame <n>)',
   '  docs [topic]  print a shipped guide; --list names the topics',
   '  frame         capture one or more frames to PNG',
+  "  preview       serve a browser preview with playback, scrubbing and the clips' audio",
   '  render        render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),',
   '                with --concurrency <n> renderers capturing at once (default: half the cores)',
   '',
   'Examples:',
   '  motion-kit render entry.tsx --out out.mp4',
   '  motion-kit check entry.tsx --frame 1,4 --history pool --json',
+  '  motion-kit preview entry.tsx --composition intro',
   '  motion-kit docs getting-started',
   '',
   'Run `motion-kit docs` to print the guide, or `motion-kit <command> --help` for command options.',
@@ -912,6 +1003,18 @@ export const runCli = async (
   const config = resolveRendererConfig(args, process.env, process.cwd());
   if (!config.ok)
     return emit(buildEnvelope(args.command, failure([config.error]), durationMs()), args.json);
+  if (args.command === 'preview') {
+    try {
+      return await runPreview(args, config.value, signal, durationMs);
+    } catch (error) {
+      if (error instanceof Error && error.stack !== undefined)
+        process.stderr.write(`${error.stack}\n`);
+      return emit(
+        buildEnvelope('preview', failure([internalUnexpected()]), durationMs()),
+        args.json,
+      );
+    }
+  }
   let outcome: CommandOutcome;
   // A cancelled run's line is written below, but a library that exits the process from its own
   // signal handler can end the run before that line is reached; this cover is the last chance to

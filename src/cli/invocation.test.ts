@@ -68,6 +68,7 @@ describe('resolveCommand', () => {
       'frame',
       'docs',
       'check',
+      'preview',
       'inspect',
       'validate',
     ]);
@@ -85,7 +86,9 @@ describe('resolveCommand', () => {
       '--frame',
       '--history',
       '--out',
+      '--port',
       '--predecessor',
+      '--preview-fps',
       '--project-root',
       '--props',
       '--scale',

@@ -236,15 +236,40 @@ export const DocsArgsSchema = z
       });
   });
 
+export const PreviewArgsSchema = z.strictObject({
+  command: z.literal('preview'),
+  projectRoot: rendererConfig.projectRoot,
+  viteConfig: rendererConfig.viteConfig,
+  entry,
+  composition,
+  props: propsText.optional(),
+  /** Frames the preview samples per second while playing; low by default (TASK-246). */
+  previewFps: z
+    .string()
+    .regex(/^(?:[1-9]|[1-5][0-9]|60)$/u, 'Use --preview-fps with an integer from 1 to 60.')
+    .transform(Number)
+    .optional(),
+  /** Loopback port; an ephemeral one when omitted. */
+  port: z
+    .string()
+    .regex(/^\d{1,5}$/u, 'Use --port with an integer from 0 to 65535.')
+    .transform(Number)
+    .pipe(z.int().max(65_535, 'Use --port with an integer from 0 to 65535.'))
+    .optional(),
+  json,
+});
+
 export const CliArgsSchema = z.discriminatedUnion('command', [
   RenderArgsSchema,
   FrameArgsSchema,
   DocsArgsSchema,
   CheckArgsSchema,
+  PreviewArgsSchema,
 ]);
 
 export type RenderArgs = z.infer<typeof RenderArgsSchema>;
 export type FrameArgs = z.infer<typeof FrameArgsSchema>;
 export type DocsArgs = z.infer<typeof DocsArgsSchema>;
 export type CheckArgs = z.infer<typeof CheckArgsSchema>;
+export type PreviewArgs = z.infer<typeof PreviewArgsSchema>;
 export type CliArgs = z.infer<typeof CliArgsSchema>;

@@ -238,7 +238,8 @@ defineComposition({
 - An invalid declaration — `endInFrames <= startInFrames`, a negative or non-integer frame, a
   non-finite volume — is rejected at `defineComposition` time as `render.page-error`. A declared file
   that cannot be opened is `asset.load-failed` before any frame is encoded.
-- Audio plays in the rendered `.mp4` only: there is no preview UI yet, and the frames route writes
+- Audio plays in the rendered `.mp4` and in [`motion-kit preview`](cli.md#preview), where each source
+  can be muted; the preview mix is approximate, so check the `.mp4`. The frames route writes
   pictures without sound.
 
 ## Three.js
@@ -275,7 +276,7 @@ bootstrap's own API: an entry never renders `Composition` itself.
 ## Not available in 0.0.1
 
 `interpolate`, `spring`, `keyframes`, easing, `Animate`, `Reveal` and `Stagger` (`/motion`);
-`defineTheme` and tokens (`/theme`); the scene presets (`/presets`); the preview UI; `inspect` and
+`defineTheme` and tokens (`/theme`); the scene presets (`/presets`); `inspect` and
 `validate`. Until `/motion` lands, motion
 is plain arithmetic on `useTime()` / `useSequence()`, which is exactly what the
 [reference examples](examples.md) do.

@@ -80,6 +80,27 @@ const CORE_RESTRICTION = {
     },
   ],
 };
+// The preview host is a browser page: core and shared utilities, React and Zod, nothing Node-side.
+const PREVIEW_RESTRICTION = {
+  paths: [],
+  patterns: [
+    {
+      group: [
+        '**/render/**',
+        '**/cli/**',
+        '**/agent/**',
+        '**/three/**',
+        'vite',
+        'vite/*',
+        'playwright',
+        'playwright/*',
+        '@playwright/*',
+      ],
+      message:
+        'The preview host runs in the browser and talks to the realm over the preview protocol only.',
+    },
+  ],
+};
 const mergeRestrictions = (...restrictions: (typeof THREE_RESTRICTION)[]) => ({
   paths: restrictions.flatMap((r) => r.paths),
   patterns: restrictions.flatMap((r) => r.patterns),
@@ -329,6 +350,17 @@ export default defineConfig({
         'no-restricted-imports': [
           'error',
           mergeRestrictions(THREE_RESTRICTION, NODE_RESTRICTION, CORE_RESTRICTION),
+        ],
+      },
+    },
+    {
+      // The preview host page runs in the user's browser next to the realm it drives; it reaches the
+      // realm only over the preview protocol, never through the Node-side render or CLI graph.
+      files: ['src/preview/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          mergeRestrictions(THREE_RESTRICTION, NODE_RESTRICTION, PREVIEW_RESTRICTION),
         ],
       },
     },

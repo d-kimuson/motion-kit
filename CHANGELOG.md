@@ -8,9 +8,19 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **Browser preview.** `motion-kit preview <entry>` serves a page on loopback where you play, scrub
+  and step a Composition in your own browser, with its declared audio (a mute checkbox per source,
+  remembered per project root) and a timeline of its named Sequences and audio clips. Options:
+  `--composition`, `--props`, `--preview-fps` (1 to 60, default 12), `--port`, `--project-root` and
+  `--vite-config`. Readiness is the result: one envelope (`data: { format: 'preview', url }`) or the
+  line `serving <url> (Ctrl-C to stop); ready`, then it runs until stopped, and a stop after readiness
+  exits `0`. A source change reloads the Composition at the same frame (there is no HMR), and a Vite
+  config change ends the preview with `render.page-error`. `PreviewDataSchema` and the `preview`
+  command join the CLI output contract. The preview samples frames at a low rate and mixes audio in the
+  browser, so it can differ from the `.mp4`.
 - **Named Sequences.** `Sequence` and `TransitionScene` accept an optional `name`. Named ancestors
   form a path, and the runtime reports each mounted named Sequence as the frames it is visible in,
-  so a host such as the planned preview can show and anchor on shots instead of bare frame numbers.
+  so a host such as the preview can show and anchor on shots instead of bare frame numbers.
   Rendering is unchanged.
 - **Three.js canvas.** `@kimuson/motion-kit/three` exports `ThreeCanvas` and `CameraRig`. A canvas
   opens R3F with `frameloop="never"`, a stopped clock, DPR 1 and a preserved drawing buffer, and is

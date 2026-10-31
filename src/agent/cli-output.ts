@@ -129,6 +129,13 @@ export const CheckDataSchema = z.strictObject({
   ),
 });
 
+/** `motion-kit preview` writes this once the preview host is listening; it then serves until stopped. */
+export const PreviewDataSchema = z.strictObject({
+  format: z.literal('preview'),
+  /** The preview host page, its selection (Composition, props, preview fps) in the query. */
+  url: z.string().min(1),
+});
+
 const common = {
   schemaVersion: z.literal(1),
   ok: z.boolean(),
@@ -140,7 +147,15 @@ const common = {
 const deferredData = z.record(z.string(), z.json());
 
 /** The known subcommands. `command` is this enum or null, never a sentinel member. */
-export const CommandSchema = z.enum(['render', 'frame', 'docs', 'check', 'inspect', 'validate']);
+export const CommandSchema = z.enum([
+  'render',
+  'frame',
+  'docs',
+  'check',
+  'preview',
+  'inspect',
+  'validate',
+]);
 export type Command = z.infer<typeof CommandSchema>;
 
 /** The envelope's own reading of `command`: a known subcommand, or null when argv named none. */
@@ -152,6 +167,11 @@ export const EnvelopeSchema = z
     z.strictObject({ ...common, command: z.literal('frame'), data: FrameDataSchema.nullable() }),
     z.strictObject({ ...common, command: z.literal('docs'), data: DocsDataSchema.nullable() }),
     z.strictObject({ ...common, command: z.literal('check'), data: CheckDataSchema.nullable() }),
+    z.strictObject({
+      ...common,
+      command: z.literal('preview'),
+      data: PreviewDataSchema.nullable(),
+    }),
     z.strictObject({ ...common, command: z.literal('inspect'), data: deferredData.nullable() }),
     z.strictObject({ ...common, command: z.literal('validate'), data: deferredData.nullable() }),
     // No subcommand could be identified from argv (`motion-kit --json`, `motion-kit unknown --json`).
@@ -183,4 +203,5 @@ export type RenderData = z.infer<typeof RenderDataSchema>;
 export type FrameData = z.infer<typeof FrameDataSchema>;
 export type DocsData = z.infer<typeof DocsDataSchema>;
 export type CheckData = z.infer<typeof CheckDataSchema>;
+export type PreviewData = z.infer<typeof PreviewDataSchema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
