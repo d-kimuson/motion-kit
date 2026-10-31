@@ -1,15 +1,16 @@
 # Linux qualification of the spike suites and the R3F flag matrix
 
-The spike suites now have Linux measurements from three runs of
+The spike suites now have Linux measurements from four runs of
 `.github/workflows/spikes-linux.yaml` on `ubuntu-latest`, five repetitions per suite each:
 [41204901232](https://github.com/kimuson/motion-kit/actions/runs/41204901232),
-[41207262712](https://github.com/kimuson/motion-kit/actions/runs/41207262712) and
-[41219905051](https://github.com/kimuson/motion-kit/actions/runs/41219905051) (all `pull_request`
-events on PR #65). `motion` passed 5/5 in all three, `three` 5/5, `three-flags` 5/5, `assets` 0/5 and
-`clock` 1/5, 4/5, 0/5. The three passing suites reproduce their macOS results, including exact DOM
-and PNG equality, on ANGLE's SwiftShader (Subzero) Vulkan backend. Neither open failure is a missing
-readiness barrier: `assets` is a single screenshot pixel in the font fixture, unchanged across all
-three runs, and `clock` is the paused `<video>` presenting a picture that its `currentTime` does not
+[41207262712](https://github.com/kimuson/motion-kit/actions/runs/41207262712),
+[41219905051](https://github.com/kimuson/motion-kit/actions/runs/41219905051) and
+[41220801083](https://github.com/kimuson/motion-kit/actions/runs/41220801083) (all `pull_request`
+events on PR #65). `motion` passed 5/5 in all four, `three` 5/5, `three-flags` 5/5, `assets` 0/5 and
+`clock` 1/5, 4/5, 0/5, 3/5. The three passing suites reproduce their macOS results, including exact
+DOM and PNG equality, on ANGLE's SwiftShader (Subzero) Vulkan backend. Neither open failure is a
+missing readiness barrier: `assets` is a single screenshot pixel in the font fixture, unchanged across
+all four runs, and `clock` is the paused `<video>` presenting a picture that its `currentTime` does not
 fix — the one comparison the clock spike excludes from its own scope. The suites stay out of
 `check.yaml` ([ADR](../../../decisions/20261031-spike-suites-stay-out-of-ci.accepted.md));
 `.github/workflows/spikes-linux.yaml` is the on-demand harness.
@@ -41,20 +42,29 @@ every repetition log.
 Wall time is around the whole `pnpm spike:*` process. Five repetitions per command per run; Vitest's
 own duration stays within 1 s of it except for `three-flags`, which forks a child process per profile.
 
-| Suite               | Linux result, run 1 / 2 / 3 | Linux wall, run 1 | Linux wall, run 2 | Linux wall, run 3 | macOS baseline  |
-| ------------------- | --------------------------- | ----------------- | ----------------- | ----------------- | --------------- |
-| `spike:motion`      | **5/5**, 5/5, 5/5           | 29.48–30.06 s     | 29.77–30.91 s     | 29.06–30.59 s     | 29.38 / 29.42 s |
-| `spike:three`       | **5/5**, 5/5, 5/5           | 11.84–12.97 s     | 11.98–12.70 s     | 12.16–13.01 s     | 9.81 / 11.29 s  |
-| `spike:three:flags` | **5/5**, 5/5, 5/5           | 43.86–46.21 s     | 43.12–45.33 s     | 44.11–44.80 s     | 32.42 s         |
-| `spike:clock`       | **1/5**, 4/5, **0/5**       | 5.80–49.13 s      | 34.73–52.67 s     | 5.82–49.13 s      | 38.83 / 39.10 s |
-| `spike:assets`      | **0/5**, 0/5, 0/5           | 7.48–8.50 s       | 7.79–8.16 s       | 8.54–9.57 s       | 9.70 / 10.07 s  |
+| Suite               | Linux result across the four runs | Linux wall    | macOS baseline  |
+| ------------------- | --------------------------------- | ------------- | --------------- |
+| `spike:motion`      | **5/5** every run                 | 29.06–30.91 s | 29.38 / 29.42 s |
+| `spike:three`       | **5/5** every run                 | 11.84–13.01 s | 9.81 / 11.29 s  |
+| `spike:three:flags` | **5/5** every run                 | 32.21–46.21 s | 32.42 s         |
+| `spike:clock`       | **1/5**, 4/5, **0/5**, 3/5        | 3.60–52.67 s  | 38.83 / 39.10 s |
+| `spike:assets`      | **0/5** every run                 | 7.48–9.57 s   | 9.70 / 10.07 s  |
+
+- `motion` is indistinguishable from macOS, and `three` is 5–30% slower than the two macOS software
+  runs (means 11.70, 12.30, 12.51 and 12.23 s against 10.78 and 9.30 s). The other two suites move
+  more between runs than between platforms: `three-flags` took 32.21–33.95 s in run 41220801083 and
+  43.12–46.21 s in the other three (macOS 32.42 s), and a passing `clock` took 38.39–39.23 s there
+  against 49.13–52.67 s elsewhere (macOS 38.83–39.10 s). Wall time is therefore a runner-load
+  observation, not a platform measurement, and only the pass counts carry the qualification.
+  `assets` is not comparable at all: the failing test aborts before its fresh-fixture and Suspense
+  phases.
 
 - `motion` is indistinguishable from macOS. `three` is 8–30% slower than the two macOS software runs
   (mean 11.70 s, 12.30 s and 12.51 s against 10.78 and 9.30 s), `three-flags` about 37% slower
   (43.12–46.21 s against 32.42 s), and a passing `clock` 25–35% slower (49.13 s, 50.83–52.67 s,
   49.13 s against 38.83–39.10 s). `assets` is not comparable: the failing test aborts before its
   fresh-fixture and Suspense phases.
-- `three` reproduced every macOS comparison on Linux in all three runs: 14/14 seeded random, 10/10
+- `three` reproduced every macOS comparison on Linux in all four runs: 14/14 seeded random, 10/10
   fresh roots, 1/1 held frames, four `finish`/`readback`/`rAF`/`none` barriers 7/7 each, zero readback
   byte mismatches, and all four history-dependent negative controls mismatching in DOM and PNG. The
   non-preserved-buffer probe also behaved as on macOS: both screenshots matched the reference and the
@@ -111,7 +121,7 @@ position and value in all five repetitions each, decoded from the logged `Expect
 | Re-capture             | `rgb(255,255,247)` (blue channel 8 lower)                                                                                 |
 | Changed pixels / bytes | 1 pixel; 1 of 172,800 channel values (the 320×180 crop is encoded as 8-bit RGB, not RGBA)                                 |
 | Non-white content      | baseline 2,541 pixels in box `x 23–223`, `y 13–47`; re-capture 2,542 in `x 11–223` — the one extra is the differing pixel |
-| Reproducibility        | same position and value in all five repetitions of all three runs                                                         |
+| Reproducibility        | same position and value in all five repetitions of all four runs                                                          |
 
 The other ten tests pass, including 4/4 named asset failures, 4/4 never-settling diagnostics and the
 texture context-loss diagnostic, so the readiness behaviour the spike exists to prove is unaffected:
@@ -127,7 +137,7 @@ the whole `three` suite keep byte-exact equality on Linux.
 
 ## `clock`: the paused video's presented frame
 
-Fifteen repetitions over the three runs: `clock` passed 1/5, 4/5, then 0/5. A failure aborts the
+Twenty repetitions over the four runs: `clock` passed 1/5, 4/5, 0/5, then 3/5. A failure aborts the
 comparison, so only the thrown message reaches the log. Two messages carry the verdict: `e297a57` names
 the failing comparison and its DOM/PNG verdict, and the pixel diagnostic added with this record names
 the coordinate of the difference. Neither changes an assertion.
@@ -137,15 +147,17 @@ the coordinate of the difference. Neither changes an assertion.
 | 41204901232 | 4 of 5 | 1 × readiness-gate recovery (500 ms), 3 × own-clock order/hold   | none — predates `e297a57`'s verdict fields          |
 | 41207262712 | 1 of 5 | 1 × readiness-gate recovery (500 ms)                             | `{"dom":true,"png":false}`                          |
 | 41219905051 | 5 of 5 | 4 × own-clock `fresh` (250 ms ×3, 500 ms), 1 × recovery (500 ms) | DOM equal, pixels differ inside the video rectangle |
+| 41220801083 | 2 of 5 | 2 × own-clock `fresh` (500 ms, 1500 ms)                          | same, both inside the video rectangle               |
 
 **Attribution: the paused `<video>` presented a different picture at the same `currentTime`.** That is
 media frame presentation — which this spike's own scope excludes — and not clock nondeterminism and not
-a DOM-versus-paint timing problem. The evidence is the five failures of run 41219905051, the first run
-with the pixel diagnostic:
+a DOM-versus-paint timing problem. The evidence is the seven failures of the two runs with the pixel
+diagnostic (41219905051 and 41220801083):
 
 1. Every failure is DOM-equal and pixel-different, and every differing box lies inside the video
-   rectangle (`160×90` at `y 150`): `x 0–159`, `y 150–231` (6,893 pixels) for a 250 ms reference and
-   `x 0–159`, `y 150–233` (8,976 pixels) for 500 ms. None of the DOM boxes above `y 150` differs.
+   rectangle (`160×90` at `y 150`): `x 0–159`, `y 150–231` (6,893 pixels) for a 250 ms reference,
+   `x 0–159`, `y 150–233` (8,976 pixels) for 500 ms, and `x 0–159`, `y 150–239` (9,484 pixels) for
+   1500 ms. None of the DOM boxes above `y 150` differs.
 2. The compared DOM already carries every clock-derived value (`outerHTML` with the rAF box styles, the
    React value, `rafClock`, both CSS `currentTime`s, the computed transforms, `video.currentTime`,
    `seeking`, the microtask and the timer stamps), so `dom: true` says the clock state, the seek order
@@ -155,18 +167,19 @@ with the pixel diagnostic:
    released commit was painted, and what remains against the reference is entirely the video.
 4. It is not paint lag either: re-capturing after two native animation frames left the same 8,976
    video-rectangle pixels different.
-5. The sample pixels are different test-pattern colours for the same frame — `(0,150) 245,2,0` against
-   `(0,150) 128,0,254` — so these are different pictures, not a one-pixel raster deviation.
-6. The failing times are the ones that fall between 10 fps frames (250 ms between 0.2 and 0.3, 500 ms
-   between 0.4 and 0.5), and the failing comparisons are the ones where two pages reach that time by
-   different seek histories: a fresh page `0 → 250` against a baseline `0 → 100 → 250`. Which of the
-   two neighbouring frames is presented is not fixed by `currentTime`, and Chromium's choice inside the
-   media pipeline was not measured here.
+5. The sample pixels are different test-pattern colours for the same frame — `(0,150) 128,0,254`
+   against `(0,150) 245,2,0` — so these are different pictures, not a one-pixel raster deviation.
+6. The failing times are the times where the presented frame is ambiguous at 10 fps — 250 ms (between
+   frames 2 and 3), 500 ms and 1500 ms (exactly on frames 5 and 15) — while 100, 750, 1000 and 2000 ms
+   have not failed in twenty repetitions. The failing comparisons are the ones where two pages reach
+   that time by different seek histories: a fresh page `0 → 500` against a baseline `0 → 100 … → 500`.
+   Which of the neighbouring frames is presented is not fixed by `currentTime`, and Chromium's choice
+   inside the media pipeline was not measured here.
 
 Run 41204901232's three detail-less failures sit in the same comparisons (own-clock `order`/`fresh`
 against a baseline) and are attributed to this class by analogy only: their own logs carry no verdict.
-Run 41207262712's recovery failure has the same DOM/pixel verdict as run 41219905051's, which the
-diagnostic then located in the video.
+Run 41207262712's recovery failure has the same DOM/pixel verdict as the one the diagnostic located in
+the video.
 
 ### What this settles and what it leaves open
 
@@ -175,8 +188,8 @@ the failing comparisons differ only in pixels the spike declares out of scope. W
 decision, not a diagnosis:
 
 - Mask the video rectangle out of the PNG comparison, keeping byte equality for the rest of the frame.
-- Keep the full-frame comparison and stop seeking to times between 10 fps frames (250 and 500 ms in
-  this fixture), so the presented frame is unambiguous.
+- Keep the full-frame comparison and stop seeking to times whose presented frame is ambiguous at 10 fps
+  (250, 500 and 1500 ms in this fixture), so both pages present the same frame.
 - Keep asserting the full frame and record the failure as a known limit of the fixture.
 
 No comparison was relaxed for this record, because choosing between those is the maintainer's call
@@ -206,15 +219,15 @@ PNG, no tolerance, no disabled animation, no image threshold.
 
 ## Residuals
 
-- Three runs, five repetitions per suite each, one Linux image (`ubuntu26`, 20261026.180.1), one
+- Four runs, five repetitions per suite each, one Linux image (`ubuntu26`, 20261026.180.1), one
   Chromium build and one SwiftShader backend. A different runner image, a hardware GPU or an ARM
-  runner is unmeasured. The `clock` failure rate went 4/5, 1/5, 5/5 across three runs with no change to
-  the comparison, so how often a between-frames seek presents the neighbouring frame is load- or
-  timing-dependent and another run would report differently again.
+  runner is unmeasured. The `clock` failure rate went 4/5, 1/5, 5/5, 2/5 across four runs with no
+  change to the comparison, so how often an ambiguous video seek target presents the neighbouring
+  frame is load- or timing-dependent and another run would report differently again.
 - Both failures are attributed and open. `assets` is one screenshot pixel in the font fixture and `clock`
   is the paused video's presented frame; each needs a decision (a documented tolerance or a stable
-  capture path for `assets`; mask the video, avoid between-frames seek targets, or accept the limit for
-  `clock`). Neither comparison was relaxed here.
+  capture path for `assets`; mask the video, avoid ambiguous video seek targets, or accept the limit
+  for `clock`). Neither comparison was relaxed here.
 - Which mechanism inside Chromium's media pipeline picks the neighbouring frame, and whether the macOS
   occurrence is the same one, is unmeasured. A macOS failure with the pixel diagnostic in place would
   say.
