@@ -22,51 +22,79 @@ export const assetGroup = ({ kind, source }: RegisteredAsset): AssetGroup => {
   return { kind, key: source, label: source.slice(source.lastIndexOf('/') + 1) };
 };
 
-const sameGroup = (a: AssetGroup, b: AssetGroup) => a.kind === b.kind && a.key === b.key;
+const groupKey = (group: AssetGroup) => `${group.kind}\0${group.key}`;
+
+/** What one frame showed, for `observeAssetFrames`. */
+export type AssetFrame = Readonly<{
+  frame: number;
+  assets: readonly RegisteredAsset[];
+  /** The frame playback showed right before this one, if it did. */
+  continued?: number | undefined;
+}>;
 
 /**
- * Add the asset groups shown `frame` used to `spans`. A span grows over a frame next to it, and
- * over the frames between `continued` and `frame` when playback showed `continued` right before
- * and that frame used the group too: playback skips the frames it cannot show in time. Spans of a
- * group that come to touch are joined. Returns `spans` itself when nothing changed.
+ * Add the asset groups each frame used to `spans`, the frames in order. A span grows over a frame
+ * next to it, and over the frames between `continued` and `frame` when playback showed
+ * `continued` right before and that frame used the group too: playback skips the frames it cannot
+ * show in time. Spans of a group that come to touch are joined. The result stays ordered by start,
+ * a span changed later after one with the same start. Returns `spans` itself when nothing changed.
  */
+export const observeAssetFrames = (
+  spans: readonly AssetSpan[],
+  frames: readonly AssetFrame[],
+): readonly AssetSpan[] => {
+  // Each group's spans, and when each span last changed: the order among equal starts.
+  const byGroup = new Map<string, AssetSpan[]>();
+  const changedAt = new Map<AssetSpan, number>();
+  spans.forEach((span, index) => {
+    const key = groupKey(span.group);
+    byGroup.set(key, [...(byGroup.get(key) ?? []), span]);
+    changedAt.set(span, index);
+  });
+  let changes = spans.length;
+  for (const { frame, assets, continued } of frames) {
+    const used = new Map<string, { group: AssetGroup; failed: boolean }>();
+    for (const asset of assets) {
+      const group = assetGroup(asset);
+      const failed = asset.status === 'failed';
+      const known = used.get(groupKey(group));
+      if (known === undefined) used.set(groupKey(group), { group, failed });
+      else known.failed ||= failed;
+    }
+    for (const [key, { group, failed }] of used) {
+      const own = byGroup.get(key) ?? [];
+      const covering = own.find((span) => span.start <= frame && frame < span.end);
+      if (covering !== undefined && (covering.failed || !failed)) continue;
+      const bridged =
+        continued !== undefined && continued < frame
+          ? own.find((span) => span.start <= continued && continued < span.end)
+          : undefined;
+      let start = Math.min(frame, bridged?.start ?? frame);
+      let end = frame + 1;
+      let joinedFailed = failed;
+      // Join every span of the group that overlaps or touches [start, end).
+      const joined = own.filter((span) => span.start <= end && start <= span.end);
+      for (const span of joined) {
+        start = Math.min(start, span.start);
+        end = Math.max(end, span.end);
+        joinedFailed ||= span.failed;
+      }
+      const grown: AssetSpan = { group, start, end, failed: joinedFailed };
+      byGroup.set(key, [...own.filter((span) => !joined.includes(span)), grown]);
+      changedAt.set(grown, changes);
+      changes += 1;
+    }
+  }
+  if (changes === spans.length) return spans;
+  return [...byGroup.values()]
+    .flat()
+    .toSorted((a, b) => a.start - b.start || (changedAt.get(a) ?? 0) - (changedAt.get(b) ?? 0));
+};
+
+/** `observeAssetFrames` for one frame. */
 export const observeAssets = (
   spans: readonly AssetSpan[],
   frame: number,
   assets: readonly RegisteredAsset[],
   continued?: number,
-): readonly AssetSpan[] => {
-  const used: { group: AssetGroup; failed: boolean }[] = [];
-  for (const asset of assets) {
-    const group = assetGroup(asset);
-    const failed = asset.status === 'failed';
-    const known = used.find((item) => sameGroup(item.group, group));
-    if (known === undefined) used.push({ group, failed });
-    else known.failed ||= failed;
-  }
-  let next = spans;
-  for (const { group, failed } of used) {
-    const own = next.filter((span) => sameGroup(span.group, group));
-    const covering = own.find((span) => span.start <= frame && frame < span.end);
-    if (covering !== undefined && (covering.failed || !failed)) continue;
-    const bridged =
-      continued !== undefined && continued < frame
-        ? own.find((span) => span.start <= continued && continued < span.end)
-        : undefined;
-    let start = Math.min(frame, bridged?.start ?? frame);
-    let end = frame + 1;
-    let joinedFailed = failed;
-    // Join every span of the group that overlaps or touches [start, end).
-    const joined = own.filter((span) => span.start <= end && start <= span.end);
-    for (const span of joined) {
-      start = Math.min(start, span.start);
-      end = Math.max(end, span.end);
-      joinedFailed ||= span.failed;
-    }
-    next = [
-      ...next.filter((span) => !joined.includes(span)),
-      { group, start, end, failed: joinedFailed },
-    ].toSorted((a, b) => a.start - b.start);
-  }
-  return next;
-};
+): readonly AssetSpan[] => observeAssetFrames(spans, [{ frame, assets, continued }]);

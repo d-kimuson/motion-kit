@@ -157,6 +157,48 @@ it('reports the assets a frame registered, a failed one with the failure', async
   });
 });
 
+it('reads the Sequences and assets of a frame in a dry page without loading or showing it', async () => {
+  const root = container();
+  const source = '/dry-never-fetched.png';
+  const DryScene = () => (
+    <>
+      <Sequence name="intro" from={0} duration={1}>
+        <span>intro</span>
+      </Sequence>
+      <Picture source={source} />
+    </>
+  );
+  const page = createLoadingPage(
+    defineCompositions([
+      defineComposition({
+        id: 'dry',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 60,
+        component: DryScene,
+        schema: z.object({}),
+      }),
+    ]),
+    'preview',
+    { dry: true },
+  );
+  pages.push(page);
+  await answerPreview(page, { type: 'mount', id: 1, props: {} });
+  // A missing picture still stands in as ready: a dry page cannot tell which load would fail.
+  expect(await answerPreview(page, { type: 'show', id: 2, frame: 0 })).toMatchObject({
+    outcome: {
+      status: 'shown',
+      sequences: [{ path: ['intro'], startFrame: 0, endFrame: 30 }],
+      assets: [{ kind: 'image', source, status: 'ready' }],
+    },
+  });
+  expect(root.childNodes).toHaveLength(0);
+  expect(performance.getEntriesByType('resource').some(({ name }) => name.endsWith(source))).toBe(
+    false,
+  );
+});
+
 // A clip drawn as one picture per frame, like an image sequence, in a boundary of its own.
 const framePicture = (frame: number) =>
   `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${frame + 1}' height='1'/>`)}`;

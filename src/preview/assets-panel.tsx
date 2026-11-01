@@ -80,7 +80,8 @@ const AudioSources = ({
   );
 };
 
-const sameAsset = (a: RegisteredAsset, b: RegisteredAsset) =>
+type AssetIdentity = Pick<RegisteredAsset, 'kind' | 'source'>;
+const sameAsset = (a: AssetIdentity, b: AssetIdentity) =>
   a.kind === b.kind && a.source === b.source;
 
 /**

@@ -664,6 +664,39 @@ it('keeps the earliest frame an asset was seen at, whichever realm saw it first'
   expect(host.controller.state().assets[1]).toMatchObject({ source: '/photo.png', frame: 30 });
 });
 
+it('leaves an asset only the scan saw unchecked until the stage shows a frame that uses it', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  host.realms[0]?.shows[0]?.answer();
+  // The scan stands in for every asset, so what it reports says nothing about loading.
+  await answerScan(host.scanners[0], (frame) => ({
+    status: 'shown',
+    frame,
+    sequences: [],
+    assets: [{ kind: 'image', source: '/photo.png', status: 'ready' }],
+  }));
+  expect(host.controller.state().assets).toEqual([
+    { kind: 'font', source: '/inter.woff2', status: 'ready', frame: 0 },
+    { kind: 'image', source: '/photo.png', status: 'unchecked', frame: 0 },
+  ]);
+  host.controller.seek(45);
+  host.realms[0]?.shows[1]?.answer({
+    status: 'shown',
+    frame: 45,
+    sequences: [],
+    assets: [{ kind: 'image', source: '/photo.png', status: 'failed' }],
+  });
+  await flush();
+  expect(host.controller.state().assets[1]).toEqual({
+    kind: 'image',
+    source: '/photo.png',
+    status: 'failed',
+    frame: 0,
+  });
+  // The timeline marks it failed too.
+  expect(host.controller.state().assetSpans.map(({ failed }) => failed)).toContain(true);
+});
+
 it('holds the scan while playback runs or waits for its audio, and goes on after a pause', async () => {
   const host = setup({ scanner: true });
   await host.controller.reload();

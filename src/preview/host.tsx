@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 
 import {
   previewConfigElementId,
+  previewDryParameter,
   previewHostConfigSchema,
   previewLoadParameter,
   previewReloadEvent,
@@ -72,7 +73,7 @@ export const startPreviewHost = (): void => {
   const scanner = scannerFrame();
   let scans = 0;
   let loads = 0;
-  const connect = (element: HTMLIFrameElement | null, signal: AbortSignal) => {
+  const connect = (element: HTMLIFrameElement | null, signal: AbortSignal, dry = false) => {
     const target = element?.contentWindow;
     if (target === null || target === undefined)
       return Promise.reject(new Error('Preview frame is not attached'));
@@ -85,6 +86,7 @@ export const startPreviewHost = (): void => {
     );
     const url = new URL(shellUrl, window.location.href);
     url.searchParams.set(previewLoadParameter, load);
+    if (dry) url.searchParams.set(previewDryParameter, '1');
     // Replacing the location keeps reloads out of the session history, so Back leaves the preview.
     target.location.replace(url.href);
     return connecting;
@@ -98,10 +100,10 @@ export const startPreviewHost = (): void => {
       scanner.style.height = `${size.height}px`;
       scans += 1;
       const scan = scans;
-      const realm = await connect(scanner, signal);
+      const realm = await connect(scanner, signal, true);
       return {
         ...realm,
-        // Unloading the page frees the images the scan read; a later scan has loaded its own.
+        // Unloading the page frees the React tree the scan read; a later scan mounts its own.
         close: () => {
           realm.close();
           if (scan === scans) scanner.contentWindow?.location.replace('about:blank');
