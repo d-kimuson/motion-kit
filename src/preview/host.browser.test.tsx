@@ -262,6 +262,99 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
   ).toEqual([['intro', 'outro'], ['intro › title']]);
 });
 
+/** The tab of the timeline under the transport, which follows the side panel's tabs. */
+const timelineTab = (root: HTMLElement, name: string) => {
+  const element = [...root.querySelectorAll<HTMLElement>('[role=tab]')].findLast(
+    (item) => item.textContent === name,
+  );
+  if (element === undefined) throw new Error(`No ${name} timeline tab`);
+  return element;
+};
+
+it('shows the audio clips or the asset groups under the named Sequences, by the tab chosen', () => {
+  const { controller } = fakeController({
+    session: readySession(60),
+    spans: [{ path: ['intro'], startFrame: 0, endFrame: 30 }],
+    assetSpans: [
+      {
+        group: { kind: 'image', key: 'photos/vows.jpg', label: 'vows.jpg' },
+        start: 0,
+        end: 30,
+        failed: false,
+      },
+    ],
+  });
+  const { root } = mount(controller);
+  const slots = () =>
+    [...root.querySelectorAll('[data-slot=timeline-lane] > [data-slot]')].map((bar) =>
+      bar.getAttribute('data-slot'),
+    );
+  expect(timelineTab(root, 'Audio').getAttribute('aria-selected')).toBe('true');
+  expect(new Set(slots())).toEqual(new Set(['timeline-span', 'timeline-audio']));
+  act(() => timelineTab(root, 'Assets').click());
+  expect(new Set(slots())).toEqual(new Set(['timeline-span', 'timeline-asset']));
+});
+
+it('opens a Composition without audio on its assets and keeps the tab chosen through a reload', () => {
+  const ready = readySession(60);
+  const silent = { ...ready, descriptor: { ...ready.descriptor, audio: [] } };
+  expect(
+    timelineTab(mount(fakeController({ session: silent }).controller).root, 'Assets').getAttribute(
+      'aria-selected',
+    ),
+  ).toBe('true');
+  const { controller } = fakeController({ session: ready });
+  let current = controller.state();
+  const listeners = new Set<() => void>();
+  const { root } = mount({
+    ...controller,
+    state: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const change = (next: PreviewState) => {
+    current = next;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+  };
+  act(() => timelineTab(root, 'Assets').click());
+  // A save reloads the realm, which unmounts the timeline until the Composition is mounted again.
+  change({ ...current, session: { kind: 'connecting' } });
+  expect(root.querySelector('[data-slot=timeline-lane]')).toBeNull();
+  change({ ...current, session: ready });
+  expect(timelineTab(root, 'Assets').getAttribute('aria-selected')).toBe('true');
+});
+
+it('drags the bottom panel taller and keeps its height for the next load', async () => {
+  const storage = memoryStorage();
+  const { controller, calls } = fakeController({ session: readySession(60) });
+  const first = mount(controller, reviewOf(controller), storage);
+  const bottom = (root: HTMLElement) => {
+    const panel = root.querySelector('#bottom');
+    if (panel === null) throw new Error('No bottom panel');
+    return panel.getBoundingClientRect().height;
+  };
+  const before = bottom(first.root);
+  const handle = first.root.querySelector<HTMLElement>(
+    '[role=separator][aria-orientation=horizontal]',
+  );
+  if (handle === null) throw new Error('No bottom resize handle');
+  act(() => {
+    handle.focus();
+    for (let step = 0; step < 3; step += 1)
+      handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+  });
+  await vi.waitFor(() => expect(bottom(first.root)).toBeGreaterThan(before + 1));
+  // The arrows the handle takes do not step the frame as well.
+  expect(calls).toEqual([]);
+  const taller = bottom(first.root);
+  const second = mount(controller, reviewOf(controller), storage);
+  expect(bottom(second.root)).toBeCloseTo(taller, 0);
+});
+
 it('lays the asset groups out over the frames that used them, in lanes of their own', () => {
   const group = (key: string, label: string, kind = 'image') => ({ kind, key, label });
   const vows = group('photos/vows.jpg', 'vows.jpg');
@@ -274,6 +367,7 @@ it('lays the asset groups out over the frames that used them, in lanes of their 
     ],
   });
   const { root } = mount(controller);
+  act(() => timelineTab(root, 'Assets').click());
   const lanes = [...root.querySelectorAll('[data-slot=timeline-lane]')].filter(
     (row) => row.querySelector('[data-slot=timeline-asset]') !== null,
   );
