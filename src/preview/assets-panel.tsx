@@ -112,7 +112,10 @@ const RegisteredAssets = ({
             data-current={here ? '' : undefined}
             className={cn('flex items-center gap-2 rounded-md px-1 py-1', here && 'bg-muted')}
           >
-            <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label={asset.kind} />
+            <Icon
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-label={t.kind(asset.kind)}
+            />
             <div className="min-w-0 flex-1" title={asset.source}>
               <div className="truncate text-xs">{assetName(asset.source, t)}</div>
               <div className="truncate text-[11px] text-muted-foreground">{asset.source}</div>

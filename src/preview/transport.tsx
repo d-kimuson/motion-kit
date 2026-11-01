@@ -18,6 +18,19 @@ const Hint = ({ label, children }: { label: string; children: ReactElement }) =>
   </Tooltip>
 );
 
+/**
+ * `text` laid out as wide as `widest`, so the row keeps its width as the text changes in any
+ * language: a count of characters would not, since a Japanese character is two columns wide.
+ */
+const Fixed = ({ text, widest }: { text: string; widest: string }) => (
+  <span className="inline-grid justify-items-end">
+    <span aria-hidden className="invisible col-start-1 row-start-1">
+      {widest}
+    </span>
+    <span className="col-start-1 row-start-1">{text}</span>
+  </span>
+);
+
 /** A toggle per language, each named in its own language. */
 const LocaleSwitch = ({
   locale,
@@ -34,7 +47,7 @@ const LocaleSwitch = ({
           key={item}
           size="sm"
           lang={item}
-          aria-label={localeNames[item]}
+          aria-label={`${item.toUpperCase()} ${localeNames[item]}`}
           title={localeNames[item]}
           pressed={item === locale}
           onPressedChange={() => onChoose(item)}
@@ -73,7 +86,6 @@ export const Transport = ({
   const t = useMessages().transport;
   const last = Math.max(descriptor.durationInFrames - 1, 0);
   const shownFrame = state.shown?.status === 'shown' ? state.shown.frame : undefined;
-  const digits = String(last).length;
   // Playback is a frame or two behind on every tick; only half a second behind is worth showing.
   const tolerated =
     state.playback.kind === 'playing'
@@ -131,20 +143,17 @@ export const Transport = ({
         value={state.playhead}
         onChange={(event) => controller.seek(Number(event.currentTarget.value))}
       />
-      <span
-        className="text-right font-mono text-xs text-muted-foreground"
-        style={{ minWidth: `${2 * digits + 9}ch` }}
-      >
-        {t.frame(state.playhead, last)}
+      <span className="font-mono text-xs text-muted-foreground">
+        <Fixed text={t.frame(state.playhead, last)} widest={t.frame(last, last)} />
       </span>
       {/* Always laid out, so the scrubber does not resize as the lag comes and goes. */}
       <span
         data-slot="lag"
         className="font-mono text-xs text-warning"
-        style={{ minWidth: `${digits + 8}ch`, visibility: lagging ? 'visible' : 'hidden' }}
+        style={{ visibility: lagging ? 'visible' : 'hidden' }}
         title={t.lagging}
       >
-        {t.showing(shownFrame ?? state.playhead)}
+        <Fixed text={t.showing(shownFrame ?? state.playhead)} widest={t.showing(last)} />
       </span>
       <Hint label={t.commentHint}>
         <Toggle

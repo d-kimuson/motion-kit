@@ -74,6 +74,7 @@ const en = {
     pending: 'loading',
     seek: 'Seek to the frame it was first seen at',
     dataUrl: 'data: URL',
+    kind: (kind: string) => (kind === 'font' ? 'Font' : kind === 'image' ? 'Image' : kind),
   },
   elements: {
     collapse: 'Collapse',
@@ -177,6 +178,7 @@ const ja: Messages = {
     pending: '読み込み中',
     seek: '最初に現れたフレームへ移動',
     dataUrl: 'data: URL',
+    kind: (kind) => (kind === 'font' ? 'フォント' : kind === 'image' ? '画像' : kind),
   },
   elements: {
     collapse: '折りたたむ',

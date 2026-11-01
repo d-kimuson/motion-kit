@@ -822,6 +822,28 @@ it('asks for no elements while playing', async () => {
   expect(root.querySelector('[role=tabpanel]')?.textContent).toContain('Pause');
 });
 
+it('keeps the scrubber the same width from the first frame to the last in either language', () => {
+  const scrubberAt = (playhead: number, languages: readonly string[]) => {
+    const { controller } = fakeController({ session: readySession(6659), playhead });
+    const { root } = mount(
+      controller,
+      undefined,
+      undefined,
+      createLocaleSetting(memoryStorage(), languages),
+    );
+    // Wide enough that the row does not squeeze the frame label.
+    root.style.width = '1280px';
+    const scrubber = root.querySelector('input[type=range]');
+    if (scrubber === null) throw new Error('No scrubber');
+    return scrubber.getBoundingClientRect().width;
+  };
+  for (const languages of [['en'], ['ja']]) {
+    const first = scrubberAt(0, languages);
+    expect(first).toBeGreaterThan(0);
+    expect(scrubberAt(6658, languages)).toBe(first);
+  }
+});
+
 it('switches the page to Japanese and keeps the choice for the next load', () => {
   const storage = memoryStorage();
   const { controller } = fakeController({ session: readySession(60) });
