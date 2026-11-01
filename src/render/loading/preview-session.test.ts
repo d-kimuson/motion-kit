@@ -85,6 +85,21 @@ const writeUntil = async <T>(settled: Promise<T>, write: () => void): Promise<T>
   return result;
 };
 
+it('reports a temporary directory it cannot create as a failure, not a rejection', async () => {
+  const root = fixture();
+  const previous = process.env['TMPDIR'];
+  process.env['TMPDIR'] = join(root, 'missing', 'tmp');
+  try {
+    await expect(open(root)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'render.page-error', message: 'Loading workspace creation failed.' },
+    });
+  } finally {
+    if (previous === undefined) delete process.env['TMPDIR'];
+    else process.env['TMPDIR'] = previous;
+  }
+});
+
 it('serves the host page, the preview shell and audio under the Vite fs policy', async () => {
   const root = fixture();
   const result = await open(root);

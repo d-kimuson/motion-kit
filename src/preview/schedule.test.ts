@@ -38,10 +38,15 @@ describe('playheadFrame', () => {
     expect(playheadFrame(playing, 1000.999, rate(30000, 1001), 100_000)).toBe(29999);
   });
 
+  it('holds the anchor frame until the anchor time, as while the started sound is not yet heard', () => {
+    const playing = { kind: 'playing', anchorFrame: 100, anchorTime: 2 } as const;
+    expect(playheadFrame(playing, 1.9, fps30, 600)).toBe(100);
+    expect(playheadFrame(playing, 1.999, fps30, 600)).toBe(100);
+  });
+
   it('clamps to the Composition', () => {
     const playing = { kind: 'playing', anchorFrame: 50, anchorTime: 0 } as const;
     expect(playheadFrame(playing, 10, fps30, 60)).toBe(59);
-    expect(playheadFrame(playing, -10, fps30, 60)).toBe(0);
     expect(playheadFrame({ kind: 'paused', frame: 80 }, 0, fps30, 60)).toBe(59);
   });
 });

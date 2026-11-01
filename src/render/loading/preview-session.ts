@@ -43,7 +43,12 @@ export const openPreviewSession = async (
   const timeoutMs = options.loadingTimeoutMs ?? 30_000;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
     return { ok: false, error: loadingFailure('timeout option') };
-  const workspace = await mkdtemp(join(tmpdir(), 'motion-kit-preview-'));
+  let workspace: string;
+  try {
+    workspace = await mkdtemp(join(tmpdir(), 'motion-kit-preview-'));
+  } catch {
+    return { ok: false, error: loadingFailure('workspace creation') };
+  }
   const failure = Promise.withResolvers<Diagnostic>();
   let service: LoadingService | undefined;
   let disposal: Promise<Result<undefined>> | undefined;
@@ -64,20 +69,26 @@ export const openPreviewSession = async (
   const onAbort = () => aborted.resolve('aborted');
   options.signal?.addEventListener('abort', onAbort, { once: true });
   let fallen: Diagnostic | undefined;
-  service = startLoadingService(
-    {
-      projectRoot: options.projectRoot,
-      entry: options.entry,
-      ...(options.viteConfig === undefined ? {} : { viteConfig: options.viteConfig }),
-      workspace,
-      mode: 'preview',
-      ...(options.port === undefined ? {} : { port: options.port }),
-    },
-    (diagnostic) => {
-      fallen ??= diagnostic;
-      failure.resolve(diagnostic);
-    },
-  );
+  try {
+    service = startLoadingService(
+      {
+        projectRoot: options.projectRoot,
+        entry: options.entry,
+        ...(options.viteConfig === undefined ? {} : { viteConfig: options.viteConfig }),
+        workspace,
+        mode: 'preview',
+        ...(options.port === undefined ? {} : { port: options.port }),
+      },
+      (diagnostic) => {
+        fallen ??= diagnostic;
+        failure.resolve(diagnostic);
+      },
+    );
+  } catch {
+    // `fork` throws synchronously when the child cannot be spawned at all.
+    await dispose();
+    return { ok: false, error: loadingFailure('service startup') };
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   const started = await Promise.race([
     service.ready.then(

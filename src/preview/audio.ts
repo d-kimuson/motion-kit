@@ -39,14 +39,17 @@ export const createAudioPlayer = (
   const buffers = new Map<string, Promise<AudioBuffer | undefined>>();
   const decoded = new Map<string, AudioBuffer>();
   let voices: Voice[] = [];
+  // Bumped by `forget`, so a decode still running then cannot store the replaced file.
+  let generation = 0;
   const decode = (src: string) => {
     let buffer = buffers.get(src);
     if (buffer === undefined) {
+      const started = generation;
       buffer = load(src)
         .then((data) => graph.decodeAudioData(data))
         .then(
           (value) => {
-            decoded.set(src, value);
+            if (started === generation) decoded.set(src, value);
             return value;
           },
           () => undefined,
@@ -90,6 +93,7 @@ export const createAudioPlayer = (
     },
     stop,
     forget: () => {
+      generation += 1;
       buffers.clear();
       decoded.clear();
     },

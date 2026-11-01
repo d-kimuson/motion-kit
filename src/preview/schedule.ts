@@ -35,7 +35,8 @@ export const playheadFrame = (
   durationInFrames: number,
 ): number => {
   if (playback.kind === 'paused') return clampFrame(playback.frame, durationInFrames);
-  const elapsed = createTimelineTime(audioTime - playback.anchorTime);
+  // Before the anchor time the clips started at the anchor are not heard yet, so it holds.
+  const elapsed = createTimelineTime(Math.max(audioTime - playback.anchorTime, 0));
   const advanced = elapsed.ok ? Number(timeToFrameFloor(elapsed.value, fps)) : 0;
   return clampFrame(playback.anchorFrame + advanced, durationInFrames);
 };

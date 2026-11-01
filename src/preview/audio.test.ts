@@ -71,6 +71,27 @@ it('decodes each source once and reports the ones that cannot play', async () =>
   expect(loads).toEqual(['voice.wav', 'bad.wav', 'voice.wav']);
 });
 
+it('drops a decode that was still running when the sources were forgotten', async () => {
+  const fake = fakeGraph();
+  const pending: ((text: string) => void)[] = [];
+  const player = createAudioPlayer(
+    fake.graph,
+    () =>
+      new Promise((resolve) => {
+        pending.push((text) => resolve(new TextEncoder().encode(text).buffer));
+      }),
+  );
+  const stale = player.prepare(['voice.wav']);
+  player.forget();
+  const fresh = player.prepare(['voice.wav']);
+  pending[1]?.('new take');
+  await fresh;
+  pending[0]?.('old take');
+  await stale;
+  player.start([{ src: 'voice.wav', delay: 0, offset: 0, duration: 1, gain: 1 }], new Set());
+  expect(fake.started.map((start) => start.src)).toEqual(['new take']);
+});
+
 it('starts clips on the context clock, muted ones silent, and stops the previous ones', async () => {
   const fake = fakeGraph();
   const player = createAudioPlayer(fake.graph, loader([]));
