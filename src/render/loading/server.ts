@@ -344,7 +344,10 @@ try {
         if (!vite.isFileLoadingAllowed(server.config, file)) {
           response.statusCode = 403;
           response.end();
-        } else
+        } else {
+          // Watched before it is read, so a source created after the host first asked is heard.
+          audioFiles.add(file);
+          server.watcher.add(file);
           void stat(file).then(
             (stats) => {
               if (!stats.isFile()) {
@@ -352,8 +355,6 @@ try {
                 response.end();
                 return;
               }
-              audioFiles.add(file);
-              server.watcher.add(file);
               // A reload after the file changed must not get the old bytes from the HTTP cache.
               response.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
@@ -367,6 +368,7 @@ try {
               response.end();
             },
           );
+        }
       }
     }
     return true;

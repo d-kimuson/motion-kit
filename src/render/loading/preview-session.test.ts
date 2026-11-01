@@ -232,6 +232,23 @@ it('emits reload when an audio file the host fetched changes', async () => {
   expect(await (await fetch(audio)).text()).toBe('RIFF-replaced');
 });
 
+it('emits reload when an audio file the host asked for before it existed is created', async () => {
+  const root = fixture();
+  const result = await open(root);
+  if (!result.ok) throw new Error('Preview failed to start');
+  const audio = new URL('/__motion-kit/preview/audio', result.value.url);
+  audio.searchParams.set('src', 'audio/later.wav');
+  expect((await fetch(audio)).status).toBe(404);
+  const event = await writeUntil(
+    nextEvent(new URL('/__motion-kit/preview/events', result.value.url).href, (text) =>
+      text.startsWith('event: reload'),
+    ),
+    () => writeFileSync(join(root, 'audio/later.wav'), 'RIFF-later'),
+  );
+  expect(event).toBe('event: reload\ndata: {}');
+  expect(await (await fetch(audio)).text()).toBe('RIFF-later');
+});
+
 it('ends the session when the Vite config changes', async () => {
   const root = fixture();
   const result = await open(root);
