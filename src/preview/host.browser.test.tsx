@@ -662,6 +662,9 @@ it('fits the five side panel tabs with a capped comment count', () => {
   expect(tab('Comments').textContent).toBe('Comments 99+');
   const list = root.querySelector<HTMLElement>('[data-slot=tabs-list]');
   if (list === null) throw new Error('No tab list');
+  // A wider system font (Linux CI) leaves the labels less room than they need; narrowing the list stands
+  // in for it, and the outer tabs must still stay inside.
+  list.style.width = '15rem';
   const edge = list.getBoundingClientRect();
   for (const trigger of list.querySelectorAll('[role=tab]')) {
     const box = trigger.getBoundingClientRect();

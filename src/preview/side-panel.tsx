@@ -104,7 +104,7 @@ const Sequences = ({
 
 const Count = ({ value }: { value: number }) =>
   value === 0 ? undefined : (
-    <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+    <Badge variant="secondary" className="h-4 shrink-0 px-1.5 text-[10px]">
       {value > 99 ? '99+' : value}
     </Badge>
   );
@@ -136,26 +136,27 @@ export const SidePanel = ({
   useEffect(() => {
     if (target !== undefined) setTab('comments');
   }, [target]);
-  // Five tabs share 22rem, so they take less padding than shadcn's.
-  const trigger = 'gap-1 px-1 text-xs';
+  // Five tabs share 22rem, so they take less padding than shadcn's, and a label that still does not
+  // fit (a wider system font) is cut rather than pushing the outer tabs out of the list.
+  const trigger = 'min-w-0 flex-auto gap-1 px-1 text-xs';
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b p-2">
         <TabsList className="w-full">
           <TabsTrigger value="info" className={trigger}>
-            Info
+            <span className="truncate">Info</span>
           </TabsTrigger>
           <TabsTrigger value="sequences" className={trigger}>
-            Sequences
+            <span className="truncate">Sequences</span>
           </TabsTrigger>
           <TabsTrigger value="assets" className={trigger}>
-            Assets
+            <span className="truncate">Assets</span>
           </TabsTrigger>
           <TabsTrigger value="elements" className={trigger}>
-            Elements
+            <span className="truncate">Elements</span>
           </TabsTrigger>
           <TabsTrigger value="comments" className={trigger}>
-            Comments <Count value={comments.length} />
+            <span className="truncate">Comments</span> <Count value={comments.length} />
           </TabsTrigger>
         </TabsList>
       </div>
