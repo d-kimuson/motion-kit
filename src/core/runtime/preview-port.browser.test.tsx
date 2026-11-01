@@ -112,6 +112,62 @@ it('refuses renderer requests and leases in a preview realm', async () => {
   expect(page.completeCapture(outcome.lease)).toEqual({ status: 'accepted' });
 });
 
+const Card = () => (
+  <div style={{ position: 'relative', width: 320, height: 180 }}>
+    <section data-source="/project/scenes/Card.tsx:4:5">
+      <h1
+        id="title"
+        className="lead big"
+        style={{ position: 'absolute', left: 40, top: 20, width: 100, height: 30, margin: 0 }}
+      >
+        Hello{'   '}world
+      </h1>
+    </section>
+  </div>
+);
+
+it('describes the element at a design-pixel point of the shown frame, and nothing outside it', async () => {
+  container();
+  const page = createLoadingPage(
+    defineCompositions([
+      defineComposition({
+        id: 'card',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 30,
+        component: Card,
+        schema: z.object({}),
+      }),
+    ]),
+    'preview',
+  );
+  pages.push(page);
+  await answerPreview(page, { type: 'mount', id: 1, props: {} });
+  await answerPreview(page, { type: 'show', id: 2, frame: 0 });
+  expect(await answerPreview(page, { type: 'inspect', id: 3, x: 50, y: 30 })).toEqual({
+    type: 'inspected',
+    id: 3,
+    result: {
+      ok: true,
+      value: {
+        selector: 'h1#title.lead.big',
+        text: 'Hello world',
+        source: '/project/scenes/Card.tsx:4:5',
+        box: { x: 40, y: 20, width: 100, height: 30 },
+      },
+    },
+  });
+  expect(await answerPreview(page, { type: 'inspect', id: 4, x: 300, y: 170 })).toMatchObject({
+    result: { ok: true, value: { selector: 'div', source: null } },
+  });
+  expect(await answerPreview(page, { type: 'inspect', id: 5, x: 400, y: 10 })).toEqual({
+    type: 'inspected',
+    id: 5,
+    result: { ok: true, value: null },
+  });
+});
+
 const nextReply = (port: MessagePort) =>
   new Promise<PreviewReply>((resolve) => {
     port.addEventListener('message', (event) => resolve(previewReplySchema.parse(event.data)), {
