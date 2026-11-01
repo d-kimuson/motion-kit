@@ -7,6 +7,7 @@ import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protoc
 import { type AssetSpan } from './asset-usage.ts';
 import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { useMessages } from './messages.ts';
 import { packLanes, timecode } from './schedule.ts';
 import { cn } from './ui/utils.ts';
 
@@ -61,6 +62,7 @@ const AssetBar = memo(function AssetBar({
   end: number;
   duration: number;
 }) {
+  const t = useMessages().timeline;
   return (
     <div
       data-slot="timeline-asset"
@@ -70,7 +72,7 @@ const AssetBar = memo(function AssetBar({
         span.failed ? 'bg-destructive/40' : 'bg-asset/30',
       )}
       style={placed(start, end, duration)}
-      title={`${span.group.key} [${span.start}, ${span.end})${span.failed ? ', failed to load' : ''}`}
+      title={`${span.group.key} [${span.start}, ${span.end})${span.failed ? t.failed : ''}`}
     >
       <span className="px-1.5">
         <AssetIcon kind={span.group.kind} />
@@ -120,6 +122,7 @@ export const Timeline = ({
   controller: PreviewController;
   comments: readonly ReviewComment[];
 }) => {
+  const t = useMessages().timeline;
   const duration = descriptor.durationInFrames;
   // A named Sequence is reported while its parent is mounted, so the shown frame picks the active.
   const active =
@@ -164,10 +167,10 @@ export const Timeline = ({
     controller.seek(Math.min(Math.floor(ratio * duration), Math.max(duration - 1, 0)));
   };
   const lanes = [
-    ...(comments.length === 0 ? [] : ['Comments']),
-    ...spanLanes.map((_, index) => (index === 0 ? 'Sequences' : '')),
-    ...audioLanes.map((_, index) => (index === 0 ? 'Audio' : '')),
-    ...assetLanes.map((_, index) => (index === 0 ? 'Assets' : '')),
+    ...(comments.length === 0 ? [] : [t.comments]),
+    ...spanLanes.map((_, index) => (index === 0 ? t.sequences : '')),
+    ...audioLanes.map((_, index) => (index === 0 ? t.audio : '')),
+    ...assetLanes.map((_, index) => (index === 0 ? t.assets : '')),
   ];
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 px-3 pb-2 select-none">

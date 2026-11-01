@@ -5,6 +5,7 @@ import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type RegisteredAsset } from '../lib/preview-protocol.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { type Messages, useMessages } from './messages.ts';
 import { timecode } from './schedule.ts';
 import { basename } from './timeline.tsx';
 import { Badge } from './ui/badge.tsx';
@@ -25,7 +26,8 @@ const None = ({ children }: { children: ReactNode }) => (
 );
 
 /** A data URL has no file name to show. */
-const assetName = (source: string) => (source.startsWith('data:') ? 'data: URL' : basename(source));
+const assetName = (source: string, t: Messages['assets']) =>
+  source.startsWith('data:') ? t.dataUrl : basename(source);
 
 /** One row per declared audio source; the toggle mutes every clip of that source. */
 const AudioSources = ({
@@ -37,9 +39,10 @@ const AudioSources = ({
   descriptor: LoadingDescriptor;
   controller: PreviewController;
 }) => {
+  const t = useMessages().assets;
   const tracks = descriptor.audio ?? [];
   const sources = [...new Set(tracks.map((track) => track.src))];
-  if (sources.length === 0) return <None>This Composition declares no audio.</None>;
+  if (sources.length === 0) return <None>{t.noAudio}</None>;
   return (
     <ul className="grid grid-cols-1 gap-1">
       {sources.map((src) => {
@@ -51,7 +54,7 @@ const AudioSources = ({
             <Toggle
               size="sm"
               variant="outline"
-              aria-label={muted ? `Unmute ${src}` : `Mute ${src}`}
+              aria-label={muted ? t.unmute(src) : t.mute(src)}
               pressed={!muted}
               onPressedChange={() => controller.toggleMute(src)}
             >
@@ -61,13 +64,13 @@ const AudioSources = ({
               <div className="truncate text-xs">{basename(src)}</div>
               <div className="truncate text-[11px] text-muted-foreground">
                 {src}
-                {clips > 1 ? ` · ${clips} clips` : ''}
+                {clips > 1 ? ` · ${t.clips(clips)}` : ''}
               </div>
             </div>
             {unplayable ? (
-              <Badge variant="destructive" title="Could not be fetched or decoded">
+              <Badge variant="destructive" title={t.unplayableHint}>
                 <TriangleAlert />
-                unplayable
+                {t.unplayable}
               </Badge>
             ) : undefined}
           </li>
@@ -93,10 +96,10 @@ const RegisteredAssets = ({
   fps: FrameRate;
   controller: PreviewController;
 }) => {
+  const t = useMessages().assets;
   const { shown } = state;
   const current = shown?.status === 'shown' || shown?.status === 'failed' ? shown.assets : [];
-  if (state.assets.length === 0)
-    return <None>No frame shown so far has registered a font or image with `useAsset`.</None>;
+  if (state.assets.length === 0) return <None>{t.none}</None>;
   return (
     <ul className="grid grid-cols-1 gap-0.5">
       {state.assets.map((asset) => {
@@ -109,23 +112,26 @@ const RegisteredAssets = ({
             data-current={here ? '' : undefined}
             className={cn('flex items-center gap-2 rounded-md px-1 py-1', here && 'bg-muted')}
           >
-            <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label={asset.kind} />
+            <Icon
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-label={t.kind(asset.kind)}
+            />
             <div className="min-w-0 flex-1" title={asset.source}>
-              <div className="truncate text-xs">{assetName(asset.source)}</div>
+              <div className="truncate text-xs">{assetName(asset.source, t)}</div>
               <div className="truncate text-[11px] text-muted-foreground">{asset.source}</div>
             </div>
             {asset.status === 'failed' ? (
               <Badge variant="destructive">
                 <TriangleAlert />
-                failed
+                {t.failed}
               </Badge>
             ) : asset.status === 'pending' ? (
-              <Badge variant="secondary">loading</Badge>
+              <Badge variant="secondary">{t.pending}</Badge>
             ) : undefined}
             <button
               type="button"
               className="rounded-sm px-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="Seek to the frame it was first seen at"
+              title={t.seek}
               onClick={() => controller.seek(asset.frame)}
             >
               {timecode(asset.frame, fps).replace(/\.\d+$/, '')}
@@ -148,14 +154,17 @@ export const AssetsPanel = ({
   descriptor: LoadingDescriptor;
   fps: FrameRate;
   controller: PreviewController;
-}) => (
-  <div className="grid gap-4">
-    {/* The fonts and images come first: a narrated Composition declares dozens of clips. */}
-    <Section title="Fonts and images">
-      <RegisteredAssets state={state} fps={fps} controller={controller} />
-    </Section>
-    <Section title="Audio">
-      <AudioSources state={state} descriptor={descriptor} controller={controller} />
-    </Section>
-  </div>
-);
+}) => {
+  const t = useMessages().assets;
+  return (
+    <div className="grid gap-4">
+      {/* The fonts and images come first: a narrated Composition declares dozens of clips. */}
+      <Section title={t.registered}>
+        <RegisteredAssets state={state} fps={fps} controller={controller} />
+      </Section>
+      <Section title={t.audio}>
+        <AudioSources state={state} descriptor={descriptor} controller={controller} />
+      </Section>
+    </div>
+  );
+};

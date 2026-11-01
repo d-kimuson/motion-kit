@@ -15,6 +15,7 @@ import {
   type ReviewSite,
 } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { type Messages, useMessages } from './messages.ts';
 import { type CommentDraftState, type ReviewController } from './review.ts';
 import { timecode } from './schedule.ts';
 import { Button } from './ui/button.tsx';
@@ -32,9 +33,9 @@ export const timeLabel = (time: CommentTime, fps: FrameRate) =>
     ? timecode(time.frame, fps)
     : `${timecode(time.start, fps)} – ${timecode(time.end, fps)}`;
 
-const placeLabel = (place: CommentPlace, site: ReviewSite) => {
-  if (place.kind === 'frame') return 'Whole frame';
-  if (place.kind === 'point') return `Point (${Math.round(place.x)}, ${Math.round(place.y)})`;
+const placeLabel = (place: CommentPlace, site: ReviewSite, t: Messages['comments']) => {
+  if (place.kind === 'frame') return t.wholeFrame;
+  if (place.kind === 'point') return t.point(Math.round(place.x), Math.round(place.y));
   const { selector, source } = place.element;
   return source === null ? selector : `${selector} · ${relativeSource(source, site)}`;
 };
@@ -54,6 +55,7 @@ const Composer = ({
   fps: FrameRate;
   review: Review;
 }) => {
+  const t = useMessages().comments;
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => field.current?.focus(), [draft.anchor, draft.place]);
   const save = () => review.controller.save();
@@ -62,13 +64,13 @@ const Composer = ({
       <div className="flex items-center gap-2 text-xs">
         <span className="font-mono">{timeLabel(commentTime(draft.anchor, draft.end), fps)}</span>
         <span className="min-w-0 flex-1 truncate text-right text-muted-foreground">
-          {placeLabel(draft.place, review.site)}
+          {placeLabel(draft.place, review.site, t)}
         </span>
       </div>
       <Textarea
         ref={field}
-        aria-label="Comment"
-        placeholder="What should change here?"
+        aria-label={t.field}
+        placeholder={t.placeholder}
         value={draft.body}
         onChange={(event) => review.controller.write(event.currentTarget.value)}
         onKeyDown={(event) => {
@@ -86,17 +88,17 @@ const Composer = ({
           variant="outline"
           size="xs"
           disabled={playhead === draft.end}
-          title="Seek to another frame first; the comment then covers every frame in between."
+          title={t.rangeHint}
           onClick={() => review.controller.endAtPlayhead()}
         >
-          {playhead === draft.anchor ? 'One frame' : `Range to ${timecode(playhead, fps)}`}
+          {playhead === draft.anchor ? t.oneFrame : t.rangeTo(timecode(playhead, fps))}
         </Button>
         <span className="flex-1" />
         <Button variant="ghost" size="xs" onClick={() => review.controller.cancel()}>
-          Cancel
+          {t.cancel}
         </Button>
         <Button size="xs" onClick={save}>
-          Save
+          {t.save}
         </Button>
       </div>
     </div>
@@ -105,6 +107,7 @@ const Composer = ({
 
 /** Copies the Markdown; where the clipboard is refused, shows it to copy by hand. */
 const CopyMarkdown = ({ markdown, disabled }: { markdown: string; disabled: boolean }) => {
+  const t = useMessages().comments;
   const [copied, setCopied] = useState<'copied' | 'refused' | undefined>();
   useEffect(() => {
     if (copied !== 'copied') return;
@@ -124,12 +127,12 @@ const CopyMarkdown = ({ markdown, disabled }: { markdown: string; disabled: bool
         }
       >
         {copied === 'copied' ? <Check /> : <Copy />}
-        {copied === 'copied' ? 'Copied' : 'Copy Markdown'}
+        {copied === 'copied' ? t.copied : t.copy}
       </Button>
       {copied === 'refused' ? (
         <Textarea
           readOnly
-          aria-label="Review Markdown"
+          aria-label={t.markdown}
           className="order-last col-span-full max-h-40 font-mono text-[11px] md:text-[11px]"
           value={markdown}
           onFocus={(event) => event.currentTarget.select()}
@@ -141,6 +144,7 @@ const CopyMarkdown = ({ markdown, disabled }: { markdown: string; disabled: bool
 
 /** Removing every comment takes a second press, since nothing brings them back. */
 const ClearComments = ({ onClear, disabled }: { onClear: () => void; disabled: boolean }) => {
+  const t = useMessages().comments;
   const [armed, setArmed] = useState(false);
   return (
     <Button
@@ -153,7 +157,7 @@ const ClearComments = ({ onClear, disabled }: { onClear: () => void; disabled: b
         setArmed(!armed);
       }}
     >
-      {armed ? 'Clear them all?' : 'Clear'}
+      {armed ? t.confirmClear : t.clear}
     </Button>
   );
 };
@@ -179,6 +183,7 @@ export const CommentsPanel = ({
   draft: CommentDraftState | undefined;
   comments: readonly ReviewComment[];
 }) => {
+  const t = useMessages().comments;
   const sorted = comments.toSorted(
     (a, b) => firstFrame(a.time) - firstFrame(b.time) || a.id - b.id,
   );
@@ -196,13 +201,10 @@ export const CommentsPanel = ({
     <div className="grid grid-cols-1 gap-3">
       {draft === undefined ? (
         <div className="grid grid-cols-1 gap-2">
-          <p className="px-1 text-xs text-muted-foreground">
-            Turn on comment mode (C) and click the stage to comment on an element, or comment on the
-            whole frame at the playhead.
-          </p>
+          <p className="px-1 text-xs text-muted-foreground">{t.guide}</p>
           <Button variant="outline" size="sm" onClick={() => review.controller.commentFrame()}>
             <MessageSquarePlus />
-            Comment on this frame
+            {t.commentFrame}
           </Button>
         </div>
       ) : (
@@ -226,12 +228,12 @@ export const CommentsPanel = ({
                   {timeLabel(comment.time, fps)}
                 </button>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  {placeLabel(comment.place, review.site)}
+                  {placeLabel(comment.place, review.site, t)}
                 </span>
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={`Delete comment ${index + 1}`}
+                  aria-label={t.remove(index + 1)}
                   onClick={() => review.book.remove(comment.id)}
                 >
                   <Trash2 />
@@ -239,7 +241,7 @@ export const CommentsPanel = ({
               </div>
               <p className="pl-4 text-xs whitespace-pre-wrap">
                 {comment.body === '' ? (
-                  <span className="text-muted-foreground">(no text)</span>
+                  <span className="text-muted-foreground">{t.empty}</span>
                 ) : (
                   comment.body
                 )}

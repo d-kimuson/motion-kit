@@ -10,6 +10,7 @@ import { type Result } from '../lib/result.ts';
 import { type Review } from './comments-panel.tsx';
 import { relativeSource } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { useMessages } from './messages.ts';
 import { basename } from './timeline.tsx';
 import { cn } from './ui/utils.ts';
 
@@ -39,6 +40,7 @@ type Rows = Readonly<{
 }>;
 
 const Node = ({ node, path, rows }: { node: ElementNode; path: string; rows: Rows }) => {
+  const t = useMessages().elements;
   const depth = path.split('.').length - 1;
   const open = depth < openDepth !== rows.toggled.has(path);
   const leaf = node.children.length === 0;
@@ -61,7 +63,7 @@ const Node = ({ node, path, rows }: { node: ElementNode; path: string; rows: Row
         ) : (
           <button
             type="button"
-            aria-label={open ? 'Collapse' : 'Expand'}
+            aria-label={open ? t.collapse : t.expand}
             className="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground hover:text-foreground"
             onClick={() => rows.toggle(path)}
           >
@@ -86,8 +88,8 @@ const Node = ({ node, path, rows }: { node: ElementNode; path: string; rows: Row
           )}
           <button
             type="button"
-            aria-label={`Comment on ${node.selector}`}
-            title="Comment on this element"
+            aria-label={t.commentOn(node.selector)}
+            title={t.commentHint}
             className="grid size-5 place-items-center rounded-sm text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-comment focus-visible:opacity-100"
             onClick={() => rows.review.controller.commentElement(element(node))}
           >
@@ -137,6 +139,7 @@ export const ElementsPanel = ({
   review: Review;
   onHighlight: (box: ElementBox | undefined) => void;
 }) => {
+  const t = useMessages().elements;
   const playing = state.playback.kind === 'playing' || state.starting;
   const { shown } = state;
   const [tree, setTree] = useState<Result<ElementTree | null>>();
@@ -153,11 +156,10 @@ export const ElementsPanel = ({
   }, [controller, playing, shown]);
   // A highlight outlives neither the panel nor the tree it came from.
   useEffect(() => () => onHighlight(undefined), [onHighlight, tree, playing]);
-  if (playing) return <Note>Pause to see the elements of the shown frame.</Note>;
-  if (tree === undefined) return <Note>Loading…</Note>;
+  if (playing) return <Note>{t.playing}</Note>;
+  if (tree === undefined) return <Note>{t.loading}</Note>;
   if (!tree.ok) return <Note>{tree.error.message}</Note>;
-  if (tree.value === null || tree.value.nodes.length === 0)
-    return <Note>The shown frame has no elements.</Note>;
+  if (tree.value === null || tree.value.nodes.length === 0) return <Note>{t.none}</Note>;
   const rows: Rows = {
     review,
     toggled,
@@ -173,9 +175,7 @@ export const ElementsPanel = ({
     <div className="grid gap-2">
       <Nodes nodes={tree.value.nodes} path={undefined} rows={rows} />
       {tree.value.truncated ? (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          Only the first elements are listed; the frame has more.
-        </p>
+        <p className="px-1 text-[11px] text-muted-foreground">{t.truncated}</p>
       ) : undefined}
     </div>
   );

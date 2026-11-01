@@ -8,6 +8,7 @@ import { CommentsPanel, type Review } from './comments-panel.tsx';
 import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { type ElementBox, ElementsPanel } from './elements-panel.tsx';
+import { useMessages } from './messages.ts';
 import { type CommentDraftState } from './review.ts';
 import { timecode } from './schedule.ts';
 import { sameSpan } from './timeline.tsx';
@@ -43,21 +44,24 @@ const CompositionFacts = ({
   /** How many the frames shown so far mounted or registered. */
   sequences: number;
   assets: number;
-}) => (
-  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 px-1 text-xs">
-    <Fact label="Composition">{descriptor.id}</Fact>
-    <Fact label="Size">
-      {descriptor.width}×{descriptor.height}
-    </Fact>
-    <Fact label="Frame rate">{rate(descriptor.fps)}</Fact>
-    <Fact label="Duration">
-      {timecode(descriptor.durationInFrames, fps)} ({descriptor.durationInFrames} frames)
-    </Fact>
-    <Fact label="Named Sequences">{sequences}</Fact>
-    <Fact label="Audio clips">{(descriptor.audio ?? []).length}</Fact>
-    <Fact label="Fonts and images">{assets}</Fact>
-  </dl>
-);
+}) => {
+  const t = useMessages().info;
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 px-1 text-xs">
+      <Fact label={t.composition}>{descriptor.id}</Fact>
+      <Fact label={t.size}>
+        {descriptor.width}×{descriptor.height}
+      </Fact>
+      <Fact label={t.frameRate}>{rate(descriptor.fps)}</Fact>
+      <Fact label={t.duration}>
+        {timecode(descriptor.durationInFrames, fps)} ({t.frames(descriptor.durationInFrames)})
+      </Fact>
+      <Fact label={t.sequences}>{sequences}</Fact>
+      <Fact label={t.audio}>{(descriptor.audio ?? []).length}</Fact>
+      <Fact label={t.assets}>{assets}</Fact>
+    </dl>
+  );
+};
 
 /** The named Sequences seen so far, in first-seen order; choosing one seeks to its start. */
 const Sequences = ({
@@ -69,12 +73,12 @@ const Sequences = ({
   fps: FrameRate;
   controller: PreviewController;
 }) => {
+  const t = useMessages().sequences;
   const active: readonly SequenceSpan[] =
     state.shown?.status === 'shown'
       ? activeSequences(state.shown.sequences, state.shown.frame)
       : [];
-  if (state.spans.length === 0)
-    return <Empty>No named Sequence has been mounted yet. Name one with `name`.</Empty>;
+  if (state.spans.length === 0) return <Empty>{t.none}</Empty>;
   return (
     <ul className="grid grid-cols-1 gap-0.5">
       {state.spans.map((span) => {
@@ -130,6 +134,7 @@ export const SidePanel = ({
   /** Outline a box of the stage, or none. */
   onHighlight: (box: ElementBox | undefined) => void;
 }) => {
+  const t = useMessages().tabs;
   const [tab, setTab] = useState<unknown>('info');
   // A new draft, or a draft moved to another target, opens the comments.
   const target = draft?.place;
@@ -144,19 +149,19 @@ export const SidePanel = ({
       <div className="border-b p-2">
         <TabsList className="w-full">
           <TabsTrigger value="info" className={trigger}>
-            <span className="truncate">Info</span>
+            <span className="truncate">{t.info}</span>
           </TabsTrigger>
           <TabsTrigger value="sequences" className={trigger}>
-            <span className="truncate">Sequences</span>
+            <span className="truncate">{t.sequences}</span>
           </TabsTrigger>
           <TabsTrigger value="assets" className={trigger}>
-            <span className="truncate">Assets</span>
+            <span className="truncate">{t.assets}</span>
           </TabsTrigger>
           <TabsTrigger value="elements" className={trigger}>
-            <span className="truncate">Elements</span>
+            <span className="truncate">{t.elements}</span>
           </TabsTrigger>
           <TabsTrigger value="comments" className={trigger}>
-            <span className="truncate">Comments</span> <Count value={comments.length} />
+            <span className="truncate">{t.comments}</span> <Count value={comments.length} />
           </TabsTrigger>
         </TabsList>
       </div>

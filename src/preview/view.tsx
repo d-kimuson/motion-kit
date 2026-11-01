@@ -6,6 +6,8 @@ import { CommentLayer } from './comment-layer.tsx';
 import { type Review } from './comments-panel.tsx';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { type ElementBox } from './elements-panel.tsx';
+import { type LocaleSetting } from './locale.ts';
+import { messages, MessagesContext, useMessages } from './messages.ts';
 import { SidePanel } from './side-panel.tsx';
 import { previewCss } from './styles.generated.ts';
 import { Timeline } from './timeline.tsx';
@@ -41,21 +43,22 @@ const useFit = (width: number, height: number) => {
 };
 
 const Overlay = ({ state, controller }: { state: PreviewState; controller: PreviewController }) => {
+  const t = useMessages().page;
   const { session } = state;
   if (session.kind === 'ready') return undefined;
   return (
     <div className="absolute inset-0 grid place-items-center bg-background p-6">
       <div className="grid w-full max-w-xl gap-3 rounded-xl border bg-card p-5 text-card-foreground shadow-sm">
         {session.kind === 'connecting' ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t.loading}</p>
         ) : session.kind === 'failed' ? (
           <>
-            <h2 className="text-sm font-semibold">The Composition could not be loaded</h2>
+            <h2 className="text-sm font-semibold">{t.loadFailed}</h2>
             <DiagnosticText diagnostic={session.diagnostic} />
           </>
         ) : (
           <>
-            <h2 className="text-sm font-semibold">Choose a Composition</h2>
+            <h2 className="text-sm font-semibold">{t.choose}</h2>
             <div className="grid gap-1.5">
               {session.compositions.map((composition) => (
                 <Button
@@ -66,7 +69,7 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
                 >
                   <span>{composition.id}</span>
                   <span className="text-xs text-muted-foreground">
-                    {composition.width}×{composition.height}, {composition.durationInFrames} frames
+                    {t.summary(composition.width, composition.height, composition.durationInFrames)}
                   </span>
                 </Button>
               ))}
@@ -102,13 +105,18 @@ export const PreviewView = ({
   frame,
   review,
   layoutStorage,
+  locale,
 }: {
   controller: PreviewController;
   frame: (element: HTMLIFrameElement | null) => void;
   review: Review;
   /** Where the width the side panel was dragged to is kept across reloads. */
   layoutStorage: LayoutStorage;
+  /** The language of the page, which the page switches. */
+  locale: LocaleSetting;
 }) => {
+  const language = useSyncExternalStore(locale.subscribe, locale.current);
+  const t = messages[language];
   const state = useSyncExternalStore(controller.subscribe, controller.state);
   const reviewState = useSyncExternalStore(review.controller.subscribe, review.controller.state);
   const allComments = useSyncExternalStore(review.book.subscribe, review.book.comments);
@@ -164,109 +172,113 @@ export const PreviewView = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [controller, review]);
   return (
-    <TooltipProvider>
-      {/* `href` and `precedence` let React hoist the sheet into <head>, out of the accessibility tree. */}
-      <style href="motion-kit-preview" precedence="default">
-        {previewCss}
-      </style>
-      {/* The stage and the side panel share the top row, split by a handle that drags the side
+    <MessagesContext value={t}>
+      <TooltipProvider>
+        {/* `href` and `precedence` let React hoist the sheet into <head>, out of the accessibility tree. */}
+        <style href="motion-kit-preview" precedence="default">
+          {previewCss}
+        </style>
+        {/* The stage and the side panel share the top row, split by a handle that drags the side
           panel wider or narrower; the bottom panel spans the page. */}
-      <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="min-h-0"
-          defaultLayout={layout.defaultLayout}
-          onLayoutChanged={layout.onLayoutChanged}
-        >
-          <ResizablePanel id="stage" minSize="25%">
-            <div
-              className="relative grid h-full place-items-center overflow-hidden bg-black"
-              ref={stage}
-            >
-              <iframe
-                ref={frame}
-                className="pointer-events-none absolute border-0 bg-black"
-                title="Composition"
-                tabIndex={-1}
-                width={descriptor?.width ?? 1280}
-                height={descriptor?.height ?? 720}
-                style={{ transform: `scale(${scale})` }}
-              />
-              {descriptor === undefined ? undefined : (
-                <CommentLayer
-                  width={descriptor.width}
-                  height={descriptor.height}
-                  scale={scale}
-                  state={reviewState}
-                  controller={review.controller}
-                  highlight={highlight}
-                />
-              )}
-              {reviewState.picking ? (
-                <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
-                  Click an element to comment on it · Esc to stop
-                </div>
-              ) : undefined}
-              <Overlay state={state} controller={controller} />
-            </div>
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel
-            id="side"
-            defaultSize="22rem"
-            minSize="16rem"
-            maxSize="60%"
-            groupResizeBehavior="preserve-pixel-size"
+        <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="min-h-0"
+            defaultLayout={layout.defaultLayout}
+            onLayoutChanged={layout.onLayoutChanged}
           >
-            <aside className="h-full min-h-0 bg-card/40">
-              {ready === undefined ? undefined : (
-                <SidePanel
-                  state={state}
-                  descriptor={ready.descriptor}
-                  fps={ready.fps}
-                  controller={controller}
-                  review={review}
-                  draft={reviewState.draft}
-                  comments={comments}
-                  onHighlight={setHighlight}
+            <ResizablePanel id="stage" minSize="25%">
+              <div
+                className="relative grid h-full place-items-center overflow-hidden bg-black"
+                ref={stage}
+              >
+                <iframe
+                  ref={frame}
+                  className="pointer-events-none absolute border-0 bg-black"
+                  title={t.page.stage}
+                  tabIndex={-1}
+                  width={descriptor?.width ?? 1280}
+                  height={descriptor?.height ?? 720}
+                  style={{ transform: `scale(${scale})` }}
                 />
-              )}
-            </aside>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-        <div className="flex max-h-[40vh] min-h-0 flex-col border-t bg-card/40">
-          {ready === undefined ? undefined : (
-            <>
-              <Transport
-                state={state}
-                descriptor={ready.descriptor}
-                fps={ready.fps}
-                controller={controller}
-                picking={reviewState.picking}
-                onTogglePicking={() => review.controller.togglePicking()}
-              />
-              {state.shown?.status === 'failed' ? (
-                <div className="grid max-h-24 shrink-0 gap-1 overflow-y-auto border-t px-3 py-2">
-                  {state.shown.diagnostics.map((diagnostic, index) => (
-                    <DiagnosticText key={index} diagnostic={diagnostic} />
-                  ))}
-                </div>
-              ) : undefined}
-              <ScrollArea className="min-h-0 flex-1 border-t">
-                <div className="pt-2">
-                  <Timeline
+                {descriptor === undefined ? undefined : (
+                  <CommentLayer
+                    width={descriptor.width}
+                    height={descriptor.height}
+                    scale={scale}
+                    state={reviewState}
+                    controller={review.controller}
+                    highlight={highlight}
+                  />
+                )}
+                {reviewState.picking ? (
+                  <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
+                    {t.page.picking}
+                  </div>
+                ) : undefined}
+                <Overlay state={state} controller={controller} />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle />
+            <ResizablePanel
+              id="side"
+              defaultSize="22rem"
+              minSize="16rem"
+              maxSize="60%"
+              groupResizeBehavior="preserve-pixel-size"
+            >
+              <aside className="h-full min-h-0 bg-card/40">
+                {ready === undefined ? undefined : (
+                  <SidePanel
                     state={state}
                     descriptor={ready.descriptor}
                     fps={ready.fps}
                     controller={controller}
+                    review={review}
+                    draft={reviewState.draft}
                     comments={comments}
+                    onHighlight={setHighlight}
                   />
-                </div>
-              </ScrollArea>
-            </>
-          )}
+                )}
+              </aside>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+          <div className="flex max-h-[40vh] min-h-0 flex-col border-t bg-card/40">
+            {ready === undefined ? undefined : (
+              <>
+                <Transport
+                  state={state}
+                  descriptor={ready.descriptor}
+                  fps={ready.fps}
+                  controller={controller}
+                  picking={reviewState.picking}
+                  onTogglePicking={() => review.controller.togglePicking()}
+                  locale={language}
+                  onChooseLocale={locale.choose}
+                />
+                {state.shown?.status === 'failed' ? (
+                  <div className="grid max-h-24 shrink-0 gap-1 overflow-y-auto border-t px-3 py-2">
+                    {state.shown.diagnostics.map((diagnostic, index) => (
+                      <DiagnosticText key={index} diagnostic={diagnostic} />
+                    ))}
+                  </div>
+                ) : undefined}
+                <ScrollArea className="min-h-0 flex-1 border-t">
+                  <div className="pt-2">
+                    <Timeline
+                      state={state}
+                      descriptor={ready.descriptor}
+                      fps={ready.fps}
+                      controller={controller}
+                      comments={comments}
+                    />
+                  </div>
+                </ScrollArea>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </MessagesContext>
   );
 };
