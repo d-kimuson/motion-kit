@@ -118,12 +118,6 @@ describe('ThreeCanvas', () => {
     expect(differsFromAllZeros(pixelsOf(instance.capture))).toBe(true);
   }, 60_000);
 
-  it('settles at once in a dry realm, where it is never measured and never draws', async () => {
-    const instance = await open({ scene: canvasScene, dry: true });
-    expect(await within(instance.settle(0), 1000)).toMatchObject({ status: 'ready' });
-    expect(instance.capture.state).toBeUndefined();
-  }, 60_000);
-
   it('reproduces identical canvas pixels for sequential, random, repeated and fresh frames', async () => {
     const instance = await open({ scene: canvasScene });
     const reference = new Map<number, Uint8Array>();

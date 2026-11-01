@@ -27,8 +27,6 @@ export type MountOptions = {
   readonly durationInFrames?: number;
   /** The container's size at mount; `[0, 0]` exercises R3F's measurement before it renders. */
   readonly initialSize?: readonly [number, number];
-  /** Mount as a dry realm does: a dry runtime, in a root of a document that never lays out. */
-  readonly dry?: boolean;
 };
 
 export type RootCapture = {
@@ -58,7 +56,6 @@ export const mount = async ({
   height = 240,
   durationInFrames = 30,
   initialSize = [width, height],
-  dry = false,
 }: MountOptions): Promise<Mounted> => {
   const capture: RootCapture = { state: undefined };
   const registry = unwrap(
@@ -79,15 +76,13 @@ export const mount = async ({
     definition,
     compositionRealm: 'page',
     instance: 'browser-test',
-    dry,
   });
-  const owner = dry ? document.implementation.createHTMLDocument('') : document;
-  const container = owner.createElement('div');
+  const container = document.createElement('div');
   Object.assign(container.style, {
     width: `${initialSize[0]}px`,
     height: `${initialSize[1]}px`,
   });
-  owner.body.append(container);
+  document.body.append(container);
   const root = createRoot(container);
   flushSync(() => {
     root.render(<Composition definition={definition} compositionRuntime={runtime} />);

@@ -84,11 +84,8 @@ const fakeController = (
     playhead: 0,
     shown: undefined,
     spans: [],
-    assets: [],
-    assetSpans: [],
     muted: new Set(),
     unplayable: [],
-    scan: undefined,
     ...overrides,
   };
   const controller: PreviewController = {
@@ -263,87 +260,18 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
   ).toEqual([['intro', 'outro'], ['intro › title']]);
 });
 
-/** The tab of the timeline under the transport, which follows the side panel's tabs. */
-const timelineTab = (root: HTMLElement, name: string) => {
-  const element = [...root.querySelectorAll<HTMLElement>('[role=tab]')].findLast(
-    (item) => item.textContent === name,
-  );
-  if (element === undefined) throw new Error(`No ${name} timeline tab`);
-  return element;
-};
-
-it('shows the audio clips or the asset groups under the named Sequences, by the tab chosen', () => {
+it('shows the audio clips under the named Sequences', () => {
   const { controller } = fakeController({
     session: readySession(60),
     spans: [{ path: ['intro'], startFrame: 0, endFrame: 30 }],
-    assetSpans: [
-      {
-        group: { kind: 'image', key: 'photos/vows.jpg', label: 'vows.jpg' },
-        start: 0,
-        end: 30,
-        failed: false,
-      },
-    ],
   });
   const { root } = mount(controller);
-  const slots = () =>
+  expect(
     [...root.querySelectorAll('[data-slot=timeline-lane] > [data-slot]')].map((bar) =>
       bar.getAttribute('data-slot'),
-    );
-  expect(timelineTab(root, 'Audio').getAttribute('aria-selected')).toBe('true');
-  expect(new Set(slots())).toEqual(new Set(['timeline-span', 'timeline-audio']));
-  act(() => timelineTab(root, 'Assets').click());
-  expect(new Set(slots())).toEqual(new Set(['timeline-span', 'timeline-asset']));
-});
-
-it('opens a Composition without audio on its assets and keeps the tab chosen through a reload', () => {
-  const ready = readySession(60);
-  const silent = { ...ready, descriptor: { ...ready.descriptor, audio: [] } };
-  expect(
-    timelineTab(mount(fakeController({ session: silent }).controller).root, 'Assets').getAttribute(
-      'aria-selected',
     ),
-  ).toBe('true');
-  const { controller } = fakeController({ session: ready });
-  let current = controller.state();
-  const listeners = new Set<() => void>();
-  const { root } = mount({
-    ...controller,
-    state: () => current,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  });
-  const change = (next: PreviewState) => {
-    current = next;
-    act(() => {
-      for (const listener of listeners) listener();
-    });
-  };
-  act(() => timelineTab(root, 'Assets').click());
-  // A save reloads the realm, which unmounts the timeline until the Composition is mounted again.
-  change({ ...current, session: { kind: 'connecting' } });
-  expect(root.querySelector('[data-slot=timeline-lane]')).toBeNull();
-  change({ ...current, session: ready });
-  expect(timelineTab(root, 'Assets').getAttribute('aria-selected')).toBe('true');
-});
-
-it('shows how far the scan read the frames not played, and nothing once it is done', () => {
-  const status = (overrides: Partial<PreviewState>) => {
-    const { controller } = fakeController({ session: readySession(60), ...overrides });
-    const { root } = mount(controller);
-    return root.querySelector('[role=status]')?.textContent ?? null;
-  };
-  expect(status({ scan: { scanned: 31, total: 60 } })).toBe('Reading the frames not played: 51%');
-  expect(
-    status({
-      scan: { scanned: 31, total: 60 },
-      playback: { kind: 'playing', anchorFrame: 0, anchorTime: 0 },
-    }),
-  ).toBe('Reading the frames not played: 51% (waits while playing)');
-  expect(status({ scan: { scanned: 60, total: 60 } })).toBeNull();
-  expect(status({ scan: undefined })).toBeNull();
+  ).toEqual(['timeline-span', 'timeline-audio', 'timeline-audio', 'timeline-audio']);
+  expect(root.querySelector('[data-slot=timeline-asset]')).toBeNull();
 });
 
 it('drags the bottom panel taller and keeps its height for the next load', async () => {
@@ -371,46 +299,6 @@ it('drags the bottom panel taller and keeps its height for the next load', async
   const taller = bottom(first.root);
   const second = mount(controller, reviewOf(controller), storage);
   expect(bottom(second.root)).toBeCloseTo(taller, 0);
-});
-
-it('lays the asset groups out over the frames that used them, in lanes of their own', () => {
-  const group = (key: string, label: string, kind = 'image') => ({ kind, key, label });
-  const vows = group('photos/vows.jpg', 'vows.jpg');
-  const { controller } = fakeController({
-    session: readySession(60),
-    assetSpans: [
-      { group: vows, start: 0, end: 30, failed: false },
-      { group: group('/inter.woff2', 'inter.woff2', 'font'), start: 0, end: 60, failed: false },
-      { group: group('photos/toast.jpg', 'toast.jpg'), start: 30, end: 90, failed: true },
-    ],
-  });
-  const { root } = mount(controller);
-  act(() => timelineTab(root, 'Assets').click());
-  const lanes = [...root.querySelectorAll('[data-slot=timeline-lane]')].filter(
-    (row) => row.querySelector('[data-slot=timeline-asset]') !== null,
-  );
-  expect(
-    lanes.map((row) =>
-      [...row.querySelectorAll<HTMLElement>('[data-slot=timeline-asset]')].map((bar) => [
-        bar.textContent,
-        bar.style.left,
-        bar.style.right,
-      ]),
-    ),
-  ).toEqual([
-    [
-      ['vows.jpg', '0%', 'calc(50%)'],
-      // A span past the end is cut at the end of the Composition.
-      ['toast.jpg', '50%', 'calc(0%)'],
-    ],
-    [['inter.woff2', '0%', 'calc(0%)']],
-  ]);
-  expect(root.textContent).toContain('Assets');
-  const failed = root.querySelector<HTMLElement>(
-    '[data-slot=timeline-asset][title^="photos/toast"]',
-  );
-  expect(failed?.title).toBe('photos/toast.jpg [30, 90), failed to load');
-  expect(failed?.className).toContain('bg-destructive');
 });
 
 it('keeps the controls row the same width while the shown frame lags, and hides the usual lag of playback', () => {
@@ -754,29 +642,39 @@ it('comments on the element clicked in comment mode and copies the review as Mar
   expect(root.textContent).toContain('Copied');
 });
 
-it('lists the fonts and images seen so far, marks those of the shown frame and seeks to where one was first seen', () => {
-  const { controller, calls } = fakeController({
+it('lists the fonts and images of the shown frame only, with their status', () => {
+  const { controller } = fakeController({
     session: readySession(60),
-    assets: [
-      { kind: 'font', source: '/inter.woff2', status: 'ready', frame: 0 },
-      { kind: 'image', source: '/photo.png', status: 'failed', frame: 40 },
-    ],
     shown: {
       status: 'shown',
       frame: 45,
       sequences: [],
-      assets: [{ kind: 'image', source: '/photo.png', status: 'failed' }],
+      assets: [
+        { kind: 'font', source: '/inter.woff2', status: 'ready' },
+        { kind: 'image', source: '/photo.png', status: 'failed' },
+        { kind: 'image', source: '/next.png', status: 'pending' },
+      ],
     },
   });
   const { root, tab } = mount(controller);
+  expect(tab('Info').textContent).toBe('Info');
+  expect(root.textContent).toContain('Fonts and images on this frame3');
   act(() => tab('Assets').click());
-  const rows = [...root.querySelectorAll<HTMLElement>('[data-slot=asset]')];
-  expect(rows.map((row) => [row.textContent, row.hasAttribute('data-current')])).toEqual([
-    [expect.stringContaining('inter.woff2'), false],
-    [expect.stringMatching(/photo\.png.*failed/), true],
+  expect(
+    [...root.querySelectorAll<HTMLElement>('[data-slot=asset]')].map((row) => row.textContent),
+  ).toEqual([
+    expect.stringContaining('inter.woff2'),
+    expect.stringMatching(/photo\.png.*failed/),
+    expect.stringMatching(/next\.png.*loading/),
   ]);
-  act(() => rows[1]?.querySelector('button')?.click());
-  expect(calls).toEqual(['seek 40']);
+});
+
+it('lists no font or image while no frame is shown', () => {
+  const { controller } = fakeController({ session: readySession(60) });
+  const { root, tab } = mount(controller);
+  act(() => tab('Assets').click());
+  expect(root.querySelector('[data-slot=asset]')).toBeNull();
+  expect(root.textContent).toContain('The shown frame registers no font or image');
 });
 
 const tree: ElementTree = {

@@ -22,7 +22,7 @@ Font loads use `FontFace.load()`, then `document.fonts.ready` and `document.font
 
 ## Consequences
 
-Scene authors opt in by calling `useAsset`. A raw `<img>` or CSS font is outside the guarantee. A component that suspends and is removed before its effect commits can leave a registration until release or disposal; pass-end garbage collection was rejected because a suspended child does not re-render. StrictMode double-mounting is unverified. Font weight substitution, variable fonts, glyph coverage and large raster decode pressure remain the parked Phase 2 qualification. GPU resources stay in three.
+Scene authors opt in by calling `useAsset`. A raw `<img>` or CSS font is outside the guarantee. A component that suspends and is removed before its effect commits can leave a registration until release or disposal; pass-end garbage collection was rejected because a suspended child does not re-render. _Amended 2026-11-02 (TASK-281):_ such a registration no longer reaches a preview reply: `assetReadiness(generation)` leaves out the owners that never committed from an earlier generation, and an owner that unmounted or that a Suspense fallback hid since it committed (`markUncommitted`, in `useAsset`'s layout-effect cleanup). StrictMode double-mounting is unverified. Font weight substitution, variable fonts, glyph coverage and large raster decode pressure remain the parked Phase 2 qualification. GPU resources stay in three.
 
 The opt-in mutation round is `node scripts/mutate-asset-readiness.ts`. Each mutant is restored in `finally`.
 

@@ -4,15 +4,12 @@ import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protoc
 import {
   type ElementTree,
   type InspectedElement,
-  type RegisteredAsset,
   type ShowOutcome,
 } from '../lib/preview-protocol.ts';
 import { type Result } from '../lib/result.ts';
-import { observeAssetFrames, type AssetFrame, type AssetSpan } from './asset-usage.ts';
 import { type AudioPlayer } from './audio.ts';
 import { type Realm } from './connection.ts';
 import { type PreviewQuery } from './query.ts';
-import { scanFrames, type ScanProgress } from './scan.ts';
 import {
   audioSchedule,
   frameAnswered,
@@ -30,18 +27,6 @@ export type Session =
   | Readonly<{ kind: 'failed'; diagnostic: Diagnostic }>
   | Readonly<{ kind: 'ready'; descriptor: LoadingDescriptor; fps: FrameRate }>;
 
-/**
- * A registered asset as the frames shown or scanned so far report it. The scan stands in for the
- * assets instead of loading them, so one only the scan has seen is `unchecked`.
- */
-export type SeenAsset = Readonly<{
-  kind: RegisteredAsset['kind'];
-  source: string;
-  status: RegisteredAsset['status'] | 'unchecked';
-  /** The earliest frame seen to use it, by the stage or the scan. */
-  frame: number;
-}>;
-
 export type PreviewState = Readonly<{
   session: Session;
   playback: Playback;
@@ -49,19 +34,13 @@ export type PreviewState = Readonly<{
   starting: boolean;
   /** The frame the playhead is on; the realm may still be showing an earlier one. */
   playhead: number;
-  /** The realm's answer to the latest `show`. */
-  shown: ShowOutcome | undefined;
+  /** The realm's answer to the latest `show` it did not abort: the frame on the stage. */
+  shown: Exclude<ShowOutcome, Readonly<{ status: 'aborted' }>> | undefined;
   /** Every named Sequence span reported since the last reload, in first-seen order. */
   spans: readonly SequenceSpan[];
-  /** Every font and image a shown or failed frame reported since the last reload, in first-seen order, with its latest status. */
-  assets: readonly SeenAsset[];
-  /** The frames that used each asset group, from the frames shown or failed since the last reload. */
-  assetSpans: readonly AssetSpan[];
   muted: ReadonlySet<string>;
   /** Declared audio sources that could not be fetched or decoded. */
   unplayable: readonly string[];
-  /** How far the scan realm read the mounted Composition; none runs while this is undefined. */
-  scan: ScanProgress | undefined;
 }>;
 
 export type PreviewDependencies = Readonly<{
@@ -71,12 +50,6 @@ export type PreviewDependencies = Readonly<{
    * frame's shell reports that the entry failed to load or run.
    */
   connect: (signal: AbortSignal) => Promise<Realm>;
-  /**
-   * Load (or reload) a second, hidden realm frame, a dry realm (core), and connect to it; it shows
-   * every frame of the mounted Composition in turn, so the timeline knows the frames nobody played.
-   * Closing that realm unloads its page, and the React tree it holds with it.
-   */
-  connectScanner: (signal: AbortSignal) => Promise<Realm>;
   audio: AudioPlayer;
   /**
    * The `AudioContext` clock in seconds; `latency` is how long a sound started now takes to be
@@ -121,52 +94,6 @@ const accumulate = (spans: readonly SequenceSpan[], seen: readonly SequenceSpan[
   ...spans,
   ...seen.filter((span) => !spans.some((known) => sameSpan(known, span))),
 ];
-const assetKey = ({ kind, source }: Pick<RegisteredAsset, 'kind' | 'source'>) =>
-  `${kind}\0${source}`;
-/** One answered frame; `continued` as for `observeAssetFrames`. */
-type Observation = Readonly<{
-  frame: number;
-  outcome: ShowOutcome;
-  continued?: number | undefined;
-}>;
-/**
- * What the answers of frames, in order, add to the state. A frame the stage showed (`checked`)
- * sets the status of each asset it used; a scanned one adds the assets not seen before, unchecked.
- */
-const observe = (
-  state: PreviewState,
-  observations: readonly Observation[],
-  checked: boolean,
-): Pick<PreviewState, 'spans' | 'assets' | 'assetSpans'> => {
-  let { spans } = state;
-  const assets = new Map(state.assets.map((asset) => [assetKey(asset), asset]));
-  const frames: AssetFrame[] = [];
-  for (const { frame, outcome, continued } of observations) {
-    if (outcome.status === 'shown') spans = accumulate(spans, outcome.sequences);
-    if (outcome.status === 'aborted') continue;
-    frames.push({ frame, assets: outcome.assets, continued });
-    for (const { kind, source, status } of outcome.assets) {
-      const known = assets.get(assetKey({ kind, source }));
-      assets.set(
-        assetKey({ kind, source }),
-        known === undefined
-          ? { kind, source, status: checked ? status : 'unchecked', frame }
-          : {
-              ...known,
-              status: checked ? status : known.status,
-              frame: Math.min(known.frame, frame),
-            },
-      );
-    }
-  }
-  return {
-    spans,
-    assets: frames.length === 0 ? state.assets : [...assets.values()],
-    assetSpans: observeAssetFrames(state.assetSpans, frames),
-  };
-};
-// The scan reports this many frames at once, so the lanes are not packed again for every frame.
-const scanBatch = 30;
 const lastFrame = (descriptor: LoadingDescriptor) => Math.max(descriptor.durationInFrames - 1, 0);
 const realmDidNotStart: Diagnostic = {
   code: 'render.page-error',
@@ -184,17 +111,13 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     playhead: 0,
     shown: undefined,
     spans: [],
-    assets: [],
-    assetSpans: [],
     muted: deps.muted.load(),
     unplayable: [],
-    scan: undefined,
   };
   const listeners = new Set<() => void>();
   const update = (next: Partial<PreviewState>) => {
     state = { ...state, ...next };
     for (const listener of listeners) listener();
-    wakeScan();
   };
   let realm: Realm | undefined;
   let connection: AbortController | undefined;
@@ -212,25 +135,23 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     if (state.starting) update({ starting: false });
   };
 
-  // Each play, and each seek while playing, starts a run; the frames one run shows follow each
-  // other, so the asset spans bridge the frames playback skipped between them.
-  let playRun: object = {};
-  let lastShown: Readonly<{ run: object | undefined; frame: number }> | undefined;
   const present = (frame: number | undefined) => {
     if (frame === undefined || realm === undefined) return;
     const current = realm;
-    const sentIn = playing() ? playRun : undefined;
     current.show(frame).then(
       (outcome) => {
         if (current !== realm) return;
-        const continued =
-          sentIn !== undefined && lastShown?.run === sentIn ? lastShown.frame : undefined;
-        if (outcome.status !== 'aborted') lastShown = { run: sentIn, frame };
-        update({ shown: outcome, ...observe(state, [{ frame, outcome, continued }], true) });
+        // An aborted show leaves the frame before it on the stage.
+        if (outcome.status !== 'aborted')
+          update({
+            shown: outcome,
+            ...(outcome.status === 'shown'
+              ? { spans: accumulate(state.spans, outcome.sequences) }
+              : {}),
+          });
         const step = frameAnswered(presenter);
         presenter = step.state;
         present(step.send);
-        wakeScan();
       },
       // The realm closed for a reload; its successor shows the playhead again.
       () => {},
@@ -244,71 +165,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   };
   const ready = () => (state.session.kind === 'ready' ? state.session : undefined);
   const playing = () => state.playback.kind === 'playing';
-
-  // The scan waits while playback runs or is about to, and while the stage is showing a frame, so
-  // it does not take the time of the frames on screen.
-  let waking: (() => void)[] = [];
-  const scanMayRun = () => !playing() && !state.starting && presenter.inFlight === undefined;
-  const wakeScan = () => {
-    if (waking.length > 0 && scanMayRun()) for (const wake of waking.splice(0)) wake();
-  };
-  let scanning: AbortController | undefined;
-  let scanner: Realm | undefined;
-  const stopScan = () => {
-    scanning?.abort();
-    scanning = undefined;
-    scanner?.close();
-    scanner = undefined;
-    for (const wake of waking.splice(0)) wake();
-  };
-  const scan = async (descriptor: LoadingDescriptor) => {
-    stopScan();
-    const controller = new AbortController();
-    scanning = controller;
-    const total = descriptor.durationInFrames;
-    update({ scan: { scanned: 0, total } });
-    // A scan that cannot start leaves the timeline to the frames shown, as before there was one.
-    const giveUp = () => {
-      if (controller.signal.aborted) return;
-      stopScan();
-      update({ scan: undefined });
-    };
-    let current: Realm;
-    try {
-      current = await deps.connectScanner(controller.signal);
-    } catch {
-      giveUp();
-      return;
-    }
-    if (controller.signal.aborted) {
-      current.close();
-      return;
-    }
-    scanner = current;
-    const mounted = await unlessClosed(current.mount(descriptor.id, deps.query.props));
-    if (mounted?.ok !== true || mounted.value.descriptor.durationInFrames !== total) {
-      giveUp();
-      return;
-    }
-    await scanFrames({
-      show: (frame) => current.show(frame),
-      total,
-      idle: scanMayRun,
-      wake: () =>
-        new Promise((resolve) => {
-          waking.push(resolve);
-        }),
-      report: (steps, progress) => update({ scan: progress, ...observe(state, steps, false) }),
-      batch: scanBatch,
-      signal: controller.signal,
-    });
-    // Every frame read: the realm is no longer needed.
-    if (scanning === controller) {
-      scanning = undefined;
-      scanner?.close();
-      scanner = undefined;
-    }
-  };
 
   const halt = () => {
     stopTicking?.();
@@ -329,7 +185,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       anchorFrame,
       anchorTime: deps.clock.now() + deps.clock.latency(),
     };
-    playRun = {};
     update({ playback });
     deps.audio.start(
       audioSchedule(
@@ -378,7 +233,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     }
     update({ session: { kind: 'ready', descriptor, fps: fps.value } });
     want(Math.min(state.playhead, lastFrame(descriptor)));
-    void scan(descriptor);
     prepared = deps.audio
       .prepare((descriptor.audio ?? []).map((track) => track.src))
       .then((unplayable) => {
@@ -402,7 +256,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     connection?.abort();
     realm?.close();
     realm = undefined;
-    stopScan();
     presenter = idlePresenter;
     prepared = Promise.resolve();
     if (changed.audio) deps.audio.forget();
@@ -412,9 +265,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       session: { kind: 'connecting' },
       shown: undefined,
       spans: [],
-      assets: [],
-      assetSpans: [],
-      scan: undefined,
     });
     let current: Realm;
     try {
@@ -510,7 +360,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     },
     dispose: () => {
       halt();
-      stopScan();
       connection?.abort();
       realm?.close();
       realm = undefined;

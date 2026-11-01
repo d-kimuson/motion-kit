@@ -88,13 +88,19 @@ export type AssetRegistry = Readonly<{
   release: (owner: string) => void;
   retry: (key: string) => void;
   markCommitted: (owner: string) => void;
+  /** The owner left the screen: unmounted, or hidden by a Suspense fallback that may reveal it again. */
+  markUncommitted: (owner: string) => void;
   beginPass: () => void;
   endPass: () => void;
   whenReady: (request: ReadinessRequest) => Promise<AssetSettlement>;
   pending: () => readonly PendingAsset[];
   /** Failed registrations as produced diagnostics. Not a package export. */
   failures: (location?: Location, generation?: number) => readonly Diagnostic[];
-  snapshot: () => AssetReadinessSnapshot;
+  /**
+   * The live registrations by status. Given the generation of a committed frame, the owners of a
+   * render cut off before it committed, which never release, are left out.
+   */
+  snapshot: (generation?: number) => AssetReadinessSnapshot;
   versions: () => readonly Readonly<{ id: string; version: string }>[];
   poke: () => void;
   dispose: () => void;
@@ -124,19 +130,6 @@ export const createAssetRegistry = (options: {
   const liveEntries = (): Entry[] =>
     [...entries.values()].filter((entry) => entry.owners.size > 0 && !disposed);
 
-  const recordsFor = (entry: Entry): PendingAsset[] =>
-    [...entry.owners.values()].map((owner) => ({
-      id: owner.assetId,
-      kind: entry.descriptor.kind,
-      source: entry.descriptor.source,
-      phase: entry.phase,
-      ...(owner.sceneId === undefined ? {} : { sceneId: owner.sceneId }),
-    }));
-
-  const pendingRegistrations = (): PendingAsset[] =>
-    liveEntries()
-      .filter((entry) => entry.status === 'pending' || entry.status === 'idle')
-      .flatMap(recordsFor);
   // A held frame (the preview) renders as a transition, and a render cut off before it committed
   // keeps its registrations until the next frame renders over them. A failure only such stale
   // owners hold belongs to that earlier frame; a committed owner still shows its asset.
@@ -144,6 +137,21 @@ export const createAssetRegistry = (options: {
     !owner.committed &&
     owner.context.generation !== undefined &&
     owner.context.generation < generation;
+  const recordsFor = (entry: Entry, generation?: number): PendingAsset[] =>
+    [...entry.owners.values()]
+      .filter((owner) => generation === undefined || !stale(owner, generation))
+      .map((owner) => ({
+        id: owner.assetId,
+        kind: entry.descriptor.kind,
+        source: entry.descriptor.source,
+        phase: entry.phase,
+        ...(owner.sceneId === undefined ? {} : { sceneId: owner.sceneId }),
+      }));
+
+  const pendingRegistrations = (): PendingAsset[] =>
+    liveEntries()
+      .filter((entry) => entry.status === 'pending' || entry.status === 'idle')
+      .flatMap((entry) => recordsFor(entry));
   const entriesOf = (generation?: number): Entry[] =>
     liveEntries().filter(
       (entry) =>
@@ -228,6 +236,10 @@ export const createAssetRegistry = (options: {
     source: redactAssetSource(asset.source),
   });
 
+  const ownerOf = (owner: string): Owner | undefined => {
+    const key = ownerKey.get(owner);
+    return key === undefined ? undefined : entries.get(key)?.owners.get(owner);
+  };
   const releaseOwner = (owner: string, key: string) => {
     const entry = entries.get(key);
     ownerKey.delete(owner);
@@ -398,9 +410,12 @@ export const createAssetRegistry = (options: {
       beginRetryAttempt(entry);
     },
     markCommitted: (owner) => {
-      const key = ownerKey.get(owner);
-      const ownerState = key === undefined ? undefined : entries.get(key)?.owners.get(owner);
+      const ownerState = ownerOf(owner);
       if (ownerState !== undefined) ownerState.committed = true;
+    },
+    markUncommitted: (owner) => {
+      const ownerState = ownerOf(owner);
+      if (ownerState !== undefined) ownerState.committed = false;
     },
     beginPass: () => {
       passOpen = true;
@@ -416,20 +431,18 @@ export const createAssetRegistry = (options: {
     pending: () => pendingRegistrations().map(publishRecord),
     failures: (location, generation) =>
       failedEntries(generation).map((entry) => diagnosticFor(entry, location)),
-    snapshot: () => ({
-      pending: liveEntries()
-        .filter((entry) => entry.status === 'pending' || entry.status === 'idle')
-        .flatMap(recordsFor)
-        .map(publishRecord),
-      failed: liveEntries()
-        .filter((entry) => entry.status === 'failed')
-        .flatMap(recordsFor)
-        .map(publishRecord),
-      ready: liveEntries()
-        .filter((entry) => entry.status === 'ready')
-        .flatMap(recordsFor)
-        .map(publishRecord),
-    }),
+    snapshot: (generation) => {
+      const records = (statuses: readonly Entry['status'][]) =>
+        liveEntries()
+          .filter((entry) => statuses.includes(entry.status))
+          .flatMap((entry) => recordsFor(entry, generation))
+          .map(publishRecord);
+      return {
+        pending: records(['pending', 'idle']),
+        failed: records(['failed']),
+        ready: records(['ready']),
+      };
+    },
     versions: () =>
       liveEntries().map((entry) => ({
         id: `asset:${fingerprint(entry.key)}`,

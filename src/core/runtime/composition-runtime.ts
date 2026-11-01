@@ -2,7 +2,7 @@ import { type Diagnostic, type Location } from '../../lib/diagnostic.ts';
 import { type PendingAsset } from '../../lib/frame-protocol.ts';
 import { type Result } from '../../lib/result.ts';
 import { assetNotReadyDiagnostic, mergeFailureDiagnostics } from '../assets/diagnostics.ts';
-import { loadRegisteredAsset, standInAsset, type AssetLoader } from '../assets/loaders.ts';
+import { loadRegisteredAsset, type AssetLoader } from '../assets/loaders.ts';
 import { createAssetRegistry, type AssetRegistry } from '../assets/registry.ts';
 import { type PreparedComposition } from '../composition/registry.ts';
 import { createSequenceDirectory, sequenceSpans } from '../sequence/directory.ts';
@@ -97,12 +97,6 @@ export type CompositionRuntimeOptions = {
   externalDeadline?: boolean;
   /** Confirm old host/React work cannot mutate this realm before the next grant. */
   quiesce?: (snapshot: FrameSnapshot) => Promise<void>;
-  /**
-   * Settle frames only for which Sequences and assets they use, in a root that does not lay out:
-   * every font and image is stood in for (`standInAsset`), and integrations, which only draw, are
-   * not settled, since a canvas that is never laid out never draws.
-   */
-  dry?: boolean;
 };
 
 // `revision` is the resource revision of the snapshot the content committed.
@@ -172,7 +166,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
   let notifyAssetChange = () => {};
   const sequences = createSequenceDirectory();
   const registry = createAssetRegistry({
-    load: readAssetLoader(options) ?? (options.dry === true ? standInAsset : loadRegisteredAsset),
+    load: readAssetLoader(options) ?? loadRegisteredAsset,
     onChange: () => notifyAssetChange(),
   });
 
@@ -309,7 +303,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
           return;
         }
         const revision = resourceRevision;
-        for (const integration of options.dry === true ? [] : integrations.values()) {
+        for (const integration of integrations.values()) {
           if (settled.get(integration) === revision) continue;
           try {
             const result = await integration.settle(request.snapshot, request.controller.signal);

@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useLayoutEffect } from 'react';
 
 import { useAssetRuntime, useCompositionFrame } from '../composition/composition.tsx';
 import { assetsOf } from '../runtime/composition-runtime.ts';
@@ -50,10 +50,14 @@ export function useAsset(descriptor: AssetDescriptor): FontFace | HTMLImageEleme
     timeSeconds: toSeconds(snapshot.presentationTime),
     generation: snapshot.generation,
   });
-  useEffect(() => {
+  // A layout effect, so a frame's reply leaves out a part it unmounted or a fallback hid in the
+  // commit. A fallback that hides it runs only this cleanup, so the asset stays registered and
+  // shows again without loading; the passive cleanup releases it once it unmounts.
+  useLayoutEffect(() => {
     registry.markCommitted(owner);
-    return () => registry.release(owner);
+    return () => registry.markUncommitted(owner);
   }, [registry, owner]);
+  useEffect(() => () => registry.release(owner), [registry, owner]);
   if (read.status === 'pending') throw read.promise;
   if (read.status === 'failed') {
     if (read.diagnostic === undefined) throw new Error('Asset failure is missing a diagnostic.');

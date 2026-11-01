@@ -32,9 +32,13 @@ const unique = (assets: readonly RegisteredAsset[]): RegisteredAsset[] => [
   ...new Map(assets.map((asset) => [`${asset.kind}\0${asset.source}`, asset])).values(),
 ];
 
-/** The fonts and images registered for the frame that settled. */
-const registered = (page: LoadingPage): RegisteredAsset[] => {
-  const { pending, failed, ready } = page.assetReadiness();
+/**
+ * The fonts and images registered for the frame that settled. A render cut off before it committed
+ * (a Suspense boundary that suspended on mount, a frame a newer one replaced) never releases its
+ * registrations, so only those of this frame's generation or of a committed owner count.
+ */
+const registered = (page: LoadingPage, generation: number): RegisteredAsset[] => {
+  const { pending, failed, ready } = page.assetReadiness(generation);
   return unique(
     [
       ...failed.map((asset) => ({ ...asset, status: 'failed' as const })),
@@ -78,7 +82,7 @@ const present = async (
       status: 'shown',
       frame: outcome.lease.globalFrame,
       sequences: page.sequences(),
-      assets: registered(page),
+      assets: registered(page, outcome.lease.generation),
     };
   if (completion.status === 'resettle') return present(page, await page.resettle(outcome.lease));
   return completion.status === 'failed'

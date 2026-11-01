@@ -658,6 +658,35 @@ describe('asset registry', () => {
     ]);
   });
 
+  it('leaves the owners of a render cut off before it committed out of a later snapshot', async () => {
+    const registry = createAssetRegistry({ load: () => Promise.resolve('value') });
+    registry.retain(image('/shown.png', 'shown'), 'shown-owner', context);
+    registry.markCommitted('shown-owner');
+    registry.retain(image('/cut-off.png', 'cut-off'), 'cut-off-owner', context);
+    registry.retain(image('/next.png', 'next'), 'next-owner', { ...context, generation: 2 });
+    await tick();
+    expect(registry.snapshot(2).ready.map((asset) => asset.id)).toEqual(['shown', 'next']);
+    expect(registry.snapshot().ready.map((asset) => asset.id)).toEqual([
+      'shown',
+      'cut-off',
+      'next',
+    ]);
+  });
+
+  it('leaves an owner hidden or unmounted since it committed out of a later snapshot', async () => {
+    const registry = createAssetRegistry({ load: () => Promise.resolve('value') });
+    registry.retain(image('/shown.png', 'shown'), 'shown-owner', context);
+    registry.markCommitted('shown-owner');
+    registry.retain(image('/gone.png', 'gone'), 'gone-owner', context);
+    registry.markCommitted('gone-owner');
+    registry.markUncommitted('gone-owner');
+    await tick();
+    expect(registry.snapshot(2).ready.map((asset) => asset.id)).toEqual(['shown']);
+    // A fallback that hid it leaves it registered, so it shows again without loading.
+    registry.markCommitted('gone-owner');
+    expect(registry.snapshot(2).ready.map((asset) => asset.id)).toEqual(['shown', 'gone']);
+  });
+
   it('keeps the barrier waiting when a registration appears during confirmation', async () => {
     const late = Promise.withResolvers<string>();
     let confirmations = 0;
