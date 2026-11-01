@@ -319,7 +319,7 @@ motion-kit preview entry.tsx --composition teaser --preview-fps 15
 The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
 click on the timeline seek. The keys work wherever the focus is on the page, except in an input. The timecode shows `mm:ss.cc` and the frame number; when playback is slower
 than the preview rate, `showing <n>` names the frame actually on screen. Each declared audio source has a
-mute checkbox, remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
+checkbox, ticked while it is audible; clearing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
 fetched or decoded is marked in the page and skipped.
 
 Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
@@ -353,8 +353,8 @@ the line `serving <url> (Ctrl-C to stop); ready` is. Then the process serves unt
 
 - A stop after readiness (`Ctrl-C`, `SIGTERM`, `SIGHUP`) is the normal end: exit `0`, nothing more on
   stdout.
-- A failure before readiness (entry not found, Vite or entry load failure, a taken `--port`) is the usual
-  failure envelope with exit `1`, or `2` for an invocation error.
+- A failure before readiness is the usual failure envelope: exit `1` for a Vite or entry load failure
+  or a taken `--port`, and `2` for an invocation error, which includes an entry that is not found.
 - A stop before readiness is a cancellation as for every command: no envelope, the stderr line
   `preview aborted; nothing is being served`, exit `128` plus the signal number.
 - A failure after readiness, such as a Vite config change, writes one line to stderr,

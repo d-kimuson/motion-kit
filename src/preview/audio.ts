@@ -116,7 +116,13 @@ export const mutedSources = (
         return new Set();
       }
     },
-    save: (muted: ReadonlySet<string>) =>
-      storage.setItem(key, JSON.stringify([...muted].toSorted())),
+    // A blocked or full storage only loses the memory of the choice, never the mute itself.
+    save: (muted: ReadonlySet<string>) => {
+      try {
+        storage.setItem(key, JSON.stringify([...muted].toSorted()));
+      } catch {
+        // Nothing to keep it in.
+      }
+    },
   };
 };

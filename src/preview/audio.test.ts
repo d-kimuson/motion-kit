@@ -106,3 +106,16 @@ it('keeps muted sources per project and survives a corrupt entry', () => {
   items.set('motion-kit-preview:muted:/a', '{nope');
   expect(project.load()).toEqual(new Set());
 });
+
+it('lets a mute through when storage refuses to keep it', () => {
+  const blocked = mutedSources(
+    {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      },
+    },
+    '/a',
+  );
+  expect(() => blocked.save(new Set(['a.wav']))).not.toThrow();
+});

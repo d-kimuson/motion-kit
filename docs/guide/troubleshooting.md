@@ -237,8 +237,8 @@ Anything else: keep the envelope and the stack, and report it.
 - **A source is marked unplayable, or there is no sound.** The audio file could not be fetched or
   decoded by the browser, or it lies outside what Vite's `server.fs.allow` serves (an absolute `src`
   elsewhere renders but does not play in the preview: add its directory to `server.fs.allow`); the
-  source is skipped and the rest plays. Browsers also start audio only after a click, so press Play. Check the
-  mute checkbox of the source.
+  source is skipped and the rest plays. Browsers also start audio only after a click, so press Play. Check that
+  the source's checkbox is ticked; a cleared one mutes it.
 - **The page shows `render.page-error`: "The composition page loaded, but the entry did not start."**
   The entry failed to import or run in the browser, for example a syntax error or a module that throws
   at import. The browser console and the terminal running `preview` name the error; save a fix and the
