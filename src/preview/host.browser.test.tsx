@@ -147,11 +147,12 @@ it('maps the playback keys anywhere on the page except where a focused control u
     return element;
   };
   const [text, checkbox, range] = [control('text'), control('checkbox'), control('range')];
-  document.body.append(root, text, checkbox, range);
+  const select = document.createElement('select');
+  document.body.append(root, text, checkbox, range, select);
   const view = createRoot(root);
   cleanups.push(() => {
     act(() => view.unmount());
-    for (const element of [root, text, checkbox, range]) element.remove();
+    for (const element of [root, text, checkbox, range, select]) element.remove();
   });
   act(() =>
     view.render(
@@ -176,6 +177,10 @@ it('maps the playback keys anywhere on the page except where a focused control u
   press('ArrowRight', {}, text);
   press(' ', {}, checkbox);
   press('ArrowRight', {}, checkbox);
+  // A select chooses its option with the arrows.
+  press(' ', {}, select);
+  press('ArrowDown', {}, select);
+  press('ArrowRight', {}, select);
   // The scrubber's own arrow step is cancelled, so the frame moves once.
   expect(press('ArrowLeft', {}, range)).toBe(false);
   press(' ', {}, range);
@@ -844,7 +849,7 @@ it('keeps the scrubber the same width from the first frame to the last in either
   }
 });
 
-it('switches the page to Japanese and keeps the choice for the next load', () => {
+it('switches the page to Japanese in the settings and keeps the choice for the next load', async () => {
   const storage = memoryStorage();
   const { controller } = fakeController({ session: readySession(60) });
   const first = mount(
@@ -853,19 +858,33 @@ it('switches the page to Japanese and keeps the choice for the next load', () =>
     memoryStorage(),
     createLocaleSetting(storage, ['en-US']),
   );
-  const language = first.root.querySelector('[role=group][aria-label=Language]');
-  const japanese = language?.querySelector<HTMLElement>('[lang=ja]');
-  if (japanese === null || japanese === undefined) throw new Error('No Japanese toggle');
-  act(() => japanese.click());
+  const settings = first.root.querySelector<HTMLElement>('[aria-label=Settings]');
+  if (settings === null) throw new Error('No settings button');
+  act(() => settings.click());
+  // The popover is portaled out of the view's root.
+  const language = await vi.waitFor(() => {
+    const select = document.querySelector<HTMLSelectElement>('select[id]');
+    if (select === null) throw new Error('No language select');
+    return select;
+  });
+  expect(document.querySelector(`label[for="${language.id}"]`)?.textContent).toBe('Language');
+  expect([...language.options].map((option) => [option.value, option.text, option.lang])).toEqual([
+    ['en', 'English', 'en'],
+    ['ja', '日本語', 'ja'],
+  ]);
+  act(() => {
+    language.value = 'ja';
+    language.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   expect(first.tab('情報').getAttribute('aria-selected')).toBe('true');
   expect(first.root.querySelector('[aria-label=再生]')).not.toBeNull();
-  expect(japanese.getAttribute('aria-pressed')).toBe('true');
+  expect(language.value).toBe('ja');
   const second = mount(
     controller,
     reviewOf(controller),
     memoryStorage(),
     createLocaleSetting(storage, ['en-US']),
   );
-  expect(second.root.querySelector('[role=group][aria-label=言語]')).not.toBeNull();
+  expect(second.root.querySelector('[aria-label=設定]')).not.toBeNull();
   expect(second.tab('アセット')).toBeDefined();
 });

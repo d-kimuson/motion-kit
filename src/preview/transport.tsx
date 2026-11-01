@@ -1,13 +1,15 @@
-import { MessageSquarePlus, Pause, Play, StepBack, StepForward } from 'lucide-react';
-import { type ReactElement } from 'react';
+import { MessageSquarePlus, Pause, Play, Settings, StepBack, StepForward } from 'lucide-react';
+import { type ReactElement, useId } from 'react';
 
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
-import { type Locale, localeNames, locales } from './locale.ts';
+import { type Locale, localeNames, localeSchema, locales } from './locale.ts';
 import { useMessages } from './messages.ts';
 import { timecode } from './schedule.ts';
 import { Button } from './ui/button.tsx';
+import { NativeSelect, NativeSelectOption } from './ui/native-select.tsx';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from './ui/popover.tsx';
 import { Toggle } from './ui/toggle.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.tsx';
 
@@ -31,37 +33,55 @@ const Fixed = ({ text, widest }: { text: string; widest: string }) => (
   </span>
 );
 
-/** A toggle per language, each named in its own language. */
-const LocaleSwitch = ({
+/** The page's settings, behind an icon: for now only its language, each named in its own language. */
+const SettingsMenu = ({
   locale,
-  onChoose,
+  onChooseLocale,
 }: {
   locale: Locale;
-  onChoose: (locale: Locale) => void;
+  onChooseLocale: (locale: Locale) => void;
 }) => {
-  const label = useMessages().page.language;
+  const t = useMessages();
+  const languageId = useId();
   return (
-    <div role="group" aria-label={label} className="flex items-center">
-      {locales.map((item) => (
-        <Toggle
-          key={item}
-          size="sm"
-          lang={item}
-          aria-label={`${item.toUpperCase()} ${localeNames[item]}`}
-          title={localeNames[item]}
-          pressed={item === locale}
-          onPressedChange={() => onChoose(item)}
-          className="px-1.5 text-xs uppercase"
-        >
-          {item}
-        </Toggle>
-      ))}
-    </div>
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button variant="ghost" size="icon-sm" aria-label={t.transport.settings}>
+            <Settings />
+          </Button>
+        }
+      />
+      <PopoverContent side="top" align="end" className="w-56">
+        <PopoverTitle className="text-sm">{t.transport.settings}</PopoverTitle>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3">
+          <label htmlFor={languageId} className="text-xs text-muted-foreground">
+            {t.page.language}
+          </label>
+          <NativeSelect
+            id={languageId}
+            size="sm"
+            className="w-full"
+            value={locale}
+            onChange={(event) => {
+              const chosen = localeSchema.safeParse(event.currentTarget.value);
+              if (chosen.success) onChooseLocale(chosen.data);
+            }}
+          >
+            {locales.map((item) => (
+              <NativeSelectOption key={item} value={item} lang={item}>
+                {localeNames[item]}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };
 
 /**
- * The playback controls, the scrubber, comment mode and the page's language, which stay in view
+ * The playback controls, the scrubber, comment mode and the page's settings, which stay in view
  * above the scrolling timeline.
  */
 export const Transport = ({
@@ -168,7 +188,7 @@ export const Transport = ({
           {t.comment}
         </Toggle>
       </Hint>
-      <LocaleSwitch locale={locale} onChoose={onChooseLocale} />
+      <SettingsMenu locale={locale} onChooseLocale={onChooseLocale} />
     </div>
   );
 };
