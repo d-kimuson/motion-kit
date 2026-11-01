@@ -11,12 +11,13 @@ import { createAudioPlayer, mutedSources } from './audio.ts';
 import { createCommentBook } from './comment-book.ts';
 import { connectRealm } from './connection.ts';
 import { createPreviewController } from './controller.ts';
+import { createLocaleSetting } from './locale.ts';
 import { parsePreviewQuery, withCompositionId } from './query.ts';
 import { createReviewController } from './review.ts';
 import { PreviewView } from './view.tsx';
 
-// Reading `localStorage` throws where the browser blocks site data; mutes and comments then last
-// for the page.
+// Reading `localStorage` throws where the browser blocks site data; mutes, comments and the
+// language then last for the page.
 const siteStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
   try {
     return window.localStorage;
@@ -121,9 +122,17 @@ export const startPreviewHost = (): void => {
       ...(viteConfig === undefined ? {} : { viteConfig }),
     },
   };
+  const locale = createLocaleSetting(storage, navigator.languages);
+  // Screen readers and the browser's fonts follow the document's language.
+  const syncLanguage = () => {
+    document.documentElement.lang = locale.current();
+  };
+  syncLanguage();
+  locale.subscribe(syncLanguage);
   createRoot(root).render(
     <PreviewView
       layoutStorage={storage}
+      locale={locale}
       controller={controller}
       frame={(element) => {
         frame = element;

@@ -12,6 +12,7 @@ import { createCommentBook } from './comment-book.ts';
 import { type Review } from './comments-panel.tsx';
 import { connectRealm } from './connection.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { createLocaleSetting } from './locale.ts';
 import { createReviewController } from './review.ts';
 import { PreviewView } from './view.tsx';
 
@@ -124,6 +125,9 @@ const memoryStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
   };
 };
 
+/** The page in English, whatever the browser running the test prefers. */
+const english = () => createLocaleSetting(memoryStorage(), ['en']);
+
 /** Comment mode over `controller`, with comments kept for the test only. */
 const reviewOf = (controller: PreviewController): Review => {
   const book = createCommentBook(memoryStorage(), '/work/app', 'entry.tsx');
@@ -152,6 +156,7 @@ it('maps the playback keys anywhere on the page except where a focused control u
   act(() =>
     view.render(
       <PreviewView
+        locale={english()}
         controller={controller}
         frame={() => {}}
         review={reviewOf(controller)}
@@ -194,6 +199,7 @@ it('pauses on Space while a play waits for its audio', () => {
   act(() =>
     view.render(
       <PreviewView
+        locale={english()}
         controller={controller}
         frame={() => {}}
         review={reviewOf(controller)}
@@ -236,6 +242,7 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
   act(() =>
     view.render(
       <PreviewView
+        locale={english()}
         controller={controller}
         frame={() => {}}
         review={reviewOf(controller)}
@@ -315,6 +322,7 @@ it('keeps the controls row the same width while the shown frame lags, and hides 
     act(() =>
       view.render(
         <PreviewView
+          locale={english()}
           controller={controller}
           frame={() => {}}
           review={reviewOf(controller)}
@@ -373,6 +381,7 @@ it('highlights only the spans the shown frame is inside, not every mounted one',
   act(() =>
     view.render(
       <PreviewView
+        locale={english()}
         controller={controller}
         frame={() => {}}
         review={reviewOf(controller)}
@@ -412,6 +421,7 @@ const mount = (
   controller: PreviewController,
   review = reviewOf(controller),
   layoutStorage = memoryStorage(),
+  locale = english(),
 ) => {
   const root = document.createElement('div');
   document.body.append(root);
@@ -423,6 +433,7 @@ const mount = (
   act(() =>
     view.render(
       <PreviewView
+        locale={locale}
         controller={controller}
         frame={() => {}}
         review={review}
@@ -809,4 +820,30 @@ it('asks for no elements while playing', async () => {
   });
   expect(calls).toEqual([]);
   expect(root.querySelector('[role=tabpanel]')?.textContent).toContain('Pause');
+});
+
+it('switches the page to Japanese and keeps the choice for the next load', () => {
+  const storage = memoryStorage();
+  const { controller } = fakeController({ session: readySession(60) });
+  const first = mount(
+    controller,
+    reviewOf(controller),
+    memoryStorage(),
+    createLocaleSetting(storage, ['en-US']),
+  );
+  const language = first.root.querySelector('[role=group][aria-label=Language]');
+  const japanese = language?.querySelector<HTMLElement>('[lang=ja]');
+  if (japanese === null || japanese === undefined) throw new Error('No Japanese toggle');
+  act(() => japanese.click());
+  expect(first.tab('情報').getAttribute('aria-selected')).toBe('true');
+  expect(first.root.querySelector('[aria-label=再生]')).not.toBeNull();
+  expect(japanese.getAttribute('aria-pressed')).toBe('true');
+  const second = mount(
+    controller,
+    reviewOf(controller),
+    memoryStorage(),
+    createLocaleSetting(storage, ['en-US']),
+  );
+  expect(second.root.querySelector('[role=group][aria-label=言語]')).not.toBeNull();
+  expect(second.tab('アセット')).toBeDefined();
 });
