@@ -53,11 +53,12 @@ it('reports an entry that throws while it runs', async () => {
 });
 
 it('waits for an entry that awaits past its frame load before announcing', async () => {
-  const realm = await connectTo(
+  const connecting = connectTo(
     `<script type="module">await new Promise((done) => addEventListener('load', () => setTimeout(done, 1500)));
 parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1 }, location.origin);</script>`,
   );
-  realm.close();
+  await expect(connecting).resolves.toHaveProperty('close');
+  (await connecting).close();
 });
 
 const fakeController = () => {
