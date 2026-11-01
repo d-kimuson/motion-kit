@@ -96,6 +96,8 @@ describe('Composition runtime ownership', () => {
     expect(runtime.getSnapshot()?.generation).toBe(1);
     expect(content.acknowledge(1, 'v1')).toBe(false);
     content.acknowledge(1, 'v2');
+    // The root commits again for the changed resources, as React does on the new snapshot.
+    runtime.acknowledgeContent('composition-root', 1, '1');
     const next = await settled;
     if (next.status !== 'ready') throw new Error('not ready');
     expect(next.lease.generation).toBe(1);
@@ -105,6 +107,27 @@ describe('Composition runtime ownership', () => {
     });
     expect(runtime.completeCapture(next.lease)).toEqual({ status: 'accepted' });
     expect(runtime.completeCapture(next.lease)).toEqual({ status: 'aborted' });
+    runtime.dispose();
+  });
+
+  it('waits for the root to commit the latest resources, not an earlier revision', async () => {
+    const runtime = await setup();
+    const pending = runtime.settleFrame(0, { source: 'renderer', requestId: 'a' });
+    await tick();
+    const earlier = runtime.getSnapshot();
+    runtime.registerContent('late', 'v1').acknowledge(1, 'v1');
+    const latest = runtime.getSnapshot();
+    if (earlier === null || latest === null) throw new Error('no snapshot');
+    expect(latest.resourceRevision).toBeGreaterThan(earlier.resourceRevision);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    runtime.acknowledgeContent('composition-root', 1, '1', earlier.resourceRevision);
+    await tick();
+    expect(settled).toBe(false);
+    runtime.acknowledgeContent('composition-root', 1, '1', latest.resourceRevision);
+    expect(await pending).toMatchObject({ status: 'ready' });
     runtime.dispose();
   });
 
@@ -154,6 +177,7 @@ describe('Composition runtime ownership', () => {
           return work.promise;
         },
       });
+      runtime.acknowledgeContent('composition-root', 1, '1');
       expect(await runtime.resettle(ready.lease)).toEqual({ status: 'aborted' });
       await tick();
       expect(runtime.getSnapshot()).toBeNull();
@@ -272,6 +296,7 @@ describe('Composition runtime ownership', () => {
     expect(adapter).toHaveBeenCalledTimes(1);
     if (content === undefined) throw new Error('missing content');
     content.acknowledge(1, 'v1');
+    runtime.acknowledgeContent('composition-root', 1, '1');
     expect(await pending).toMatchObject({ status: 'ready' });
     expect(adapter).toHaveBeenCalledTimes(2);
     content.dispose();
@@ -306,6 +331,7 @@ describe('Composition runtime ownership', () => {
       const content = runtime.registerContent('late', 'v1');
       const resettled = runtime.resettle(ready.lease);
       content.acknowledge(1, 'v1');
+      runtime.acknowledgeContent('composition-root', 1, '1');
       const current = await resettled;
       if (current.status !== 'ready') throw new Error('not ready');
       await vi.advanceTimersByTimeAsync(9);

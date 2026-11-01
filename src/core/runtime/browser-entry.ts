@@ -194,6 +194,7 @@ export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage
           createElement(Composition, {
             definition: prepared.value,
             compositionRuntime: selectedRuntime,
+            presentation: host === 'preview' ? 'held' : 'live',
           }),
         ),
       );

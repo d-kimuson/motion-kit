@@ -27,6 +27,7 @@ export {
   Composition,
   CompositionContent,
   useCompositionFrame,
+  type FramePresentation,
 } from './core/composition/composition.tsx';
 export {
   useTimeline,

@@ -721,6 +721,10 @@ describe('asset registry', () => {
       }),
     ]);
     gate.resolve('ready');
+    await tick();
+    // The loaded asset is drawn only by the root's next commit, so the frame waits for it.
+    expect(settled).toBe(false);
+    runtime.acknowledgeContent('composition-root', 1, '1');
     await expect(pending).resolves.toMatchObject({ status: 'ready' });
     runtime.dispose();
   });

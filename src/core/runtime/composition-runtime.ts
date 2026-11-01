@@ -99,7 +99,8 @@ export type CompositionRuntimeOptions = {
   quiesce?: (snapshot: FrameSnapshot) => Promise<void>;
 };
 
-type Content = { version: string; generation: number | undefined };
+// `revision` is the resource revision of the snapshot the content committed.
+type Content = { version: string; generation: number | undefined; revision?: number };
 type Request = {
   requestId: string;
   snapshot: FrameSnapshot;
@@ -259,6 +260,16 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
   ): [Diagnostic, ...Diagnostic[]] | undefined =>
     mergeFailureDiagnostics(thrown, registry.failures(locationFor(request)));
 
+  // The root commits again when resources change within a generation (an asset that loaded), and
+  // the frame is ready only once that commit lands: one that committed the earlier revision may
+  // still show a fallback in place of the asset.
+  const committedFor = (request: Request) =>
+    [...contents].every(
+      ([id, content]) =>
+        content.generation === request.snapshot.generation &&
+        (id !== 'composition-root' || content.revision === resourceRevision),
+    );
+
   const drain = async (request: Request) => {
     request.draining = true;
     try {
@@ -270,10 +281,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
           configuredTimeoutMs: frameTimeoutMs,
           location: locationFor(request),
           generation: request.snapshot.generation,
-          committed: () =>
-            [...contents.values()].every(
-              (content) => content.generation === request.snapshot.generation,
-            ),
+          committed: () => committedFor(request),
         });
         if (!live(request)) return;
         if (!readiness.ok) {
@@ -311,12 +319,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
         }
         if (!live(request)) return;
         if (revision !== resourceRevision) continue;
-        if (
-          [...contents.values()].some(
-            (content) => content.generation !== request.snapshot.generation,
-          )
-        )
-          continue;
+        if (!committedFor(request)) continue;
         if (registry.pending().length > 0) continue;
         request.settledRevision = resourceRevision;
         request.result.resolve({ status: 'ready', lease: leaseFor(request) });
@@ -408,6 +411,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     id: string,
     acknowledgedGeneration: number,
     version: string,
+    revision = resourceRevision,
   ): boolean => {
     const registration = contents.get(id);
     if (
@@ -419,6 +423,7 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     )
       return false;
     registration.generation = acknowledgedGeneration;
+    registration.revision = revision;
     signalChange();
     return true;
   };
