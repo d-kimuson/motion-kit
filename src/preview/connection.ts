@@ -89,21 +89,26 @@ const unreachable = (): never => {
 };
 
 /**
- * Wait for the realm in `frame` to announce itself, then transfer the port requests travel on.
- * Only the frame at the host's own origin is accepted. Rejects when the frame's shell reports that
- * the entry failed to start; there is no deadline, since an entry may await before announcing.
+ * Wait for the realm in `frame` to announce itself for `load`, then transfer the port requests
+ * travel on. Only the frame at the host's own origin is accepted. Rejects when the frame's shell
+ * reports that the entry of that load failed to start; there is no deadline, since an entry may
+ * await before announcing.
  */
-export const connectRealm = (host: RealmWindow, signal?: AbortSignal): Promise<Realm> =>
+export const connectRealm = (
+  host: RealmWindow,
+  load: string,
+  signal?: AbortSignal,
+): Promise<Realm> =>
   new Promise((resolve, reject) => {
     const onMessage = (event: Event) => {
       if (!(event instanceof MessageEvent)) return;
       if (event.source !== host.frame || event.origin !== host.origin) return;
-      if (previewFailedSchema.safeParse(event.data).success) {
+      if (previewFailedSchema.safeParse(event.data).data?.load === load) {
         stop();
         reject(new Error('Preview realm failed to start'));
         return;
       }
-      if (!previewReadySchema.safeParse(event.data).success) return;
+      if (previewReadySchema.safeParse(event.data).data?.load !== load) return;
       stop();
       const channel = new MessageChannel();
       host.frame.postMessage(

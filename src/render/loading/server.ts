@@ -12,6 +12,7 @@ import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
+import { previewReloadEvent } from '../../lib/preview-protocol.ts';
 import { installBundledVite } from './config-loader.ts';
 import {
   configFailure,
@@ -422,7 +423,7 @@ try {
       return;
     }
     changedFiles.clear();
-    for (const stream of reloadStreams) stream.write('event: reload\ndata: {}\n\n');
+    for (const stream of reloadStreams) stream.write(`event: ${previewReloadEvent}\ndata: {}\n\n`);
   };
   const reload = (file: string) => {
     changedFiles.add(file);

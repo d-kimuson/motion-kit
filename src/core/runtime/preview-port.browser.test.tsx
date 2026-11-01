@@ -139,8 +139,17 @@ it('announces itself and serves only the first port its parent transfers at its 
   const announced = new Promise<unknown>((resolve) => {
     window.addEventListener('message', (event) => resolve(event.data), { once: true });
   });
-  servePreviewPort(previewPage(), { events, parent: window, origin: window.location.origin });
-  expect(await announced).toEqual({ type: 'motion-kit-preview-ready', protocolVersion: 1 });
+  servePreviewPort(previewPage(), {
+    events,
+    parent: window,
+    origin: window.location.origin,
+    load: '3',
+  });
+  expect(await announced).toEqual({
+    type: 'motion-kit-preview-ready',
+    protocolVersion: 1,
+    load: '3',
+  });
 
   const replies: unknown[] = [];
   const watch = (port: MessagePort) => {
@@ -159,4 +168,27 @@ it('announces itself and serves only the first port its parent transfers at its 
   expect(await reply).toMatchObject({ type: 'listed', id: 7, result: { ok: true } });
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(replies).toEqual([]);
+});
+
+it('answers a request whose handling threw, so the host does not wait on it', async () => {
+  container();
+  const events = new EventTarget();
+  const page = previewPage();
+  servePreviewPort(
+    { ...page, settleFrame: () => Promise.reject(new Error('boom')) },
+    { events, parent: window, origin: window.location.origin, load: '' },
+  );
+  const port = connect(events, {});
+  const reply = nextReply(port);
+  port.postMessage({ type: 'show', id: 5, frame: 0 });
+  expect(await reply).toMatchObject({
+    type: 'shown',
+    id: 5,
+    outcome: {
+      status: 'failed',
+      diagnostics: [
+        { code: 'internal.unexpected', message: 'The preview realm could not answer: boom' },
+      ],
+    },
+  });
 });

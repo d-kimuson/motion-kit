@@ -10,6 +10,7 @@ import {
   mountRequestSchema,
   type LoadingPage,
 } from '../../lib/loading-protocol.ts';
+import { previewLoadParameter } from '../../lib/preview-protocol.ts';
 import { type Result } from '../../lib/result.ts';
 import { Composition } from '../composition/composition.tsx';
 import {
@@ -219,11 +220,13 @@ export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage
 /** Browser-only bootstrap; mount never implies an initial seek or readiness. The shell URL fixes
  * the host: `?host=preview` serves a preview host over a port, anything else the renderer. */
 export const bootstrapComposition = (input: unknown): void => {
-  if (new URLSearchParams(window.location.search).get('host') === 'preview') {
+  const parameters = new URLSearchParams(window.location.search);
+  if (parameters.get('host') === 'preview') {
     servePreviewPort(createLoadingPage(input, 'preview'), {
       events: window,
       parent: window.parent,
       origin: window.location.origin,
+      load: parameters.get(previewLoadParameter) ?? '',
     });
     return;
   }

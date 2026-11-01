@@ -39,7 +39,8 @@ const harness = (answer: (request: unknown) => PreviewReply | undefined) => {
   };
   return { window: { events, frame, origin } satisfies RealmWindow, connects, announce };
 };
-const ready = { type: 'motion-kit-preview-ready', protocolVersion: 1 };
+const ready = { type: 'motion-kit-preview-ready', protocolVersion: 1, load: '2' };
+const failed = { type: 'motion-kit-preview-failed', load: '2' };
 const listed = (id: number): PreviewReply => ({
   type: 'listed',
   id,
@@ -59,7 +60,7 @@ it('connects on the frame announcement and correlates replies by id', async () =
       };
     return parsed.type === 'list' ? listed(parsed.id) : undefined;
   });
-  const connecting = connectRealm(fake.window);
+  const connecting = connectRealm(fake.window, '2');
   fake.announce(ready);
   const realm = await connecting;
   expect(fake.connects).toEqual([
@@ -77,10 +78,13 @@ it('connects on the frame announcement and correlates replies by id', async () =
 
 it('ignores announcements from other windows, origins or protocol versions', async () => {
   const fake = harness((request) => listed(previewRequestSchema.parse(request).id));
-  const connecting = connectRealm(fake.window);
+  const connecting = connectRealm(fake.window, '2');
   fake.announce(ready, { source: {} });
   fake.announce(ready, { origin: 'http://evil.test' });
   fake.announce({ ...ready, protocolVersion: 2 });
+  // The document an earlier load left in the frame.
+  fake.announce({ ...ready, load: '1' });
+  fake.announce({ ...failed, load: '1' });
   expect(fake.connects).toEqual([]);
   fake.announce(ready);
   await connecting;
@@ -93,7 +97,7 @@ it('drops malformed or unknown replies and rejects what is pending on close', as
     // An id the host never sent.
     return { type: 'listed', id: parsed.id + 100, result: { ok: true, value: [] } };
   });
-  const connecting = connectRealm(fake.window);
+  const connecting = connectRealm(fake.window, '2');
   fake.announce(ready);
   const realm = await connecting;
   const pending = realm.list();
@@ -104,10 +108,10 @@ it('drops malformed or unknown replies and rejects what is pending on close', as
 
 it('rejects when the frame reports that its entry failed, and only from that frame', async () => {
   const fake = harness(() => undefined);
-  const connecting = connectRealm(fake.window);
-  fake.announce({ type: 'motion-kit-preview-failed' }, { source: {} });
-  fake.announce({ type: 'motion-kit-preview-failed' }, { origin: 'http://evil.example' });
-  fake.announce({ type: 'motion-kit-preview-failed' });
+  const connecting = connectRealm(fake.window, '2');
+  fake.announce(failed, { source: {} });
+  fake.announce(failed, { origin: 'http://evil.example' });
+  fake.announce(failed);
   await expect(connecting).rejects.toThrow('Preview realm failed to start');
   fake.announce(ready);
   expect(fake.connects).toEqual([]);
@@ -116,7 +120,7 @@ it('rejects when the frame reports that its entry failed, and only from that fra
 it('stops waiting for an announcement once aborted', async () => {
   const fake = harness(() => undefined);
   const controller = new AbortController();
-  const connecting = connectRealm(fake.window, controller.signal);
+  const connecting = connectRealm(fake.window, '2', controller.signal);
   controller.abort();
   await expect(connecting).rejects.toThrow('Preview realm closed');
   fake.announce(ready);

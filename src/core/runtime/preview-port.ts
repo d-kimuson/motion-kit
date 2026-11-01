@@ -1,3 +1,4 @@
+import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type FramePage } from '../../lib/frame-protocol.ts';
 import { type LoadingPage } from '../../lib/loading-protocol.ts';
 import {
@@ -14,6 +15,8 @@ export type PreviewHostWindow = Readonly<{
   events: Pick<EventTarget, 'addEventListener'>;
   parent: MessageEventSource & Pick<Window, 'postMessage'>;
   origin: string;
+  /** The shell URL's `load`, echoed in the announcement. */
+  load: string;
 }>;
 
 // Preview has no supervisor that could recycle the user's browser, so the page bounds its own
@@ -36,6 +39,26 @@ const present = async (
     };
   if (completion.status !== 'resettle') return completion;
   return present(page, await page.resettle(outcome.lease));
+};
+
+const unanswered = (error: unknown): Diagnostic => ({
+  code: 'internal.unexpected',
+  severity: 'error',
+  message: `The preview realm could not answer: ${error instanceof Error ? error.message : String(error)}`,
+  hint: 'Read the error in the browser console, then save a fix; the preview reloads on its own.',
+});
+/** A request whose answer threw still gets a reply, so the host never waits on it. */
+const failedReply = (request: PreviewRequest, error: unknown): PreviewReply => {
+  const diagnostic = unanswered(error);
+  if (request.type === 'list')
+    return { type: 'listed', id: request.id, result: { ok: false, error: diagnostic } };
+  if (request.type === 'mount')
+    return { type: 'mounted', id: request.id, result: { ok: false, error: diagnostic } };
+  return {
+    type: 'shown',
+    id: request.id,
+    outcome: { status: 'failed', diagnostics: [diagnostic] },
+  };
 };
 
 /** One preview request against the realm's Loading Page. */
@@ -79,16 +102,17 @@ export const servePreviewPort = (page: LoadingPage, host: PreviewHostWindow): vo
     port.addEventListener('message', (message) => {
       const request = previewRequestSchema.safeParse(message.data);
       if (request.success)
-        void answerPreview(page, request.data).then(
-          (reply) => port.postMessage(reply),
-          // The host's request then stays pending until the next reload replaces this realm.
-          (error: unknown) => console.error(error),
-        );
+        void answerPreview(page, request.data)
+          .catch((error: unknown) => {
+            console.error(error);
+            return failedReply(request.data, error);
+          })
+          .then((reply) => port.postMessage(reply));
     });
     port.start();
   });
   host.parent.postMessage(
-    { type: 'motion-kit-preview-ready', protocolVersion: previewProtocolVersion },
+    { type: 'motion-kit-preview-ready', protocolVersion: previewProtocolVersion, load: host.load },
     host.origin,
   );
 };

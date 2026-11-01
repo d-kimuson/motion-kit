@@ -1,10 +1,15 @@
 import { createRoot } from 'react-dom/client';
 
-import { previewConfigElementId, previewHostConfigSchema } from '../lib/preview-protocol.ts';
+import {
+  previewConfigElementId,
+  previewHostConfigSchema,
+  previewLoadParameter,
+  previewReloadEvent,
+} from '../lib/preview-protocol.ts';
 import { createAudioPlayer, mutedSources } from './audio.ts';
 import { connectRealm } from './connection.ts';
 import { createPreviewController } from './controller.ts';
-import { parsePreviewQuery } from './query.ts';
+import { parsePreviewQuery, withCompositionId } from './query.ts';
 import { PreviewView } from './view.tsx';
 
 const fail = (root: HTMLElement, message: string) => {
@@ -32,6 +37,7 @@ export const startPreviewHost = (): void => {
   }
   const { shellUrl, eventsUrl, audioUrl, projectRoot } = config.data;
   let frame: HTMLIFrameElement | null = null;
+  let loads = 0;
   const context = new AudioContext();
   const controller = createPreviewController({
     query: query.value,
@@ -40,12 +46,16 @@ export const startPreviewHost = (): void => {
       const target = element?.contentWindow;
       if (element === null || target === null || target === undefined)
         return Promise.reject(new Error('Preview frame is not attached'));
+      loads += 1;
+      const load = String(loads);
       const connecting = connectRealm(
         { events: window, frame: target, origin: window.location.origin },
+        load,
         signal,
       );
-      // Assigning the same URL navigates again, which is the reload.
-      element.src = shellUrl;
+      const url = new URL(shellUrl, window.location.href);
+      url.searchParams.set(previewLoadParameter, load);
+      element.src = url.href;
       return connecting;
     },
     audio: createAudioPlayer(context, async (src) => {
@@ -61,14 +71,15 @@ export const startPreviewHost = (): void => {
       },
     },
     muted: mutedSources(window.localStorage, projectRoot),
-    choose: (compositionId) => {
-      const params = new URLSearchParams(window.location.search);
-      params.set('composition', compositionId);
-      window.history.replaceState(null, '', `?${params.toString()}`);
-    },
+    choose: (compositionId) =>
+      window.history.replaceState(
+        null,
+        '',
+        withCompositionId(window.location.search, compositionId),
+      ),
   });
   // The server sends `reload` after a module the realm loaded changed; the realm is rebuilt.
-  new EventSource(eventsUrl).addEventListener('reload', () => void controller.reload());
+  new EventSource(eventsUrl).addEventListener(previewReloadEvent, () => void controller.reload());
   createRoot(root).render(
     <PreviewView
       controller={controller}

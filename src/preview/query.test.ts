@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { defaultPreviewFps, parsePreviewQuery, previewQueryString } from './query.ts';
+import {
+  defaultPreviewFps,
+  parsePreviewQuery,
+  previewQueryString,
+  withCompositionId,
+} from './query.ts';
 
 describe('parsePreviewQuery', () => {
   it('defaults to no selection, empty props and the default preview fps', () => {
@@ -20,6 +25,14 @@ describe('parsePreviewQuery', () => {
     const query = { compositionId: 'a b&c', props: { text: 'x=y&z' }, fps: 8 };
     expect(parsePreviewQuery(previewQueryString(query))).toEqual({ ok: true, value: query });
     expect(previewQueryString({ props: {}, fps: defaultPreviewFps })).toBe('');
+  });
+
+  it('reads back a chosen Composition with the rest of the query kept', () => {
+    const query = { compositionId: 'first', props: { text: 'x' }, fps: 8 };
+    expect(parsePreviewQuery(withCompositionId(previewQueryString(query), 'second'))).toEqual({
+      ok: true,
+      value: { ...query, compositionId: 'second' },
+    });
   });
 
   it('rejects malformed props and out-of-range fps as invalid arguments', () => {

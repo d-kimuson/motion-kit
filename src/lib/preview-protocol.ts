@@ -18,23 +18,33 @@ import { type Result } from './result.ts';
  */
 export const previewProtocolVersion = 1;
 
+/**
+ * The shell URL parameter naming one load of the realm frame. The frame's window outlives a
+ * reload, so the document being replaced can still post; both realm messages carry their load and
+ * the host only listens to the load it started.
+ */
+export const previewLoadParameter = 'load';
 /** The realm announces itself to its parent window once the bootstrap ran. */
 export const previewReadySchema = z.object({
   type: z.literal('motion-kit-preview-ready'),
   protocolVersion: z.literal(previewProtocolVersion),
+  load: z.string(),
 });
 /**
  * The realm's shell posts this when its entry failed to load or run before the realm could
  * announce itself; a slow entry (top-level await) simply announces later.
  */
 export const previewFailedType = 'motion-kit-preview-failed';
-export const previewFailedSchema = z.object({ type: z.literal(previewFailedType) });
+export const previewFailedSchema = z.object({
+  type: z.literal(previewFailedType),
+  load: z.string(),
+});
 /**
  * The classic script a preview realm's shell carries ahead of its entry. It runs before the module
  * graph, so it sees the entry's script fail to load or throw; capturing on the window also reaches
  * the script element's own error event.
  */
-export const previewFailureReporter = `<script>addEventListener('error',function(e){if(e instanceof ErrorEvent||e.target instanceof HTMLScriptElement)parent.postMessage({type:${JSON.stringify(previewFailedType)}},location.origin)},true)</script>`;
+export const previewFailureReporter = `<script>addEventListener('error',function(e){if(e instanceof ErrorEvent||e.target instanceof HTMLScriptElement)parent.postMessage({type:${JSON.stringify(previewFailedType)},load:new URLSearchParams(location.search).get(${JSON.stringify(previewLoadParameter)})||''},location.origin)},true)</script>`;
 /** The host answers with this message and transfers the port requests travel on. */
 export const previewConnectSchema = z.object({
   type: z.literal('motion-kit-preview-connect'),
@@ -85,6 +95,9 @@ export type PreviewReply =
   | Readonly<{ type: 'listed'; id: number; result: Result<readonly LoadingDescriptor[]> }>
   | Readonly<{ type: 'mounted'; id: number; result: Result<MountReceipt> }>
   | Readonly<{ type: 'shown'; id: number; outcome: ShowOutcome }>;
+
+/** The server-sent event the events route emits after a module the realm loaded changed. */
+export const previewReloadEvent = 'reload';
 
 /** What the server inlines into the host page; every URL is absolute-path, under Vite's base. */
 export const previewHostConfigSchema = z.object({

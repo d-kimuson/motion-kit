@@ -52,6 +52,13 @@ export const parsePreviewQuery = (search: string): Result<PreviewQuery> => {
   };
 };
 
+/** `search` with the chosen Composition in it, so a page reload keeps the choice. */
+export const withCompositionId = (search: string, compositionId: string): string => {
+  const params = new URLSearchParams(search);
+  params.set('composition', compositionId);
+  return `?${params.toString()}`;
+};
+
 /** The query `parsePreviewQuery` reads back; defaults are left out. */
 export const previewQueryString = (query: PreviewQuery): string => {
   const params = new URLSearchParams();

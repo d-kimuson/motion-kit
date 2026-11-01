@@ -14,7 +14,8 @@ afterEach(() => {
 
 /**
  * Connect to a frame whose document is `body` behind the shell's failure reporter. A blob URL keeps
- * this origin in `location.origin`, which a `srcdoc` frame reports as `null`.
+ * this origin in `location.origin`, which a `srcdoc` frame reports as `null`; it takes no query, so
+ * the load is the empty one the reporter falls back to.
  */
 const connectTo = (body: string) => {
   const element = document.createElement('iframe');
@@ -33,7 +34,7 @@ const connectTo = (body: string) => {
   });
   const frame = element.contentWindow;
   if (frame === null) throw new Error('No frame window');
-  const connecting = connectRealm({ events: window, frame, origin: window.location.origin });
+  const connecting = connectRealm({ events: window, frame, origin: window.location.origin }, '');
   element.src = url;
   return connecting;
 };
@@ -55,7 +56,7 @@ it('reports an entry that throws while it runs', async () => {
 it('waits for an entry that awaits past its frame load before announcing', async () => {
   const connecting = connectTo(
     `<script type="module">await new Promise((done) => addEventListener('load', () => setTimeout(done, 1500)));
-parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1 }, location.origin);</script>`,
+parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1, load: '' }, location.origin);</script>`,
   );
   await expect(connecting).resolves.toHaveProperty('close');
   (await connecting).close();
