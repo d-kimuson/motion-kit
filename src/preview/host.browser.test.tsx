@@ -84,6 +84,7 @@ const fakeController = (
     shown: undefined,
     spans: [],
     assets: [],
+    assetSpans: [],
     muted: new Set(),
     unplayable: [],
     ...overrides,
@@ -247,6 +248,45 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
       [...row.querySelectorAll('[data-slot=timeline-span]')].map((bar) => bar.textContent),
     ),
   ).toEqual([['intro', 'outro'], ['intro › title']]);
+});
+
+it('lays the asset groups out over the frames that used them, in lanes of their own', () => {
+  const group = (key: string, label: string, kind = 'image') => ({ kind, key, label });
+  const vows = group('photos/vows.jpg', 'vows.jpg');
+  const { controller } = fakeController({
+    session: readySession(60),
+    assetSpans: [
+      { group: vows, start: 0, end: 30, failed: false },
+      { group: group('/inter.woff2', 'inter.woff2', 'font'), start: 0, end: 60, failed: false },
+      { group: group('photos/toast.jpg', 'toast.jpg'), start: 30, end: 90, failed: true },
+    ],
+  });
+  const { root } = mount(controller);
+  const lanes = [...root.querySelectorAll('[data-slot=timeline-lane]')].filter(
+    (row) => row.querySelector('[data-slot=timeline-asset]') !== null,
+  );
+  expect(
+    lanes.map((row) =>
+      [...row.querySelectorAll<HTMLElement>('[data-slot=timeline-asset]')].map((bar) => [
+        bar.textContent,
+        bar.style.left,
+        bar.style.right,
+      ]),
+    ),
+  ).toEqual([
+    [
+      ['vows.jpg', '0%', 'calc(50%)'],
+      // A span past the end is cut at the end of the Composition.
+      ['toast.jpg', '50%', 'calc(0%)'],
+    ],
+    [['inter.woff2', '0%', 'calc(0%)']],
+  ]);
+  expect(root.textContent).toContain('Assets');
+  const failed = root.querySelector<HTMLElement>(
+    '[data-slot=timeline-asset][title^="photos/toast"]',
+  );
+  expect(failed?.title).toBe('photos/toast.jpg [30, 90), failed to load');
+  expect(failed?.className).toContain('bg-destructive');
 });
 
 it('keeps the controls row the same width while the shown frame lags, and hides the usual lag of playback', () => {

@@ -36,6 +36,7 @@ const setup = () => {
     playhead: 40,
     shown: undefined,
     assets: [],
+    assetSpans: [],
     spans: [
       { path: ['intro'], startFrame: 0, endFrame: 60 },
       { path: ['intro', 'title'], startFrame: 20, endFrame: 50 },
