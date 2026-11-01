@@ -123,6 +123,7 @@ export const startPreviewHost = (): void => {
   };
   createRoot(root).render(
     <PreviewView
+      layoutStorage={storage}
       controller={controller}
       frame={(element) => {
         frame = element;

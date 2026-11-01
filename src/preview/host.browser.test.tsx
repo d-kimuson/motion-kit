@@ -114,17 +114,18 @@ const fakeController = (
   return { controller, calls };
 };
 
+/** Site storage kept for the test only. */
+const memoryStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, value),
+  };
+};
+
 /** Comment mode over `controller`, with comments kept for the test only. */
 const reviewOf = (controller: PreviewController): Review => {
-  const items = new Map<string, string>();
-  const book = createCommentBook(
-    {
-      getItem: (key) => items.get(key) ?? null,
-      setItem: (key, value) => void items.set(key, value),
-    },
-    '/work/app',
-    'entry.tsx',
-  );
+  const book = createCommentBook(memoryStorage(), '/work/app', 'entry.tsx');
   return {
     controller: createReviewController({ preview: controller, book, props: {} }),
     book,
@@ -149,7 +150,12 @@ it('maps the playback keys anywhere on the page except where a focused control u
   });
   act(() =>
     view.render(
-      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+      <PreviewView
+        controller={controller}
+        frame={() => {}}
+        review={reviewOf(controller)}
+        layoutStorage={memoryStorage()}
+      />,
     ),
   );
   const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) =>
@@ -186,7 +192,12 @@ it('pauses on Space while a play waits for its audio', () => {
   });
   act(() =>
     view.render(
-      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+      <PreviewView
+        controller={controller}
+        frame={() => {}}
+        review={reviewOf(controller)}
+        layoutStorage={memoryStorage()}
+      />,
     ),
   );
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
@@ -223,7 +234,12 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
   });
   act(() =>
     view.render(
-      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+      <PreviewView
+        controller={controller}
+        frame={() => {}}
+        review={reviewOf(controller)}
+        layoutStorage={memoryStorage()}
+      />,
     ),
   );
   expect(
@@ -258,7 +274,12 @@ it('keeps the controls row the same width while the shown frame lags, and hides 
     });
     act(() =>
       view.render(
-        <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+        <PreviewView
+          controller={controller}
+          frame={() => {}}
+          review={reviewOf(controller)}
+          layoutStorage={memoryStorage()}
+        />,
       ),
     );
     const lag = root.querySelector<HTMLElement>('[data-slot=lag]');
@@ -311,7 +332,12 @@ it('highlights only the spans the shown frame is inside, not every mounted one',
   });
   act(() =>
     view.render(
-      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+      <PreviewView
+        controller={controller}
+        frame={() => {}}
+        review={reviewOf(controller)}
+        layoutStorage={memoryStorage()}
+      />,
     ),
   );
   expect(
@@ -342,7 +368,11 @@ const readySession = (durationInFrames: number) => {
   };
 };
 
-const mount = (controller: PreviewController, review = reviewOf(controller)) => {
+const mount = (
+  controller: PreviewController,
+  review = reviewOf(controller),
+  layoutStorage = memoryStorage(),
+) => {
   const root = document.createElement('div');
   document.body.append(root);
   const view = createRoot(root);
@@ -350,7 +380,16 @@ const mount = (controller: PreviewController, review = reviewOf(controller)) => 
     act(() => view.unmount());
     root.remove();
   });
-  act(() => view.render(<PreviewView controller={controller} frame={() => {}} review={review} />));
+  act(() =>
+    view.render(
+      <PreviewView
+        controller={controller}
+        frame={() => {}}
+        review={review}
+        layoutStorage={layoutStorage}
+      />,
+    ),
+  );
   const tab = (name: string) => {
     const element = [...root.querySelectorAll<HTMLElement>('[role=tab]')].find((item) =>
       item.textContent.startsWith(name),
@@ -368,6 +407,37 @@ it('hoists its stylesheet into <head>, so the page text and accessibility tree s
   expect(document.head.querySelector('style[data-href="motion-kit-preview"]')).not.toBeNull();
   expect(root.querySelector('style')).toBeNull();
   expect(root.textContent).not.toContain('tailwindcss');
+});
+
+it('drags the side panel narrower and keeps the width for the next load', async () => {
+  const storage = memoryStorage();
+  const { controller, calls } = fakeController({ session: readySession(60) });
+  const first = mount(controller, reviewOf(controller), storage);
+  const side = (root: HTMLElement) => {
+    const aside = root.querySelector('aside');
+    if (aside === null) throw new Error('No side panel');
+    return aside.getBoundingClientRect().width;
+  };
+  const before = side(first.root);
+  const handle = first.root.querySelector<HTMLElement>('[role=separator]');
+  if (handle === null) throw new Error('No resize handle');
+  // The handle moves right by the keyboard the way a drag moves it, which narrows the side panel;
+  // the test page is too narrow to widen it past the stage's minimum.
+  act(() => {
+    handle.focus();
+    for (let step = 0; step < 3; step += 1)
+      handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  });
+  await vi.waitFor(() => expect(side(first.root)).toBeLessThan(before - 1));
+  // The arrows the handle takes do not step the frame as well; Space still plays.
+  expect(calls).toEqual([]);
+  act(() => {
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  });
+  expect(calls).toEqual(['play']);
+  const narrowed = side(first.root);
+  const second = mount(controller, reviewOf(controller), storage);
+  expect(side(second.root)).toBeCloseTo(narrowed, 0);
 });
 
 it('lists each audio source once in the side panel, and its toggle mutes that source', () => {
@@ -434,17 +504,26 @@ it('comments on the element clicked in comment mode and copies the review as Mar
   if (layer === null) throw new Error('No comment layer');
   // The layer is the Composition (320×180) scaled into the stage; a click maps back to design pixels.
   const box = layer.getBoundingClientRect();
-  const at = {
-    clientX: box.left + box.width / 4,
-    clientY: box.top + box.height / 2,
-    bubbles: true,
+  // A mouse event keeps whole client pixels, so a point is the whole pixel nearest the design
+  // point it aims at, and the expected design point is mapped back from that pixel.
+  const aim = (x: number, y: number) => {
+    const clientX = Math.round(box.left + (x * box.width) / 320);
+    const clientY = Math.round(box.top + (y * box.height) / 180);
+    const design = [
+      Math.round(((clientX - box.left) * 320) / box.width),
+      Math.round(((clientY - box.top) * 180) / box.height),
+    ].join(', ');
+    return { event: { clientX, clientY, bubbles: true }, design };
   };
+  const first = aim(80, 90);
+  const at = first.event;
+  const point = `inspect ${first.design.replace(' ', '')}`;
   await act(async () => {
     layer.dispatchEvent(new PointerEvent('pointermove', at));
     layer.dispatchEvent(new MouseEvent('click', at));
     await Promise.resolve();
   });
-  expect(calls.slice(1)).toEqual(['inspect 80,90', 'inspect 80,90', 'pause']);
+  expect(calls.slice(1)).toEqual([point, point, 'pause']);
   expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
   const field = root.querySelector<HTMLTextAreaElement>('textarea[aria-label=Comment]');
   if (field === null) throw new Error('No comment field');
@@ -463,8 +542,9 @@ it('comments on the element clicked in comment mode and copies the review as Mar
   // brings the Comments tab back and keeps what was typed.
   act(() => tab('Sequences').click());
   act(() => void press('c'));
+  const second = aim(160, 90);
   await act(async () => {
-    layer.dispatchEvent(new MouseEvent('click', { ...at, clientX: box.left + box.width / 2 }));
+    layer.dispatchEvent(new MouseEvent('click', second.event));
     await Promise.resolve();
   });
   expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
@@ -498,7 +578,7 @@ it('comments on the element clicked in comment mode and copies the review as Mar
     [
       '## 1. 00:00.40 (frame 12)',
       '',
-      '- Element: `h1.title` "Hello" from `src/title.tsx:3:7`, box (20, 30) 100×40, clicked at (160, 90)',
+      `- Element: \`h1.title\` "Hello" from \`src/title.tsx:3:7\`, box (20, 30) 100×40, clicked at (${second.design})`,
       '',
       '> Bigger title',
     ].join('\n'),

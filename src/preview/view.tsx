@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { type LayoutStorage, useDefaultLayout } from 'react-resizable-panels';
 
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { CommentLayer } from './comment-layer.tsx';
@@ -10,6 +11,7 @@ import { previewCss } from './styles.generated.ts';
 import { Timeline } from './timeline.tsx';
 import { Transport } from './transport.tsx';
 import { Button } from './ui/button.tsx';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable.tsx';
 import { ScrollArea } from './ui/scroll-area.tsx';
 import { TooltipProvider } from './ui/tooltip.tsx';
 
@@ -78,12 +80,15 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 
 /**
  * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field
- * and a tab take every key, and Space activates a button or toggles a checkbox. Focus stays on the scrubber
- * or a checkbox after it is used, so the other keys still reach the shortcuts.
+ * and a tab take every key, the side panel's resize handle the arrows, and Space activates a
+ * button or toggles a checkbox. Focus stays on the scrubber, a checkbox or the handle after it is
+ * used, so the other keys still reach the shortcuts.
  */
-const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
+const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'arrows' | 'none' => {
   // A tab moves between its siblings with the arrows and is chosen with Space.
-  if (target instanceof Element && target.getAttribute('role') === 'tab') return 'all';
+  const role = target instanceof Element ? target.getAttribute('role') : null;
+  if (role === 'tab') return 'all';
+  if (role === 'separator') return 'arrows';
   if (target instanceof HTMLTextAreaElement) return 'all';
   if (target instanceof HTMLButtonElement) return 'space';
   if (!(target instanceof HTMLInputElement)) return 'none';
@@ -96,10 +101,13 @@ export const PreviewView = ({
   controller,
   frame,
   review,
+  layoutStorage,
 }: {
   controller: PreviewController;
   frame: (element: HTMLIFrameElement | null) => void;
   review: Review;
+  /** Where the width the side panel was dragged to is kept across reloads. */
+  layoutStorage: LayoutStorage;
 }) => {
   const state = useSyncExternalStore(controller.subscribe, controller.state);
   const reviewState = useSyncExternalStore(review.controller.subscribe, review.controller.state);
@@ -109,6 +117,12 @@ export const PreviewView = ({
   const comments = allComments.filter((comment) => comment.compositionId === descriptor?.id);
   // The box an element row of the side panel points at.
   const [highlight, setHighlight] = useState<ElementBox>();
+  const layout = useDefaultLayout({
+    id: 'motion-kit-preview:layout',
+    panelIds: ['stage', 'side'],
+    storage: layoutStorage,
+    onlySaveAfterUserInteractions: true,
+  });
   const { stage, scale } = useFit(descriptor?.width ?? 1280, descriptor?.height ?? 720);
   useEffect(() => {
     void controller.reload();
@@ -121,7 +135,12 @@ export const PreviewView = ({
       // A modified key belongs to the browser: Alt+Arrow navigates history, Ctrl+Space is the IME.
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const keys = nativeKeys(event.target);
-      if (keys === 'all' || (keys === 'space' && event.key === ' ')) return;
+      if (
+        keys === 'all' ||
+        (keys === 'space' && event.key === ' ') ||
+        (keys === 'arrows' && event.key.startsWith('Arrow'))
+      )
+        return;
       const delta = event.shiftKey ? 10 : 1;
       if (event.key === ' ') {
         event.preventDefault();
@@ -150,50 +169,72 @@ export const PreviewView = ({
       <style href="motion-kit-preview" precedence="default">
         {previewCss}
       </style>
-      {/* The stage and the side menu share the top row; the bottom menu spans the page. */}
-      <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)_22rem] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-        <div className="relative grid place-items-center overflow-hidden bg-black" ref={stage}>
-          <iframe
-            ref={frame}
-            className="pointer-events-none absolute border-0 bg-black"
-            title="Composition"
-            tabIndex={-1}
-            width={descriptor?.width ?? 1280}
-            height={descriptor?.height ?? 720}
-            style={{ transform: `scale(${scale})` }}
-          />
-          {descriptor === undefined ? undefined : (
-            <CommentLayer
-              width={descriptor.width}
-              height={descriptor.height}
-              scale={scale}
-              state={reviewState}
-              controller={review.controller}
-              highlight={highlight}
-            />
-          )}
-          {reviewState.picking ? (
-            <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
-              Click an element to comment on it · Esc to stop
+      {/* The stage and the side panel share the top row, split by a handle that drags the side
+          panel wider or narrower; the bottom panel spans the page. */}
+      <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="min-h-0"
+          defaultLayout={layout.defaultLayout}
+          onLayoutChanged={layout.onLayoutChanged}
+        >
+          <ResizablePanel id="stage" minSize="25%">
+            <div
+              className="relative grid h-full place-items-center overflow-hidden bg-black"
+              ref={stage}
+            >
+              <iframe
+                ref={frame}
+                className="pointer-events-none absolute border-0 bg-black"
+                title="Composition"
+                tabIndex={-1}
+                width={descriptor?.width ?? 1280}
+                height={descriptor?.height ?? 720}
+                style={{ transform: `scale(${scale})` }}
+              />
+              {descriptor === undefined ? undefined : (
+                <CommentLayer
+                  width={descriptor.width}
+                  height={descriptor.height}
+                  scale={scale}
+                  state={reviewState}
+                  controller={review.controller}
+                  highlight={highlight}
+                />
+              )}
+              {reviewState.picking ? (
+                <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
+                  Click an element to comment on it · Esc to stop
+                </div>
+              ) : undefined}
+              <Overlay state={state} controller={controller} />
             </div>
-          ) : undefined}
-          <Overlay state={state} controller={controller} />
-        </div>
-        <aside className="min-h-0 border-l bg-card/40">
-          {ready === undefined ? undefined : (
-            <SidePanel
-              state={state}
-              descriptor={ready.descriptor}
-              fps={ready.fps}
-              controller={controller}
-              review={review}
-              draft={reviewState.draft}
-              comments={comments}
-              onHighlight={setHighlight}
-            />
-          )}
-        </aside>
-        <div className="col-span-2 flex max-h-[40vh] min-h-0 flex-col border-t bg-card/40">
+          </ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel
+            id="side"
+            defaultSize="22rem"
+            minSize="16rem"
+            maxSize="60%"
+            groupResizeBehavior="preserve-pixel-size"
+          >
+            <aside className="h-full min-h-0 bg-card/40">
+              {ready === undefined ? undefined : (
+                <SidePanel
+                  state={state}
+                  descriptor={ready.descriptor}
+                  fps={ready.fps}
+                  controller={controller}
+                  review={review}
+                  draft={reviewState.draft}
+                  comments={comments}
+                  onHighlight={setHighlight}
+                />
+              )}
+            </aside>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+        <div className="flex max-h-[40vh] min-h-0 flex-col border-t bg-card/40">
           {ready === undefined ? undefined : (
             <>
               <Transport

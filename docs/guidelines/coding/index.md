@@ -22,13 +22,13 @@ Principles that apply to all code. Rules enforced statically by lint and types a
 
 Each purpose has one library. Do not write a function that duplicates one.
 
-| Purpose                                     | Library                                      | Where                                                                                                |
-| ------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Schemas and validation                      | zod                                          | Preset props, theme definitions, CLI input (add when first needed)                                   |
-| Property-based tests                        | fast-check                                   | `*.test.ts`, `*.oracle.test.ts`                                                                      |
-| Unit tests                                  | vitest                                       | `*.test.ts`                                                                                          |
-| Spring and value interpolation inside React | motion                                       | `src/motion/integration` (add when first needed; whether its values are seekable is a Phase 0 spike) |
-| 3D                                          | three, @react-three/fiber, @react-three/drei | `src/three` only (add when first needed)                                                             |
-| Browser capture                             | playwright                                   | `src/render/browser` (add when first needed)                                                         |
-| Encoding                                    | FFmpeg through a Node wrapper                | `src/render/encoding` (add when first needed; Mediabunny later)                                      |
-| Preview UI components and styling           | shadcn/ui on Base UI, Tailwind, lucide-react | `src/preview` only, bundled into `dist/preview.js` as devDependencies                                |
+| Purpose                                     | Library                                                              | Where                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Schemas and validation                      | zod                                                                  | Preset props, theme definitions, CLI input (add when first needed)                                   |
+| Property-based tests                        | fast-check                                                           | `*.test.ts`, `*.oracle.test.ts`                                                                      |
+| Unit tests                                  | vitest                                                               | `*.test.ts`                                                                                          |
+| Spring and value interpolation inside React | motion                                                               | `src/motion/integration` (add when first needed; whether its values are seekable is a Phase 0 spike) |
+| 3D                                          | three, @react-three/fiber, @react-three/drei                         | `src/three` only (add when first needed)                                                             |
+| Browser capture                             | playwright                                                           | `src/render/browser` (add when first needed)                                                         |
+| Encoding                                    | FFmpeg through a Node wrapper                                        | `src/render/encoding` (add when first needed; Mediabunny later)                                      |
+| Preview UI components and styling           | shadcn/ui on Base UI, Tailwind, lucide-react, react-resizable-panels | `src/preview` only, bundled into `dist/preview.js` as devDependencies                                |
