@@ -1,8 +1,10 @@
+import { Image, Type } from 'lucide-react';
 import { type PointerEvent } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
+import { type AssetSpan } from './asset-usage.ts';
 import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { packLanes, timecode } from './schedule.ts';
@@ -35,8 +37,15 @@ const LANE = 'relative h-5';
 const BAR =
   'absolute inset-y-0 overflow-hidden rounded-sm px-1.5 text-[11px] leading-5 whitespace-nowrap text-ellipsis';
 
+const AssetIcon = ({ kind }: { kind: string }) =>
+  kind === 'font' ? (
+    <Type className="mr-1 inline size-3 align-[-2px]" />
+  ) : (
+    <Image className="mr-1 inline size-3 align-[-2px]" />
+  );
+
 /**
- * Every review comment, named Sequence and audio clip on one time axis, with the playhead. Pressing or dragging
+ * Every review comment, named Sequence, audio clip and asset group on one time axis, with the playhead. Pressing or dragging
  * anywhere on it seeks; spans that never overlap share a lane, so many of them stay compact.
  */
 export const Timeline = ({
@@ -79,6 +88,12 @@ export const Timeline = ({
       }))
       .filter((clip) => clip.start < clip.end),
   );
+  // Asset groups are known only over the frames shown so far, like the named Sequences.
+  const assetLanes = packLanes(
+    state.assetSpans
+      .map((span: AssetSpan) => ({ span, start: span.start, end: Math.min(span.end, duration) }))
+      .filter((item) => item.start < item.end),
+  );
   const seekTo = (event: PointerEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
@@ -88,6 +103,7 @@ export const Timeline = ({
     ...(comments.length === 0 ? [] : ['Comments']),
     ...spanLanes.map((_, index) => (index === 0 ? 'Sequences' : '')),
     ...audioLanes.map((_, index) => (index === 0 ? 'Audio' : '')),
+    ...assetLanes.map((_, index) => (index === 0 ? 'Assets' : '')),
   ];
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 px-3 pb-2 select-none">
@@ -176,6 +192,26 @@ export const Timeline = ({
                   title={track.src}
                 >
                   ♪ {basename(track.src)}
+                </div>
+              ))}
+            </div>
+          ))}
+          {assetLanes.map((lane, laneIndex) => (
+            <div className={LANE} data-slot="timeline-lane" key={`asset:${laneIndex}`}>
+              {lane.map(({ span, start, end }) => (
+                <div
+                  key={`${span.group.kind}:${span.group.key}:${span.start}`}
+                  data-slot="timeline-asset"
+                  className={cn(
+                    BAR,
+                    span.failed ? 'bg-destructive/40' : 'bg-asset/30',
+                    'text-foreground/80',
+                  )}
+                  style={placed(start, end, duration)}
+                  title={`${span.group.key} [${span.start}, ${span.end})${span.failed ? ', failed to load' : ''}`}
+                >
+                  <AssetIcon kind={span.group.kind} />
+                  {span.group.label}
                 </div>
               ))}
             </div>

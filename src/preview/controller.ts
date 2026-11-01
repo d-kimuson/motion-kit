@@ -8,6 +8,7 @@ import {
   type ShowOutcome,
 } from '../lib/preview-protocol.ts';
 import { type Result } from '../lib/result.ts';
+import { observeAssets, type AssetSpan } from './asset-usage.ts';
 import { type AudioPlayer } from './audio.ts';
 import { type Realm } from './connection.ts';
 import { type PreviewQuery } from './query.ts';
@@ -45,6 +46,8 @@ export type PreviewState = Readonly<{
   spans: readonly SequenceSpan[];
   /** Every font and image a shown or failed frame reported since the last reload, in first-seen order, with its latest status. */
   assets: readonly SeenAsset[];
+  /** The frames that used each asset group, from the frames shown or failed since the last reload. */
+  assetSpans: readonly AssetSpan[];
   muted: ReadonlySet<string>;
   /** Declared audio sources that could not be fetched or decoded. */
   unplayable: readonly string[];
@@ -130,6 +133,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     shown: undefined,
     spans: [],
     assets: [],
+    assetSpans: [],
     muted: deps.muted.load(),
     unplayable: [],
   };
@@ -154,12 +158,20 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     if (state.starting) update({ starting: false });
   };
 
+  // Each play, and each seek while playing, starts a run; the frames one run shows follow each
+  // other, so the asset spans bridge the frames playback skipped between them.
+  let playRun: object = {};
+  let lastShown: Readonly<{ run: object | undefined; frame: number }> | undefined;
   const present = (frame: number | undefined) => {
     if (frame === undefined || realm === undefined) return;
     const current = realm;
+    const sentIn = playing() ? playRun : undefined;
     current.show(frame).then(
       (outcome) => {
         if (current !== realm) return;
+        const continued =
+          sentIn !== undefined && lastShown?.run === sentIn ? lastShown.frame : undefined;
+        if (outcome.status !== 'aborted') lastShown = { run: sentIn, frame };
         update({
           shown: outcome,
           ...(outcome.status === 'shown'
@@ -167,7 +179,10 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
             : {}),
           ...(outcome.status === 'aborted'
             ? {}
-            : { assets: see(state.assets, outcome.assets, frame) }),
+            : {
+                assets: see(state.assets, outcome.assets, frame),
+                assetSpans: observeAssets(state.assetSpans, frame, outcome.assets, continued),
+              }),
         });
         const step = frameAnswered(presenter);
         presenter = step.state;
@@ -205,6 +220,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       anchorFrame,
       anchorTime: deps.clock.now() + deps.clock.latency(),
     };
+    playRun = {};
     update({ playback });
     deps.audio.start(
       audioSchedule(
@@ -281,7 +297,13 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     if (changed.audio) deps.audio.forget();
     const controller = new AbortController();
     connection = controller;
-    update({ session: { kind: 'connecting' }, shown: undefined, spans: [], assets: [] });
+    update({
+      session: { kind: 'connecting' },
+      shown: undefined,
+      spans: [],
+      assets: [],
+      assetSpans: [],
+    });
     let current: Realm;
     try {
       current = await deps.connect(controller.signal);

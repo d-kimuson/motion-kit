@@ -243,6 +243,47 @@ it('accumulates the registered assets with the frame each was first seen at and 
   expect(host.controller.state().assets).toEqual([]);
 });
 
+it('spans each asset group over the frames shown, bridging only the frames playback skipped', async () => {
+  const host = setup();
+  await host.controller.reload();
+  const realm = host.realms[0];
+  const answered = new Set<number>();
+  const answerAll = async () => {
+    for (const [index, show] of (realm?.shows ?? []).entries()) {
+      if (answered.has(index)) continue;
+      answered.add(index);
+      show.answer();
+      await flush();
+    }
+  };
+  const spans = () =>
+    host.controller
+      .state()
+      .assetSpans.map(({ group, start, end }) => `${group.label} [${start}, ${end})`);
+  await answerAll();
+  // A seek while paused is not a continuation, so the frames between stay unknown.
+  host.controller.seek(20);
+  await answerAll();
+  expect(spans()).toEqual(['inter.woff2 [0, 1)', 'inter.woff2 [20, 21)']);
+  await host.controller.play();
+  await answerAll();
+  host.advance(0.5);
+  await answerAll();
+  host.advance(0.5);
+  await answerAll();
+  host.controller.pause();
+  // Playback showed 20, 35 and 50 at 30 fps, skipping the frames between.
+  expect(realm?.shows.map((show) => show.frame)).toEqual([0, 20, 20, 35, 50]);
+  expect(spans()).toEqual([
+    'inter.woff2 [0, 1)',
+    'inter.woff2 [20, 51)',
+    // The photo is used from frame 30, but the first frame shown with it was 35.
+    'photo.png [35, 51)',
+  ]);
+  await host.controller.reload();
+  expect(host.controller.state().assetSpans).toEqual([]);
+});
+
 it('keeps one show in flight and follows with the latest wanted frame', async () => {
   const host = setup();
   await host.controller.reload();
