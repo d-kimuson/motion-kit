@@ -10,11 +10,10 @@ import { type LocaleSetting } from './locale.ts';
 import { messages, MessagesContext, useMessages } from './messages.ts';
 import { SidePanel } from './side-panel.tsx';
 import { previewCss } from './styles.generated.ts';
-import { Timeline } from './timeline.tsx';
+import { TimelinePanel } from './timeline.tsx';
 import { Transport } from './transport.tsx';
 import { Button } from './ui/button.tsx';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable.tsx';
-import { ScrollArea } from './ui/scroll-area.tsx';
 import { TooltipProvider } from './ui/tooltip.tsx';
 
 const DiagnosticText = ({ diagnostic }: { diagnostic: Diagnostic }) => (
@@ -131,6 +130,12 @@ export const PreviewView = ({
     storage: layoutStorage,
     onlySaveAfterUserInteractions: true,
   });
+  const rows = useDefaultLayout({
+    id: 'motion-kit-preview:rows',
+    panelIds: ['top', 'bottom'],
+    storage: layoutStorage,
+    onlySaveAfterUserInteractions: true,
+  });
   const { stage, scale } = useFit(descriptor?.width ?? 1280, descriptor?.height ?? 720);
   useEffect(() => {
     void controller.reload();
@@ -179,104 +184,119 @@ export const PreviewView = ({
           {previewCss}
         </style>
         {/* The stage and the side panel share the top row, split by a handle that drags the side
-          panel wider or narrower; the bottom panel spans the page. */}
-        <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+          panel wider or narrower; the bottom panel spans the page, under a handle that drags it
+          taller or shorter. */}
+        {/* The panel group sizes itself to its parent, so the page's height is set around it. */}
+        <div className="isolate h-screen overflow-hidden">
           <ResizablePanelGroup
-            orientation="horizontal"
-            className="min-h-0"
-            defaultLayout={layout.defaultLayout}
-            onLayoutChanged={layout.onLayoutChanged}
+            orientation="vertical"
+            defaultLayout={rows.defaultLayout}
+            onLayoutChanged={rows.onLayoutChanged}
           >
-            <ResizablePanel id="stage" minSize="25%">
-              <div
-                className="relative grid h-full place-items-center overflow-hidden bg-black"
-                ref={stage}
+            <ResizablePanel id="top" minSize="25%">
+              <ResizablePanelGroup
+                orientation="horizontal"
+                className="min-h-0"
+                defaultLayout={layout.defaultLayout}
+                onLayoutChanged={layout.onLayoutChanged}
               >
-                <iframe
-                  ref={frame}
-                  className="pointer-events-none absolute border-0 bg-black"
-                  title={t.page.stage}
-                  tabIndex={-1}
-                  width={descriptor?.width ?? 1280}
-                  height={descriptor?.height ?? 720}
-                  style={{ transform: `scale(${scale})` }}
-                />
-                {descriptor === undefined ? undefined : (
-                  <CommentLayer
-                    width={descriptor.width}
-                    height={descriptor.height}
-                    scale={scale}
-                    state={reviewState}
-                    controller={review.controller}
-                    highlight={highlight}
-                  />
-                )}
-                {reviewState.picking ? (
-                  <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
-                    {t.page.picking}
+                <ResizablePanel id="stage" minSize="25%">
+                  <div
+                    className="relative grid h-full place-items-center overflow-hidden bg-black"
+                    ref={stage}
+                  >
+                    <iframe
+                      ref={frame}
+                      className="pointer-events-none absolute border-0 bg-black"
+                      title={t.page.stage}
+                      tabIndex={-1}
+                      width={descriptor?.width ?? 1280}
+                      height={descriptor?.height ?? 720}
+                      style={{ transform: `scale(${scale})` }}
+                    />
+                    {descriptor === undefined ? undefined : (
+                      <CommentLayer
+                        width={descriptor.width}
+                        height={descriptor.height}
+                        scale={scale}
+                        state={reviewState}
+                        controller={review.controller}
+                        highlight={highlight}
+                      />
+                    )}
+                    {reviewState.picking ? (
+                      <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
+                        {t.page.picking}
+                      </div>
+                    ) : undefined}
+                    <Overlay state={state} controller={controller} />
                   </div>
-                ) : undefined}
-                <Overlay state={state} controller={controller} />
-              </div>
+                </ResizablePanel>
+                <ResizableHandle />
+                <ResizablePanel
+                  id="side"
+                  defaultSize="22rem"
+                  minSize="16rem"
+                  maxSize="60%"
+                  groupResizeBehavior="preserve-pixel-size"
+                >
+                  <aside className="h-full min-h-0 bg-card/40">
+                    {ready === undefined ? undefined : (
+                      <SidePanel
+                        state={state}
+                        descriptor={ready.descriptor}
+                        fps={ready.fps}
+                        controller={controller}
+                        review={review}
+                        draft={reviewState.draft}
+                        comments={comments}
+                        onHighlight={setHighlight}
+                      />
+                    )}
+                  </aside>
+                </ResizablePanel>
+              </ResizablePanelGroup>
             </ResizablePanel>
             <ResizableHandle />
             <ResizablePanel
-              id="side"
-              defaultSize="22rem"
-              minSize="16rem"
-              maxSize="60%"
+              id="bottom"
+              defaultSize="16rem"
+              minSize="7rem"
+              maxSize="75%"
               groupResizeBehavior="preserve-pixel-size"
             >
-              <aside className="h-full min-h-0 bg-card/40">
+              <div className="flex h-full min-h-0 flex-col bg-card/40">
                 {ready === undefined ? undefined : (
-                  <SidePanel
-                    state={state}
-                    descriptor={ready.descriptor}
-                    fps={ready.fps}
-                    controller={controller}
-                    review={review}
-                    draft={reviewState.draft}
-                    comments={comments}
-                    onHighlight={setHighlight}
-                  />
-                )}
-              </aside>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-          <div className="flex max-h-[40vh] min-h-0 flex-col border-t bg-card/40">
-            {ready === undefined ? undefined : (
-              <>
-                <Transport
-                  state={state}
-                  descriptor={ready.descriptor}
-                  fps={ready.fps}
-                  controller={controller}
-                  picking={reviewState.picking}
-                  onTogglePicking={() => review.controller.togglePicking()}
-                  locale={language}
-                  onChooseLocale={locale.choose}
-                />
-                {state.shown?.status === 'failed' ? (
-                  <div className="grid max-h-24 shrink-0 gap-1 overflow-y-auto border-t px-3 py-2">
-                    {state.shown.diagnostics.map((diagnostic, index) => (
-                      <DiagnosticText key={index} diagnostic={diagnostic} />
-                    ))}
-                  </div>
-                ) : undefined}
-                <ScrollArea className="min-h-0 flex-1 border-t">
-                  <div className="pt-2">
-                    <Timeline
+                  <>
+                    <Transport
+                      state={state}
+                      descriptor={ready.descriptor}
+                      fps={ready.fps}
+                      controller={controller}
+                      picking={reviewState.picking}
+                      onTogglePicking={() => review.controller.togglePicking()}
+                      locale={language}
+                      onChooseLocale={locale.choose}
+                    />
+                    {state.shown?.status === 'failed' ? (
+                      <div className="grid max-h-24 shrink-0 gap-1 overflow-y-auto border-t px-3 py-2">
+                        {state.shown.diagnostics.map((diagnostic, index) => (
+                          <DiagnosticText key={index} diagnostic={diagnostic} />
+                        ))}
+                      </div>
+                    ) : undefined}
+                    <TimelinePanel
                       state={state}
                       descriptor={ready.descriptor}
                       fps={ready.fps}
                       controller={controller}
                       comments={comments}
                     />
-                  </div>
-                </ScrollArea>
-              </>
-            )}
-          </div>
+                  </>
+                )}
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       </TooltipProvider>
     </MessagesContext>

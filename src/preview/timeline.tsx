@@ -1,5 +1,5 @@
 import { Image, Type } from 'lucide-react';
-import { memo, type PointerEvent, useMemo } from 'react';
+import { memo, type PointerEvent, useMemo, useState } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
@@ -9,6 +9,8 @@ import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { useMessages } from './messages.ts';
 import { packLanes, timecode } from './schedule.ts';
+import { ScrollArea } from './ui/scroll-area.tsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.tsx';
 import { cn } from './ui/utils.ts';
 
 export const basename = (src: string) => src.slice(src.lastIndexOf('/') + 1);
@@ -105,9 +107,13 @@ export const AssetLanes = memo(function AssetLanes({
   ));
 });
 
+/** The lanes the timeline shows under the named Sequences, one kind at a time. */
+export type TimelineLayer = 'audio' | 'assets';
+
 /**
- * Every review comment, named Sequence, audio clip and asset group on one time axis, with the playhead. Pressing or dragging
- * anywhere on it seeks; spans that never overlap share a lane, so many of them stay compact.
+ * The review comments and named Sequences, then the audio clips or the asset groups, on one time
+ * axis, with the playhead. Pressing or dragging anywhere on it seeks; spans that never overlap
+ * share a lane, so many of them stay compact.
  */
 export const Timeline = ({
   state,
@@ -115,12 +121,14 @@ export const Timeline = ({
   fps,
   controller,
   comments,
+  layer,
 }: {
   state: PreviewState;
   descriptor: LoadingDescriptor;
   fps: FrameRate;
   controller: PreviewController;
   comments: readonly ReviewComment[];
+  layer: TimelineLayer;
 }) => {
   const t = useMessages().timeline;
   const duration = descriptor.durationInFrames;
@@ -169,8 +177,9 @@ export const Timeline = ({
   const lanes = [
     ...(comments.length === 0 ? [] : [t.comments]),
     ...spanLanes.map((_, index) => (index === 0 ? t.sequences : '')),
-    ...audioLanes.map((_, index) => (index === 0 ? t.audio : '')),
-    ...assetLanes.map((_, index) => (index === 0 ? t.assets : '')),
+    ...(layer === 'audio'
+      ? audioLanes.map((_, index) => (index === 0 ? t.audio : ''))
+      : assetLanes.map((_, index) => (index === 0 ? t.assets : ''))),
   ];
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 px-3 pb-2 select-none">
@@ -243,27 +252,30 @@ export const Timeline = ({
               })}
             </div>
           ))}
-          {audioLanes.map((lane, laneIndex) => (
-            <div className={LANE} data-slot="timeline-lane" key={`audio:${laneIndex}`}>
-              {lane.map(({ track, start, end, index }) => (
-                <div
-                  key={index}
-                  data-slot="timeline-audio"
-                  className={cn(
-                    BAR,
-                    'bg-audio/30 text-foreground/80',
-                    state.muted.has(track.src) && 'opacity-40 line-through',
-                    state.unplayable.includes(track.src) && 'bg-destructive/40',
-                  )}
-                  style={placed(start, end, duration)}
-                  title={track.src}
-                >
-                  ♪ {basename(track.src)}
-                </div>
-              ))}
-            </div>
-          ))}
-          <AssetLanes lanes={assetLanes} duration={duration} />
+          {layer === 'assets' ? (
+            <AssetLanes lanes={assetLanes} duration={duration} />
+          ) : (
+            audioLanes.map((lane, laneIndex) => (
+              <div className={LANE} data-slot="timeline-lane" key={`audio:${laneIndex}`}>
+                {lane.map(({ track, start, end, index }) => (
+                  <div
+                    key={index}
+                    data-slot="timeline-audio"
+                    className={cn(
+                      BAR,
+                      'bg-audio/30 text-foreground/80',
+                      state.muted.has(track.src) && 'opacity-40 line-through',
+                      state.unplayable.includes(track.src) && 'bg-destructive/40',
+                    )}
+                    style={placed(start, end, duration)}
+                    title={track.src}
+                  >
+                    ♪ {basename(track.src)}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
         </div>
         <div
           className="pointer-events-none absolute -top-px bottom-0 w-px bg-playhead"
@@ -273,5 +285,34 @@ export const Timeline = ({
         </div>
       </div>
     </div>
+  );
+};
+
+/**
+ * The timeline under the transport, with a tab for the audio clips and one for the asset groups:
+ * both stacked would push the lanes of one out of view. Only the lanes scroll.
+ */
+export const TimelinePanel = (props: Omit<Parameters<typeof Timeline>[0], 'layer'>) => {
+  const t = useMessages().timeline;
+  const [layer, setLayer] = useState<unknown>('audio');
+  const shown: TimelineLayer = layer === 'assets' ? 'assets' : 'audio';
+  return (
+    <Tabs value={shown} onValueChange={setLayer} className="min-h-0 flex-1 gap-0 border-t">
+      <TabsList variant="line" className="h-7 shrink-0 px-3 pt-1">
+        <TabsTrigger value="audio" className="px-2 text-xs">
+          {t.audio}
+        </TabsTrigger>
+        <TabsTrigger value="assets" className="px-2 text-xs">
+          {t.assets}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value={shown} className="min-h-0">
+        <ScrollArea className="h-full">
+          <div className="pt-2">
+            <Timeline {...props} layer={shown} />
+          </div>
+        </ScrollArea>
+      </TabsContent>
+    </Tabs>
   );
 };
