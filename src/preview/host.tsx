@@ -72,7 +72,12 @@ export const startPreviewHost = (): void => {
       if (!response.ok) throw new Error(`Audio ${src} answered ${response.status}`);
       return response.arrayBuffer();
     }),
-    clock: { now: () => context.currentTime, resume: () => context.resume() },
+    clock: {
+      now: () => context.currentTime,
+      // Browsers that do not report the output latency leave it undefined.
+      latency: () => context.baseLatency + (context.outputLatency ?? 0),
+      resume: () => context.resume(),
+    },
     interval: {
       start: (tick, ms) => {
         const handle = setInterval(tick, ms);

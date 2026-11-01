@@ -44,8 +44,11 @@ export type PreviewDependencies = Readonly<{
    */
   connect: (signal: AbortSignal) => Promise<Realm>;
   audio: AudioPlayer;
-  /** The `AudioContext` clock in seconds; `resume` must run inside a user gesture. */
-  clock: Readonly<{ now: () => number; resume: () => Promise<void> }>;
+  /**
+   * The `AudioContext` clock in seconds; `latency` is how long a sound started now takes to be
+   * heard, and `resume` must run inside a user gesture.
+   */
+  clock: Readonly<{ now: () => number; latency: () => number; resume: () => Promise<void> }>;
   interval: Readonly<{
     start: (tick: () => void, ms: number) => () => void;
   }>;
@@ -151,7 +154,12 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     const session = ready();
     if (session === undefined) return;
     halt();
-    const playback: Playback = { kind: 'playing', anchorFrame, anchorTime: deps.clock.now() };
+    // The playhead leaves the anchor when the clips started here are heard, not when they start.
+    const playback: Playback = {
+      kind: 'playing',
+      anchorFrame,
+      anchorTime: deps.clock.now() + deps.clock.latency(),
+    };
     update({ playback });
     deps.audio.start(
       audioSchedule(
@@ -267,7 +275,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     play: async () => {
       const session = ready();
       if (session === undefined || state.playback.kind === 'playing') return;
-      await Promise.all([deps.clock.resume(), prepared]);
+      // A clock the browser refuses to resume still plays the frames, only silently.
+      await Promise.all([deps.clock.resume().catch(() => undefined), prepared]);
       // A reload or another play may have happened while the audio was decoding.
       if (ready() !== session || playing()) return;
       run(state.playhead >= lastFrame(session.descriptor) ? 0 : state.playhead);

@@ -89,6 +89,10 @@ const setup = (
     prepare?: AudioPlayer['prepare'];
     /** The first realm's mount stays pending until that realm closes. */
     holdFirstMount?: boolean;
+    /** Seconds between starting a sound and hearing it. */
+    latency?: number;
+    /** The browser refuses to resume the audio clock. */
+    resumeFails?: boolean;
   } = {},
 ) => {
   const realms: ReturnType<typeof fakeRealm>[] = [];
@@ -127,7 +131,14 @@ const setup = (
       return Promise.resolve(realm.realm);
     },
     audio,
-    clock: { now: () => now, resume: () => Promise.resolve() },
+    clock: {
+      now: () => now,
+      latency: () => options.latency ?? 0,
+      resume: () =>
+        options.resumeFails === true
+          ? Promise.reject(new Error('The AudioContext was not allowed to start'))
+          : Promise.resolve(),
+    },
     interval: {
       start: (next, ms) => {
         expect(ms).toBe(100);
@@ -227,6 +238,24 @@ it('plays from the audio clock at the preview rate and pauses at the last frame'
     playback: { kind: 'paused', frame: 59 },
   });
   expect(host.ticking()).toBe(false);
+  await host.controller.play();
+  expect(host.controller.state().playback).toMatchObject({ kind: 'playing', anchorFrame: 0 });
+});
+
+it('holds the first frame until the audio it started is heard', async () => {
+  const host = setup({ latency: 0.2 });
+  await host.controller.reload();
+  await host.controller.play();
+  expect(host.controller.state().playback).toMatchObject({ anchorTime: 100.2 });
+  host.advance(0.15);
+  expect(host.controller.state().playhead).toBe(0);
+  host.advance(0.1);
+  expect(host.controller.state().playhead).toBe(1);
+});
+
+it('plays without sound when the browser refuses to resume the audio clock', async () => {
+  const host = setup({ resumeFails: true });
+  await host.controller.reload();
   await host.controller.play();
   expect(host.controller.state().playback).toMatchObject({ kind: 'playing', anchorFrame: 0 });
 });
