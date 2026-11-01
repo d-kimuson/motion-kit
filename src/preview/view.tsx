@@ -79,15 +79,16 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 };
 
 /**
- * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field,
- * a tab and the resize handle take every key, and Space activates a button or toggles a checkbox. Focus stays on the scrubber
- * or a checkbox after it is used, so the other keys still reach the shortcuts.
+ * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field
+ * and a tab take every key, the side panel's resize handle the arrows, and Space activates a
+ * button or toggles a checkbox. Focus stays on the scrubber, a checkbox or the handle after it is
+ * used, so the other keys still reach the shortcuts.
  */
-const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
-  // A tab moves between its siblings with the arrows and is chosen with Space; the side panel's
-  // resize handle moves with the arrows.
+const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'arrows' | 'none' => {
+  // A tab moves between its siblings with the arrows and is chosen with Space.
   const role = target instanceof Element ? target.getAttribute('role') : null;
-  if (role === 'tab' || role === 'separator') return 'all';
+  if (role === 'tab') return 'all';
+  if (role === 'separator') return 'arrows';
   if (target instanceof HTMLTextAreaElement) return 'all';
   if (target instanceof HTMLButtonElement) return 'space';
   if (!(target instanceof HTMLInputElement)) return 'none';
@@ -134,7 +135,12 @@ export const PreviewView = ({
       // A modified key belongs to the browser: Alt+Arrow navigates history, Ctrl+Space is the IME.
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const keys = nativeKeys(event.target);
-      if (keys === 'all' || (keys === 'space' && event.key === ' ')) return;
+      if (
+        keys === 'all' ||
+        (keys === 'space' && event.key === ' ') ||
+        (keys === 'arrows' && event.key.startsWith('Arrow'))
+      )
+        return;
       const delta = event.shiftKey ? 10 : 1;
       if (event.key === ' ') {
         event.preventDefault();
@@ -164,8 +170,8 @@ export const PreviewView = ({
         {previewCss}
       </style>
       {/* The stage and the side panel share the top row, split by a handle that drags the side
-          panel wider or narrower; the bottom menu spans the page. */}
-      <div className="isolate grid h-screen grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+          panel wider or narrower; the bottom panel spans the page. */}
+      <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
         <ResizablePanelGroup
           orientation="horizontal"
           className="min-h-0"

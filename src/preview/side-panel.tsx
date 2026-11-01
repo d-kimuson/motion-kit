@@ -109,7 +109,7 @@ const Count = ({ value }: { value: number }) =>
     </Badge>
   );
 
-/** The side menu next to the stage: a tab per concern, each scrolling on its own. A new or moved draft opens the comments. */
+/** The side panel next to the stage: a tab per concern, each scrolling on its own. A new or moved draft opens the comments. */
 export const SidePanel = ({
   state,
   descriptor,

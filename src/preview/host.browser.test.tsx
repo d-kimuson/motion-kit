@@ -429,8 +429,12 @@ it('drags the side panel narrower and keeps the width for the next load', async 
       handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   });
   await vi.waitFor(() => expect(side(first.root)).toBeLessThan(before - 1));
-  // The arrows the handle takes do not step the frame as well.
+  // The arrows the handle takes do not step the frame as well; Space still plays.
   expect(calls).toEqual([]);
+  act(() => {
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  });
+  expect(calls).toEqual(['play']);
   const narrowed = side(first.root);
   const second = mount(controller, reviewOf(controller), storage);
   expect(side(second.root)).toBeCloseTo(narrowed, 0);
