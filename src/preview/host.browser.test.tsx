@@ -68,6 +68,7 @@ const fakeController = (overrides: Partial<PreviewState> = {}) => {
   const state: PreviewState = {
     session: { kind: 'connecting' },
     playback: { kind: 'paused', frame: 0 },
+    starting: false,
     playhead: 0,
     shown: undefined,
     spans: [],
@@ -130,6 +131,20 @@ it('maps the playback keys anywhere on the page except where a focused control u
   press(' ', { ctrlKey: true });
   expect(calls).toEqual(['play', 'step 1', 'step -10', 'step 1', 'step -1', 'play']);
   expect(root.querySelector('iframe')?.tabIndex).toBe(-1);
+});
+
+it('pauses on Space while a play waits for its audio', () => {
+  const { controller, calls } = fakeController({ starting: true });
+  const root = document.createElement('div');
+  document.body.append(root);
+  const view = createRoot(root);
+  cleanups.push(() => {
+    act(() => view.unmount());
+    root.remove();
+  });
+  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  expect(calls).toEqual(['pause']);
 });
 
 it('packs named Sequence spans that never overlap into one timeline row', () => {

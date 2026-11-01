@@ -318,7 +318,8 @@ try {
   // Preview routes exist only in a preview session; the renderer's server stays as it was.
   const servePreview = (request: IncomingMessage, response: ServerResponse): boolean => {
     if (input.mode !== 'preview') return false;
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const url = URL.parse(request.url ?? '/', 'http://127.0.0.1');
+    if (url === null) return false;
     const path = url.pathname;
     if (path !== previewPath && path !== preview.eventsUrl && path !== preview.audioUrl)
       return false;
@@ -375,8 +376,12 @@ try {
   };
   previewRoutes = servePreview;
   const http = createHttpServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (url.pathname === shellPath)
+    // A raw request target need not parse as a URL, and a throw here would end the service.
+    const url = URL.parse(request.url ?? '/', 'http://127.0.0.1');
+    if (url === null) {
+      response.statusCode = 400;
+      response.end();
+    } else if (url.pathname === shellPath)
       serveHtml(
         response,
         shellPath,

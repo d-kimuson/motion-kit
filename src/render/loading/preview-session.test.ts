@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { get } from 'node:http';
 import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
+import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -160,6 +160,29 @@ it("applies Vite's Host check to the preview routes", async () => {
   // A port forward changes the port in the Host, which Vite accepts for a loopback name.
   expect(await statusFromHost(audio, 'localhost:9000')).toBe(200);
   expect(await statusFromHost(audio, '[::1]:9000')).toBe(200);
+});
+
+/** Sends a raw request line, which fetch would normalize, and reads the response status. */
+const statusOfTarget = (url: URL, target: string) =>
+  new Promise<number>((resolve, reject) => {
+    const socket = connect(Number(url.port), url.hostname, () =>
+      socket.write(`GET ${target} HTTP/1.1\r\nHost: ${url.host}\r\nConnection: close\r\n\r\n`),
+    );
+    let response = '';
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk: string) => {
+      response += chunk;
+    });
+    socket.on('end', () => resolve(Number(response.split(' ')[1])));
+    socket.on('error', reject);
+  });
+
+it('answers a request target that is no URL with 400 and keeps serving', async () => {
+  const result = await open(fixture());
+  if (!result.ok) throw new Error('Preview failed to start');
+  const url = new URL(result.value.url);
+  expect(await statusOfTarget(url, '//[')).toBe(400);
+  expect((await fetch(url)).status).toBe(200);
 });
 
 it('keeps the Host check under a project config that would switch it off', async () => {

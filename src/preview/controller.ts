@@ -25,6 +25,8 @@ export type Session =
 export type PreviewState = Readonly<{
   session: Session;
   playback: Playback;
+  /** A play is waiting for the audio to decode; a pause or step withdraws it. */
+  starting: boolean;
   /** The frame the playhead is on; the realm may still be showing an earlier one. */
   playhead: number;
   /** The realm's answer to the latest `show`. */
@@ -96,6 +98,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   let state: PreviewState = {
     session: { kind: 'connecting' },
     playback: { kind: 'paused', frame: 0 },
+    starting: false,
     playhead: 0,
     shown: undefined,
     spans: [],
@@ -116,6 +119,12 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   let compositionId = deps.query.compositionId;
   // Playback waits for the mounted Composition's audio, so no clip starts before it is decoded.
   let prepared: Promise<void> = Promise.resolve();
+  // The play waiting for that audio, so a later play, pause, step or reload supersedes it.
+  let starting: object | undefined;
+  const withdraw = () => {
+    starting = undefined;
+    if (state.starting) update({ starting: false });
+  };
 
   const present = (frame: number | undefined) => {
     if (frame === undefined || realm === undefined) return;
@@ -232,6 +241,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
 
   const reload = async (changed: Readonly<{ audio: boolean }> = { audio: false }) => {
     if (state.playback.kind === 'playing') pause();
+    withdraw();
     connection?.abort();
     realm?.close();
     realm = undefined;
@@ -288,6 +298,9 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     play: async () => {
       const session = ready();
       if (session === undefined || state.playback.kind === 'playing') return;
+      const request = {};
+      starting = request;
+      update({ starting: true });
       const [resumed] = await Promise.all([
         deps.clock.resume().then(
           () => true,
@@ -296,15 +309,19 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
         prepared,
       ]);
       // The audio clock is the playhead, so a clock the browser refuses to resume cannot play.
-      // A reload or another play may have happened while the audio was decoding.
+      // A pause, step, reload or another play may have happened while the audio was decoding.
+      if (starting !== request) return;
+      withdraw();
       if (!resumed || ready() !== session || playing()) return;
       run(state.playhead >= lastFrame(session.descriptor) ? 0 : state.playhead);
     },
     pause: () => {
+      withdraw();
       if (state.playback.kind === 'playing') pause();
     },
     seek,
     step: (delta) => {
+      withdraw();
       if (state.playback.kind === 'playing') pause();
       seek(state.playhead + delta);
     },

@@ -426,6 +426,46 @@ it('starts playback only after the audio is decoded, so no clip plays silent', a
   expect(host.started).toHaveLength(1);
 });
 
+it('keeps a pause made while the audio decodes, so playback does not start after it', async () => {
+  let decoded: (unplayable: readonly string[]) => void = () => {};
+  const host = setup({
+    prepare: () =>
+      new Promise((resolve) => {
+        decoded = resolve;
+      }),
+  });
+  void host.controller.reload();
+  await flush();
+  const playing = host.controller.play();
+  await flush();
+  expect(host.controller.state().starting).toBe(true);
+  host.controller.pause();
+  expect(host.controller.state().starting).toBe(false);
+  decoded([]);
+  await playing;
+  expect(host.controller.state().playback.kind).toBe('paused');
+  expect(host.started).toEqual([]);
+});
+
+it('keeps a frame step made while the audio decodes paused at the stepped frame', async () => {
+  let decoded: (unplayable: readonly string[]) => void = () => {};
+  const host = setup({
+    prepare: () =>
+      new Promise((resolve) => {
+        decoded = resolve;
+      }),
+  });
+  void host.controller.reload();
+  await flush();
+  const playing = host.controller.play();
+  await flush();
+  host.controller.step(1);
+  decoded([]);
+  await playing;
+  expect(host.controller.state().playback).toEqual({ kind: 'paused', frame: 1 });
+  expect(host.started).toEqual([]);
+});
+
 it('seeks to whole frames', async () => {
   const host = setup();
   await host.controller.reload();

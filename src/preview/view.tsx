@@ -162,7 +162,8 @@ const Controls = ({
   const fps = state.session.kind === 'ready' ? state.session.fps : undefined;
   const last = Math.max(descriptor.durationInFrames - 1, 0);
   const shownFrame = state.shown?.status === 'shown' ? state.shown.frame : undefined;
-  const playing = state.playback.kind === 'playing';
+  // A play waiting for its audio already shows pause, so a second press withdraws it.
+  const playing = state.playback.kind === 'playing' || state.starting;
   return (
     <div className="mk-controls">
       <button type="button" onClick={() => controller.step(-1)} title="Previous frame (←)">
@@ -276,7 +277,8 @@ export const PreviewView = ({
         event.preventDefault();
         // A held Space would toggle playback on every repeat.
         if (event.repeat) return;
-        if (controller.state().playback.kind === 'playing') controller.pause();
+        const current = controller.state();
+        if (current.playback.kind === 'playing' || current.starting) controller.pause();
         else void controller.play();
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         // A focused scrubber would move by itself as well, and the page would scroll.

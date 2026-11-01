@@ -353,7 +353,7 @@ the line `serving <url> (Ctrl-C to stop); ready` is. Then the process serves unt
 
 - A stop after readiness (`Ctrl-C`, `SIGTERM`, `SIGHUP`) is the normal end: exit `0`, nothing more on
   stdout.
-- A failure before readiness is the usual failure envelope: exit `1` for a Vite or entry load failure
+- A failure before readiness is the usual failure envelope: exit `1` for a Vite config or plugin failure
   or a taken `--port`, and `2` for an invocation error, which includes an entry that is not found.
 - A stop before readiness is a cancellation as for every command: no envelope, the stderr line
   `preview aborted; nothing is being served`, exit `128` plus the signal number.
