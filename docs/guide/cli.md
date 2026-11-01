@@ -301,15 +301,15 @@ The three diagnostics `check` adds are errors:
 a timeline of its named Sequences and audio clips. It renders nothing to disk, launches no browser (open
 the printed URL in your own) and needs no FFmpeg. It runs until you stop it.
 
-| Option                 | Meaning                                                                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `--composition <id>`   | Which Composition to open. Without it, a registry of one opens directly and a larger one shows a chooser in the page.        |
-| `--props <json>`       | Props object as a JSON string. Validated in the page, not by the CLI: a schema failure is shown there as a Diagnostic.       |
-| `--preview-fps <n>`    | Frames sampled per second while playing, an integer from 1 to 60, default 12. Scrubbing and stepping always show that frame. |
-| `--port <n>`           | Loopback port to listen on, 0 to 65535; default an ephemeral one. A port that is taken is `render.page-error`.               |
-| `--project-root <dir>` | As in [renderer configuration](#renderer-configuration); `--software-webgl` and `--disable-sandbox` do not apply.            |
-| `--vite-config <path>` | As in [renderer configuration](#renderer-configuration).                                                                     |
-| `--json`               | Print the readiness envelope instead of the line below.                                                                      |
+| Option                 | Meaning                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--composition <id>`   | Which Composition to open. Without it, a registry of one opens directly and a larger one shows a chooser in the page.                                            |
+| `--props <json>`       | Props object as a JSON string. The CLI requires a JSON object; the page validates it against the Composition's schema and shows a failure there as a Diagnostic. |
+| `--preview-fps <n>`    | Frames sampled per second while playing, an integer from 1 to 60, default 12. Scrubbing and stepping always show that frame.                                     |
+| `--port <n>`           | Loopback port to listen on, 0 to 65535; default an ephemeral one. A port that is taken is `render.page-error`.                                                   |
+| `--project-root <dir>` | As in [renderer configuration](#renderer-configuration); `--software-webgl` and `--disable-sandbox` do not apply.                                                |
+| `--vite-config <path>` | As in [renderer configuration](#renderer-configuration).                                                                                                         |
+| `--json`               | Print the readiness envelope instead of the line below.                                                                                                          |
 
 ```bash
 motion-kit preview entry.tsx --composition teaser --preview-fps 15
@@ -317,7 +317,7 @@ motion-kit preview entry.tsx --composition teaser --preview-fps 15
 ```
 
 The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
-click on the timeline seek. The keys work wherever the focus is on the page, except in an input. The timecode shows `mm:ss.cc` and the frame number; when playback is slower
+click on the timeline seek. The keys work wherever the focus is on the page, including the scrubber; a focused button or checkbox keeps Space for itself. The timecode shows `mm:ss.cc` and the frame number; when playback is slower
 than the preview rate, `showing <n>` names the frame actually on screen. Each declared audio source has a
 checkbox, ticked while it is audible; clearing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
 fetched or decoded is marked in the page and skipped.

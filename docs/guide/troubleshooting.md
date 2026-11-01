@@ -232,7 +232,7 @@ Anything else: keep the envelope and the stack, and report it.
   Vite config or something it imports changed, which a reload cannot pick up. Run `preview` again. The
   line is on stderr and the exit code is `1`; the earlier readiness envelope is the only stdout output.
 - **A Composition or props error appears in the page, not in the terminal.** `preview` does not load the
-  entry in the CLI: `--composition`, `--props` and registry errors are shown in the page as Diagnostics,
+  entry in the CLI: an unknown `--composition`, props the schema rejects and registry errors are shown in the page as Diagnostics (a `--props` that is not a JSON object is still `cli.invalid-arguments`),
   and the page recovers on the next save. Use `check` or `frame` to get them as an envelope.
 - **A source is marked unplayable, or there is no sound.** The audio file could not be fetched or
   decoded by the browser, or it lies outside what Vite's `server.fs.allow` serves (an absolute `src`

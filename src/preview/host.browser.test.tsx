@@ -91,24 +91,36 @@ const fakeController = () => {
   return { controller, calls };
 };
 
-it('maps the playback keys anywhere on the page except in an input or on a held Space', () => {
+it('maps the playback keys anywhere on the page except where a focused control uses them', () => {
   const { controller, calls } = fakeController();
   const root = document.createElement('div');
-  const input = document.createElement('input');
-  document.body.append(root, input);
+  const control = (type: string) => {
+    const element = document.createElement('input');
+    element.type = type;
+    return element;
+  };
+  const [text, checkbox, range] = [control('text'), control('checkbox'), control('range')];
+  document.body.append(root, text, checkbox, range);
   const view = createRoot(root);
   cleanups.push(() => {
     act(() => view.unmount());
-    root.remove();
-    input.remove();
+    for (const element of [root, text, checkbox, range]) element.remove();
   });
   act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
   const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) =>
-    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+    target.dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+    );
   press(' ');
   press(' ', { repeat: true });
   press('ArrowRight');
   press('ArrowLeft', { shiftKey: true });
-  press(' ', {}, input);
-  expect(calls).toEqual(['play', 'step 1', 'step -10']);
+  press(' ', {}, text);
+  press('ArrowRight', {}, text);
+  press(' ', {}, checkbox);
+  press('ArrowRight', {}, checkbox);
+  // The scrubber's own arrow step is cancelled, so the frame moves once.
+  expect(press('ArrowLeft', {}, range)).toBe(false);
+  press(' ', {}, range);
+  expect(calls).toEqual(['play', 'step 1', 'step -10', 'step 1', 'step -1', 'play']);
 });

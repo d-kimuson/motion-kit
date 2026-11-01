@@ -22,7 +22,7 @@ A QA Check in a real browser on an example Composition (scrub, play, audio with 
 - Audio processing beyond the `AudioTrack` contract (start, end, offset, volume), video assets, and audio-reactive visuals.
 - Supervising a hung page. Preview cannot terminate the user's browser; a frame that never settles ends in core's own frame timeout.
 - Remote access: the session listens on loopback only.
-- Validating the Composition or its props in the CLI. The CLI starts no browser; selection and props failures are shown in the page.
+- Validating the Composition or its props against the registry in the CLI. The CLI starts no browser and only requires `--props` to be a JSON object; selection and schema failures are shown in the page.
 - Review comments and their Markdown export (TASK-245). Not built; the timeline's Sequence names and the Playhead frame are the anchors it will use.
 
 ## Design
@@ -108,7 +108,7 @@ Pure functions in `src/preview/schedule.ts`, each unit-tested:
 - `wantFrame` / `frameAnswered`: the single-flight presenter.
 - `packLanes(intervals)`: timeline lanes for half-open intervals.
 
-Paused or scrubbing: show that exact frame. Playing: a timer at the preview fps (`--preview-fps`, 1-60, default 12) asks for `playheadFrame(...)`; the `AudioContext` clock is the playhead, because drift between picture and sound is what the ear notices. The last frame ends playback, and Play on the last frame starts again from frame 0. Controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a click on the timeline seek, and the timecode and frame number are shown. The shortcuts are read on the host window wherever focus is, except in an input, and Space on a focused button only activates the button; the composition iframe takes no pointer input, so it never holds the focus. A seek lands on a whole frame (floored).
+Paused or scrubbing: show that exact frame. Playing: a timer at the preview fps (`--preview-fps`, 1-60, default 12) asks for `playheadFrame(...)`; the `AudioContext` clock is the playhead, because drift between picture and sound is what the ear notices. The last frame ends playback, and Play on the last frame starts again from frame 0. Controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a click on the timeline seek, and the timecode and frame number are shown. The shortcuts are read on the host window wherever focus is, leaving out only the keys a focused control acts on (`nativeKeys`): every key in a text field, Space on a button or checkbox. A focused scrubber keeps the shortcuts, and its own arrow step is cancelled so a frame step happens once; the composition iframe takes no pointer input, so it never holds the focus. A seek lands on a whole frame (floored).
 
 ### Audio
 
@@ -120,7 +120,7 @@ Rows under the scrubber show the named Sequences the realm has reported and the 
 
 ### CLI
 
-`motion-kit preview <entry> [--composition <id>] [--props <json>] [--preview-fps <n>] [--port <n>] [--project-root <dir>] [--vite-config <path>] [--json]`. When the host page is listening it writes one success envelope, `data: { format: 'preview', url }`, or the line `serving <url> (Ctrl-C to stop); ready`, and serves until a stop signal, which is then its normal end (exit 0, no second document). A stop before readiness is a cancellation as for every command (stderr `preview aborted; nothing is being served`, exit 128 plus the signal number); a session failure after readiness writes one line `severity: code: message — hint` to stderr and exits 1. A missing entry, an invalid `--preview-fps` or `--port`, and a failure to start are the usual failure envelopes before readiness. This is new to the CLI output contract, so the [CLI output contract ADR](../contexts/agent/adr/20261024-cli-output-contract.accepted.md) is amended. The [CLI guide](../guide/cli.md#preview) is the user-facing description.
+`motion-kit preview <entry> [--composition <id>] [--props <json>] [--preview-fps <n>] [--port <n>] [--project-root <dir>] [--vite-config <path>] [--json]`. When the host page is listening it writes one success envelope, `data: { format: 'preview', url }`, or the line `serving <url> (Ctrl-C to stop); ready`, and serves until a stop signal, which is then its normal end (exit 0, no second document). A stop before readiness is a cancellation as for every command (stderr `preview aborted; nothing is being served`, exit 128 plus the signal number); a session failure after readiness writes one line `severity: code: message — hint` to stderr and exits 1. A missing entry, an invalid `--preview-fps` or `--port`, a `--props` that is not a JSON object, and a failure to start are the usual failure envelopes before readiness. This is new to the CLI output contract, so the [CLI output contract ADR](../contexts/agent/adr/20261024-cli-output-contract.accepted.md) is amended. The [CLI guide](../guide/cli.md#preview) is the user-facing description.
 
 ### Open items
 

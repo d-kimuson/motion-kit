@@ -227,6 +227,18 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 };
 
 /** The preview host page. The realm iframe is the only element React does not own the contents of. */
+/**
+ * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field
+ * takes every key, and Space activates a button or toggles a checkbox. Focus stays on the scrubber
+ * or a checkbox after it is used, so the other keys still reach the shortcuts.
+ */
+const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
+  if (target instanceof HTMLButtonElement) return 'space';
+  if (!(target instanceof HTMLInputElement)) return 'none';
+  if (target.type === 'range') return 'none';
+  return target.type === 'checkbox' ? 'space' : 'all';
+};
+
 export const PreviewView = ({
   controller,
   frame,
@@ -244,9 +256,8 @@ export const PreviewView = ({
   // Shortcuts work wherever focus is on the page; the realm frame takes no input (see .mk-frame).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return;
-      // Space on a focused button activates it; the shortcut would toggle playback a second time.
-      if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
+      const keys = nativeKeys(event.target);
+      if (keys === 'all' || (keys === 'space' && event.key === ' ')) return;
       const delta = event.shiftKey ? 10 : 1;
       if (event.key === ' ') {
         event.preventDefault();
@@ -254,8 +265,11 @@ export const PreviewView = ({
         if (event.repeat) return;
         if (controller.state().playback.kind === 'playing') controller.pause();
         else void controller.play();
-      } else if (event.key === 'ArrowLeft') controller.step(-delta);
-      else if (event.key === 'ArrowRight') controller.step(delta);
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        // A focused scrubber would move by itself as well, and the page would scroll.
+        event.preventDefault();
+        controller.step(event.key === 'ArrowLeft' ? -delta : delta);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
