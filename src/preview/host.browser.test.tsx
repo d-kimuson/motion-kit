@@ -612,6 +612,40 @@ it('shows the elements of the paused frame, highlights one on hover and drafts a
   expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
 });
 
+it('cuts a long selector so the row keeps its source and comment button', async () => {
+  const selector = `div#hero-title${'.text-balance'.repeat(20)}`;
+  const { controller } = fakeController(
+    { session: readySession(60), shown: { status: 'shown', frame: 0, sequences: [], assets: [] } },
+    null,
+    {
+      nodes: [
+        {
+          selector,
+          text: 'Hello',
+          source: '/work/app/src/title.tsx:3:7',
+          box: { x: 0, y: 0, width: 10, height: 10 },
+          visible: true,
+          children: [],
+        },
+      ],
+      truncated: false,
+    },
+  );
+  const { root, tab } = mount(controller);
+  await act(async () => {
+    tab('Elements').click();
+    await Promise.resolve();
+  });
+  const row = root.querySelector<HTMLElement>('[data-slot=element]');
+  const button = row?.querySelector(`button[aria-label="Comment on ${selector}"]`);
+  if (row === null || row === undefined || button === null || button === undefined)
+    throw new Error('No element row');
+  expect(row.scrollWidth).toBe(row.clientWidth);
+  expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
+    row.getBoundingClientRect().right,
+  );
+});
+
 it('asks for no elements while playing', async () => {
   const { controller, calls } = fakeController(
     {

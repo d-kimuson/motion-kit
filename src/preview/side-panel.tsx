@@ -35,11 +35,13 @@ const rate = ({ numerator, denominator }: LoadingDescriptor['fps']) =>
 const CompositionFacts = ({
   descriptor,
   fps,
+  sequences,
   assets,
 }: {
   descriptor: LoadingDescriptor;
   fps: FrameRate;
-  /** How many the frames shown so far registered. */
+  /** How many the frames shown so far mounted or registered. */
+  sequences: number;
   assets: number;
 }) => (
   <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 px-1 text-xs">
@@ -51,6 +53,7 @@ const CompositionFacts = ({
     <Fact label="Duration">
       {timecode(descriptor.durationInFrames, fps)} ({descriptor.durationInFrames} frames)
     </Fact>
+    <Fact label="Named Sequences">{sequences}</Fact>
     <Fact label="Audio clips">{(descriptor.audio ?? []).length}</Fact>
     <Fact label="Fonts and images">{assets}</Fact>
   </dl>
@@ -102,7 +105,8 @@ const Sequences = ({
 const Count = ({ value }: { value: number }) =>
   value === 0 ? undefined : (
     <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-      {value}
+      {/* Five tabs share 22rem; a three-digit count would push the outer ones out. */}
+      {value > 99 ? '99+' : value}
     </Badge>
   );
 
@@ -141,7 +145,7 @@ export const SidePanel = ({
             Info
           </TabsTrigger>
           <TabsTrigger value="sequences" className="text-xs">
-            Sequences <Count value={state.spans.length} />
+            Sequences
           </TabsTrigger>
           <TabsTrigger value="assets" className="text-xs">
             Assets
@@ -158,7 +162,12 @@ export const SidePanel = ({
         [
           [
             'info',
-            <CompositionFacts descriptor={descriptor} fps={fps} assets={state.assets.length} />,
+            <CompositionFacts
+              descriptor={descriptor}
+              fps={fps}
+              sequences={state.spans.length}
+              assets={state.assets.length}
+            />,
           ],
           ['sequences', <Sequences state={state} fps={fps} controller={controller} />],
           [

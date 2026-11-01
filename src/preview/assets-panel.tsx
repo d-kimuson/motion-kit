@@ -107,7 +107,7 @@ const RegisteredAssets = ({
             key={`${asset.kind}:${asset.source}`}
             data-slot="asset"
             data-current={here ? '' : undefined}
-            className={cn('flex items-center gap-2 rounded-md px-2 py-1', here && 'bg-muted')}
+            className={cn('flex items-center gap-2 rounded-md px-1 py-1', here && 'bg-muted')}
           >
             <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label={asset.kind} />
             <div className="min-w-0 flex-1" title={asset.source}>
@@ -150,11 +150,12 @@ export const AssetsPanel = ({
   controller: PreviewController;
 }) => (
   <div className="grid gap-4">
-    <Section title="Audio">
-      <AudioSources state={state} descriptor={descriptor} controller={controller} />
-    </Section>
+    {/* The fonts and images come first: a narrated Composition declares dozens of clips. */}
     <Section title="Fonts and images">
       <RegisteredAssets state={state} fps={fps} controller={controller} />
+    </Section>
+    <Section title="Audio">
+      <AudioSources state={state} descriptor={descriptor} controller={controller} />
     </Section>
   </div>
 );

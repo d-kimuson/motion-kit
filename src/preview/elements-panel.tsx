@@ -68,14 +68,16 @@ const Node = ({ node, path, rows }: { node: ElementNode; path: string; rows: Row
             <Chevron className="size-3.5" />
           </button>
         )}
-        <span className="shrink-0 font-mono">{node.selector}</span>
+        {/* A class-heavy selector is cut, so the source and the button stay in the row. */}
+        <span className="min-w-0 truncate font-mono" title={node.selector}>
+          {node.selector}
+        </span>
         {leaf && node.text !== '' ? (
-          <span className="min-w-0 truncate text-muted-foreground">{node.text}</span>
+          <span className="min-w-0 flex-1 basis-0 truncate text-muted-foreground">{node.text}</span>
         ) : undefined}
-        <span className="min-w-0 flex-1" />
         {node.source === null ? undefined : (
           <span
-            className="shrink-0 font-mono text-[11px] text-muted-foreground"
+            className="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground"
             title={relativeSource(node.source, rows.review.site)}
           >
             {shortSource(node.source)}
@@ -85,7 +87,7 @@ const Node = ({ node, path, rows }: { node: ElementNode; path: string; rows: Row
           type="button"
           aria-label={`Comment on ${node.selector}`}
           title="Comment on this element"
-          className="grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-comment focus-visible:opacity-100"
+          className="ml-auto grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-comment focus-visible:opacity-100"
           onClick={() => rows.review.controller.commentElement(element(node))}
         >
           <MessageSquarePlus className="size-3.5" />
