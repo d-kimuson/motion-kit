@@ -82,8 +82,8 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 };
 
 /**
- * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field
- * and a tab take every key, the side panel's resize handle the arrows, and Space activates a
+ * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field,
+ * a select and a tab take every key, the side panel's resize handle the arrows, and Space activates a
  * button or toggles a checkbox. Focus stays on the scrubber, a checkbox or the handle after it is
  * used, so the other keys still reach the shortcuts.
  */
@@ -92,7 +92,7 @@ const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'arrows' | 'n
   const role = target instanceof Element ? target.getAttribute('role') : null;
   if (role === 'tab') return 'all';
   if (role === 'separator') return 'arrows';
-  if (target instanceof HTMLTextAreaElement) return 'all';
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return 'all';
   if (target instanceof HTMLButtonElement) return 'space';
   if (!(target instanceof HTMLInputElement)) return 'none';
   if (target.type === 'range') return 'none';
