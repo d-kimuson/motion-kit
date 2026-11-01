@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { get } from 'node:http';
 import { createRequire } from 'node:module';
 import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { chromium } from 'playwright';
 import { afterEach, expect, it } from 'vitest';
 
 import { previewHostConfigSchema } from '../../lib/preview-protocol.ts';
@@ -112,6 +113,8 @@ it('serves the host page, the preview shell and audio under the Vite fs policy',
   );
   expect(config).toEqual({
     projectRoot: root,
+    realProjectRoot: realpathSync(root),
+    entry: 'entry.tsx',
     shellUrl: '/__motion-kit/?host=preview',
     eventsUrl: '/__motion-kit/preview/events',
     audioUrl: '/__motion-kit/preview/audio',
@@ -137,6 +140,41 @@ it('serves the host page, the preview shell and audio under the Vite fs policy',
   expect((await fetch(audio)).status).toBe(404);
   audio.searchParams.delete('src');
   expect((await fetch(audio)).status).toBe(400);
+});
+
+it('marks the DOM elements of the project with the source location of their JSX, not other hosts', async () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, 'entry.tsx'),
+    `import { defineComposition, defineCompositions } from '@kimuson/motion-kit';
+import { z } from 'zod';
+const Title = () => <h1 data-source="kept">title</h1>;
+const Scene = () => <main><Title /><p>body</p><svg><circle r={1} /><path d="M0 0" /></svg><mesh /></main>;
+export const compositions = defineCompositions([defineComposition({
+id: 'clip', component: Scene, schema: z.object({}),
+width: 320, height: 180, fps: { numerator: 30, denominator: 1 }, durationInFrames: 10 })]);`,
+  );
+  const result = await open(root);
+  if (!result.ok) throw new Error('Preview failed to start');
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.goto(result.value.url);
+    const realm = page.frameLocator('iframe');
+    await realm.locator('main p').waitFor();
+    // Vite's module ids, and so the JSX source file names, are real paths.
+    const file = join(realpathSync(root), 'entry.tsx');
+    expect(await realm.locator('main').getAttribute('data-source')).toBe(`${file}:4:21`);
+    expect(await realm.locator('main p').getAttribute('data-source')).toBe(`${file}:4:36`);
+    expect(await realm.locator('h1').getAttribute('data-source')).toBe('kept');
+    expect(await realm.locator('svg circle').getAttribute('data-source')).toBe(`${file}:4:52`);
+    // React Three Fiber elements are not DOM elements: a mark would land on the Three object.
+    // `path` and `line` name three.js classes too, so they are left alone even in an SVG.
+    expect(await realm.locator('mesh').getAttribute('data-source')).toBeNull();
+    expect(await realm.locator('svg path').getAttribute('data-source')).toBeNull();
+  } finally {
+    await browser.close();
+  }
 });
 
 /** A GET with the given Host header; a DNS-rebound page sends its own site's name. */

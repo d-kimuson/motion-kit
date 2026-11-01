@@ -9,6 +9,7 @@ import {
   type PreviewRequest,
   type ShowOutcome,
 } from '../../lib/preview-protocol.ts';
+import { inspectPoint } from './inspect.ts';
 
 /** The window a preview realm talks through; injected so the handshake is testable. */
 export type PreviewHostWindow = Readonly<{
@@ -54,6 +55,8 @@ const failedReply = (request: PreviewRequest, error: unknown): PreviewReply => {
     return { type: 'listed', id: request.id, result: { ok: false, error: diagnostic } };
   if (request.type === 'mount')
     return { type: 'mounted', id: request.id, result: { ok: false, error: diagnostic } };
+  if (request.type === 'inspect')
+    return { type: 'inspected', id: request.id, result: { ok: false, error: diagnostic } };
   return {
     type: 'shown',
     id: request.id,
@@ -80,6 +83,15 @@ export const answerPreview = async (
         loadingTimeoutMs,
       }),
     };
+  if (request.type === 'inspect') {
+    // The element the Loading Page mounts into; the Composition draws nothing outside it.
+    const root = document.getElementById('motion-kit-root');
+    return {
+      type: 'inspected',
+      id: request.id,
+      result: { ok: true, value: root === null ? null : inspectPoint(root, request.x, request.y) },
+    };
+  }
   const outcome = await page.settleFrame(request.frame, {
     source: 'preview',
     requestId: crypto.randomUUID(),

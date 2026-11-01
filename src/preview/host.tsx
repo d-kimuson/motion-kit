@@ -8,12 +8,15 @@ import {
   previewReloadSchema,
 } from '../lib/preview-protocol.ts';
 import { createAudioPlayer, mutedSources } from './audio.ts';
+import { createCommentBook } from './comment-book.ts';
 import { connectRealm } from './connection.ts';
 import { createPreviewController } from './controller.ts';
 import { parsePreviewQuery, withCompositionId } from './query.ts';
+import { createReviewController } from './review.ts';
 import { PreviewView } from './view.tsx';
 
-// Reading `localStorage` throws where the browser blocks site data; mutes then last for the page.
+// Reading `localStorage` throws where the browser blocks site data; mutes and comments then last
+// for the page.
 const siteStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
   try {
     return window.localStorage;
@@ -45,7 +48,9 @@ export const startPreviewHost = (): void => {
     fail(root, `${query.error.message} ${query.error.hint}`);
     return;
   }
-  const { shellUrl, eventsUrl, audioUrl, projectRoot } = config.data;
+  const { shellUrl, eventsUrl, audioUrl, projectRoot, realProjectRoot, entry, viteConfig } =
+    config.data;
+  const storage = siteStorage();
   let frame: HTMLIFrameElement | null = null;
   let loads = 0;
   const context = new AudioContext();
@@ -85,7 +90,7 @@ export const startPreviewHost = (): void => {
         return () => clearInterval(handle);
       },
     },
-    muted: mutedSources(siteStorage(), projectRoot),
+    muted: mutedSources(storage, projectRoot),
     choose: (compositionId) =>
       window.history.replaceState(
         null,
@@ -105,12 +110,24 @@ export const startPreviewHost = (): void => {
     // Data it cannot read may be an audio change; decoding again is only slower.
     void controller.reload({ audio: changed.success ? changed.data.audio : true });
   });
+  const book = createCommentBook(storage, projectRoot, entry);
+  const review = {
+    controller: createReviewController({ preview: controller, book, props: query.value.props }),
+    book,
+    site: {
+      projectRoot,
+      realProjectRoot,
+      entry,
+      ...(viteConfig === undefined ? {} : { viteConfig }),
+    },
+  };
   createRoot(root).render(
     <PreviewView
       controller={controller}
       frame={(element) => {
         frame = element;
       }}
+      review={review}
     />,
   );
 };

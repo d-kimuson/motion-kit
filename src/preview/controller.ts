@@ -1,7 +1,8 @@
 import { createFrameRate, type FrameRate } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
-import { type ShowOutcome } from '../lib/preview-protocol.ts';
+import { type InspectedElement, type ShowOutcome } from '../lib/preview-protocol.ts';
+import { type Result } from '../lib/result.ts';
 import { type AudioPlayer } from './audio.ts';
 import { type Realm } from './connection.ts';
 import { type PreviewQuery } from './query.ts';
@@ -73,6 +74,8 @@ export type PreviewController = Readonly<{
   seek: (frame: number) => void;
   step: (delta: number) => void;
   toggleMute: (src: string) => void;
+  /** The element at a design-pixel point of the mounted Composition; none while nothing is mounted. */
+  inspect: (x: number, y: number) => Promise<Result<InspectedElement | null>>;
   dispose: () => void;
 }>;
 
@@ -332,6 +335,11 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       deps.muted.save(muted);
       deps.audio.setMuted(src, mute);
       update({ muted });
+    },
+    inspect: async (x, y) => {
+      const current = realm;
+      if (current === undefined || ready() === undefined) return { ok: true, value: null };
+      return (await unlessClosed(current.inspect(x, y))) ?? { ok: true, value: null };
     },
     dispose: () => {
       halt();

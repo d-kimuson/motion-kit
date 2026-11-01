@@ -1,5 +1,6 @@
 import type { Alias, AliasOptions, Plugin, UserConfig } from 'vite';
 
+import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,8 @@ import {
   previewEntryId,
   previewEntrySource,
   previewHostId,
+  jsxSourceId,
+  jsxSourceSource,
 } from './entry-source.ts';
 
 const isAliasArray = (value: AliasOptions): value is readonly Alias[] => Array.isArray(value);
@@ -36,6 +39,10 @@ export const browserEntry = builtRoot
 export const previewEntry = builtRoot
   ? join(dirname(fileURLToPath(import.meta.url)), 'preview.js')
   : fileURLToPath(new URL('../../preview/host.tsx', import.meta.url));
+/** motion-kit's own modules, which the preview's source marking leaves alone. */
+const ownDirectory = builtRoot
+  ? dirname(fileURLToPath(import.meta.url))
+  : fileURLToPath(new URL('../../', import.meta.url));
 /** Ids the loading plugin owns. Vite's alias plugin runs before `enforce: 'pre'` plugins,
  * so a project alias for these would shadow the bootstrap instead of the other way round.
  * They are prepended to `resolve.alias` so motion-kit's reserved ids win over a conflicting
@@ -67,6 +74,34 @@ export const loadingPlugin = (entry: string): Plugin => ({
     return id === `\0${previewEntryId}` ? previewEntrySource() : undefined;
   },
 });
+
+const jsxDevImport = /(["'])react\/jsx-dev-runtime\1/g;
+/**
+ * Preview only: the project's modules import the source-marking JSX runtime instead of React's.
+ * It rewrites the import esbuild's development JSX transform emitted, so it applies only to the
+ * project's own files: not to motion-kit's modules, not to dependencies, not to the dependency
+ * optimizer, and the runtime it wraps stays the project's optimized `react/jsx-dev-runtime`.
+ */
+export const jsxSourcePlugin = (projectRoot: string): Plugin => {
+  // Vite's module ids are real paths, so a project under a symlink (macOS /var, /tmp) still matches.
+  const roots = [projectRoot, realpathSync(projectRoot)].map((root) => `${root}/`);
+  return {
+    name: 'motion-kit-jsx-source',
+    enforce: 'post',
+    resolveId: (id) => (id === jsxSourceId ? `\0${jsxSourceId}` : undefined),
+    load: (id) => (id === `\0${jsxSourceId}` ? jsxSourceSource() : undefined),
+    transform(code, id) {
+      const file = id.split('?')[0] ?? id;
+      const project =
+        roots.some((root) => file.startsWith(root)) &&
+        !file.startsWith(ownDirectory) &&
+        !file.includes('/node_modules/');
+      return project && /\.[jt]sx$/.test(file)
+        ? code.replace(jsxDevImport, JSON.stringify(jsxSourceId))
+        : undefined;
+    },
+  };
+};
 
 /** Resolve once from the project, including linked/workspace imports. The bootstrap
  * never gets a private React installation or a second Composition implementation. */

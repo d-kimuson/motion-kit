@@ -319,10 +319,12 @@ motion-kit preview entry.tsx --composition teaser --preview-fps 15
 The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
 click on the timeline seek. The keys work wherever the focus is on the page, including the scrubber; a focused button keeps Space for itself, a focused side panel tab keeps the arrow keys too, and a key with Alt, Ctrl or Cmd stays with the browser. The timecode shows `mm:ss.cc` and the frame number; when the picture is behind
 the playhead (while paused, or by more than half a second while playing), `showing <n>` names the frame actually on screen. The playback controls stay in view
-under the picture however long the timeline grows. The side panel next to the picture has three tabs: the Composition's size, frame rate and
-duration; the named Sequences seen so far, where choosing one jumps to its start; and the audio sources. Each declared audio source there has a
+under the picture however long the timeline grows. The side panel next to the picture has four tabs: the Composition's size, frame rate and
+duration; the named Sequences seen so far, where choosing one jumps to its start; the audio sources; and the review comments. Each declared audio source there has a
 speaker toggle, pressed while it is audible; releasing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
 fetched or decoded is marked in the page and skipped.
+
+To leave a note for a coding agent, press Comment (or C): playback pauses and the pointer outlines the visible element under it; click one to comment on it, or press Esc (or C again) to leave comment mode. "Comment on this frame" in the Comments tab comments on the whole frame instead. Seek before saving to make the comment cover a range of frames. Ctrl/Cmd+Enter saves the comment and Esc drops it. Each comment is marked on the timeline, and choosing its time seeks to it. Copy Markdown puts every comment on the Composition on the clipboard, each with its time, the named Sequences showing, the element (with the file and line of its JSX in your project) and a `motion-kit frame` command that renders the frame it is about (both ends of a range). A comment keeps the props the page was opened with, so its command renders the frame commented on even after a restart with other `--props`. Comments are kept in the browser's `localStorage` per project root and entry, so like the mute choice they stay with the port.
 
 Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
 component state restarts. A change to the Vite config or its dependencies ends the preview with

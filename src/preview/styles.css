@@ -36,6 +36,7 @@
   --color-sequence: var(--sequence);
   --color-audio: var(--audio);
   --color-warning: var(--warning);
+  --color-comment: var(--comment);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -63,11 +64,12 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   --radius: 0.625rem;
-  /* The timeline's own colours. */
+  /* The preview's own colours. */
   --playhead: oklch(0.637 0.237 25.331);
   --sequence: oklch(0.488 0.243 264.376);
   --audio: oklch(0.596 0.145 163.225);
   --warning: oklch(0.828 0.189 84.429);
+  --comment: oklch(0.667 0.295 322.15);
 }
 
 @layer base {

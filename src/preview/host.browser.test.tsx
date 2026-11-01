@@ -1,11 +1,14 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 
 import { createFrameRate } from '../core/timeline/time.ts';
-import { previewFailureReporter } from '../lib/preview-protocol.ts';
+import { type InspectedElement, previewFailureReporter } from '../lib/preview-protocol.ts';
+import { createCommentBook } from './comment-book.ts';
+import { type Review } from './comments-panel.tsx';
 import { connectRealm } from './connection.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { createReviewController } from './review.ts';
 import { PreviewView } from './view.tsx';
 
 const cleanups: (() => void)[] = [];
@@ -63,7 +66,10 @@ parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1, load:
   (await connecting).close();
 });
 
-const fakeController = (overrides: Partial<PreviewState> = {}) => {
+const fakeController = (
+  overrides: Partial<PreviewState> = {},
+  inspected: InspectedElement | null = null,
+) => {
   const calls: string[] = [];
   const state: PreviewState = {
     session: { kind: 'connecting' },
@@ -89,9 +95,31 @@ const fakeController = (overrides: Partial<PreviewState> = {}) => {
     seek: (frame) => calls.push(`seek ${frame}`),
     step: (delta) => calls.push(`step ${delta}`),
     toggleMute: (src) => calls.push(`toggle ${src}`),
+    inspect: (x, y) => {
+      calls.push(`inspect ${Math.round(x)},${Math.round(y)}`);
+      return Promise.resolve({ ok: true, value: inspected });
+    },
     dispose: () => {},
   };
   return { controller, calls };
+};
+
+/** Comment mode over `controller`, with comments kept for the test only. */
+const reviewOf = (controller: PreviewController): Review => {
+  const items = new Map<string, string>();
+  const book = createCommentBook(
+    {
+      getItem: (key) => items.get(key) ?? null,
+      setItem: (key, value) => void items.set(key, value),
+    },
+    '/work/app',
+    'entry.tsx',
+  );
+  return {
+    controller: createReviewController({ preview: controller, book, props: {} }),
+    book,
+    site: { projectRoot: '/work/app', realProjectRoot: '/work/app', entry: 'entry.tsx' },
+  };
 };
 
 it('maps the playback keys anywhere on the page except where a focused control uses them', () => {
@@ -109,7 +137,11 @@ it('maps the playback keys anywhere on the page except where a focused control u
     act(() => view.unmount());
     for (const element of [root, text, checkbox, range]) element.remove();
   });
-  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  act(() =>
+    view.render(
+      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+    ),
+  );
   const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) =>
     target.dispatchEvent(
       new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
@@ -142,7 +174,11 @@ it('pauses on Space while a play waits for its audio', () => {
     act(() => view.unmount());
     root.remove();
   });
-  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  act(() =>
+    view.render(
+      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+    ),
+  );
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
   expect(calls).toEqual(['pause']);
 });
@@ -175,7 +211,11 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
     act(() => view.unmount());
     root.remove();
   });
-  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  act(() =>
+    view.render(
+      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+    ),
+  );
   expect(
     [...root.querySelectorAll('[data-slot=timeline-lane]')].map((row) =>
       [...row.querySelectorAll('[data-slot=timeline-span]')].map((bar) => bar.textContent),
@@ -206,7 +246,11 @@ it('keeps the controls row the same width while the shown frame lags, and hides 
       act(() => view.unmount());
       root.remove();
     });
-    act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+    act(() =>
+      view.render(
+        <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+      ),
+    );
     const lag = root.querySelector<HTMLElement>('[data-slot=lag]');
     return lag === null ? 'absent' : getComputedStyle(lag).visibility;
   };
@@ -250,7 +294,11 @@ it('highlights only the spans the shown frame is inside, not every mounted one',
     act(() => view.unmount());
     root.remove();
   });
-  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  act(() =>
+    view.render(
+      <PreviewView controller={controller} frame={() => {}} review={reviewOf(controller)} />,
+    ),
+  );
   expect(
     [...root.querySelectorAll('[data-slot=timeline-span][data-active]')].map(
       (bar) => bar.textContent,
@@ -279,7 +327,7 @@ const readySession = (durationInFrames: number) => {
   };
 };
 
-const mount = (controller: PreviewController) => {
+const mount = (controller: PreviewController, review = reviewOf(controller)) => {
   const root = document.createElement('div');
   document.body.append(root);
   const view = createRoot(root);
@@ -287,7 +335,7 @@ const mount = (controller: PreviewController) => {
     act(() => view.unmount());
     root.remove();
   });
-  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  act(() => view.render(<PreviewView controller={controller} frame={() => {}} review={review} />));
   const tab = (name: string) => {
     const element = [...root.querySelectorAll<HTMLElement>('[role=tab]')].find((item) =>
       item.textContent.startsWith(name),
@@ -296,7 +344,7 @@ const mount = (controller: PreviewController) => {
     return element;
   };
   const panelButtons = () => [...root.querySelectorAll<HTMLElement>('[role=tabpanel] button')];
-  return { root, tab, panelButtons };
+  return { root, tab, panelButtons, review };
 };
 
 it('hoists its stylesheet into <head>, so the page text and accessibility tree stay free of CSS', () => {
@@ -351,4 +399,94 @@ it('leaves the arrow keys to a focused side panel tab', () => {
     );
   });
   expect(calls).toEqual([]);
+});
+
+it('comments on the element clicked in comment mode and copies the review as Markdown', async () => {
+  const title: InspectedElement = {
+    selector: 'h1.title',
+    text: 'Hello',
+    source: '/work/app/src/title.tsx:3:7',
+    box: { x: 20, y: 30, width: 100, height: 40 },
+  };
+  const { controller, calls } = fakeController({ session: readySession(60), playhead: 12 }, title);
+  const { root, tab, review } = mount(controller);
+  const press = (key: string, target: EventTarget = document.body) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  act(() => void press('c'));
+  expect(calls).toEqual(['pause']);
+  expect(review.controller.state().picking).toBe(true);
+  const layer = root.querySelector<HTMLElement>('[data-slot=comment-layer]');
+  if (layer === null) throw new Error('No comment layer');
+  // The layer is the Composition (320×180) scaled into the stage; a click maps back to design pixels.
+  const box = layer.getBoundingClientRect();
+  const at = {
+    clientX: box.left + box.width / 4,
+    clientY: box.top + box.height / 2,
+    bubbles: true,
+  };
+  await act(async () => {
+    layer.dispatchEvent(new PointerEvent('pointermove', at));
+    layer.dispatchEvent(new MouseEvent('click', at));
+    await Promise.resolve();
+  });
+  expect(calls.slice(1)).toEqual(['inspect 80,90', 'inspect 80,90', 'pause']);
+  expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
+  const field = root.querySelector<HTMLTextAreaElement>('textarea[aria-label=Comment]');
+  if (field === null) throw new Error('No comment field');
+  expect(document.activeElement).toBe(field);
+  // Typing a space in the comment does not toggle playback.
+  act(() => void press(' ', field));
+  expect(calls).not.toContain('play');
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
+      field,
+      'Bigger title',
+    );
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // Another tab drops the field, not the text; picking again moves the draft to the new target,
+  // brings the Comments tab back and keeps what was typed.
+  act(() => tab('Sequences').click());
+  act(() => void press('c'));
+  await act(async () => {
+    layer.dispatchEvent(new MouseEvent('click', { ...at, clientX: box.left + box.width / 2 }));
+    await Promise.resolve();
+  });
+  expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
+  const kept = root.querySelector<HTMLTextAreaElement>('textarea[aria-label=Comment]');
+  expect(kept?.value).toBe('Bigger title');
+  expect(document.activeElement).toBe(kept);
+  act(() => {
+    kept?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  expect([...root.querySelectorAll('[data-slot=comment]')].map((item) => item.textContent)).toEqual(
+    [expect.stringContaining('h1.title · src/title.tsx:3:7Bigger title')],
+  );
+  expect(root.querySelectorAll('[data-slot=timeline-comment]')).toHaveLength(1);
+  const written = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  cleanups.push(() => written.mockRestore());
+  const copy = [...root.querySelectorAll('button')].find((button) =>
+    button.textContent.includes('Copy Markdown'),
+  );
+  await act(async () => {
+    copy?.click();
+    await Promise.resolve();
+  });
+  expect(written.mock.calls[0]?.[0]).toContain(
+    [
+      '## 1. 00:00.40 (frame 12)',
+      '',
+      '- Element: `h1.title` "Hello" from `src/title.tsx:3:7`, box (20, 30) 100×40, clicked at (160, 90)',
+      '',
+      '> Bigger title',
+    ].join('\n'),
+  );
+  expect(root.textContent).toContain('Copied');
 });

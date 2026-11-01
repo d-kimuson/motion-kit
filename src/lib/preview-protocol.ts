@@ -61,6 +61,8 @@ export const previewRequestSchema = z.discriminatedUnion('type', [
     props: z.unknown(),
   }),
   z.object({ type: z.literal('show'), id: requestId, frame: z.int().nonnegative() }),
+  /** The element at a point of the shown frame, in the Composition's design pixels. */
+  z.object({ type: z.literal('inspect'), id: requestId, x: z.number(), y: z.number() }),
 ]);
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
 
@@ -81,6 +83,22 @@ export type ShowOutcome =
   | Readonly<{ status: 'failed'; diagnostics: readonly [Diagnostic, ...Diagnostic[]] }>
   | Readonly<{ status: 'aborted' }>;
 
+/** The element a review comment points at, as the realm describes it. */
+export const inspectedElementSchema = z.object({
+  /** Tag, id and classes, as in `h1#title.lead`. */
+  selector: z.string(),
+  /** The start of its text content, whitespace collapsed; empty when it has none. */
+  text: z.string(),
+  /**
+   * `file:line:column` of the JSX that created it or its nearest ancestor that has one; null when
+   * no element on the way up came from JSX compiled in development.
+   */
+  source: z.string().nullable(),
+  /** Its bounding box in design pixels, rounded. */
+  box: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
+});
+export type InspectedElement = z.infer<typeof inspectedElementSchema>;
+
 export const previewReplySchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('listed'),
@@ -89,12 +107,18 @@ export const previewReplySchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('mounted'), id: requestId, result: resultSchema(mountReceiptSchema) }),
   z.object({ type: z.literal('shown'), id: requestId, outcome: showOutcomeSchema }),
+  z.object({
+    type: z.literal('inspected'),
+    id: requestId,
+    result: resultSchema(inspectedElementSchema.nullable()),
+  }),
 ]);
 // Readonly on both sides of the wire, like the Loading Page values the replies carry.
 export type PreviewReply =
   | Readonly<{ type: 'listed'; id: number; result: Result<readonly LoadingDescriptor[]> }>
   | Readonly<{ type: 'mounted'; id: number; result: Result<MountReceipt> }>
-  | Readonly<{ type: 'shown'; id: number; outcome: ShowOutcome }>;
+  | Readonly<{ type: 'shown'; id: number; outcome: ShowOutcome }>
+  | Readonly<{ type: 'inspected'; id: number; result: Result<InspectedElement | null> }>;
 
 /** The server-sent event the events route emits after a module the realm loaded changed. */
 export const previewReloadEvent = 'reload';
@@ -103,7 +127,14 @@ export const previewReloadSchema = z.object({ audio: z.boolean() });
 
 /** What the server inlines into the host page; every URL is absolute-path, under Vite's base. */
 export const previewHostConfigSchema = z.object({
+  /** The resolved project root; review comments name it for `--project-root`. */
   projectRoot: z.string(),
+  /** Its real path, the prefix of the file names in `data-source`. */
+  realProjectRoot: z.string(),
+  /** The entry relative to the project root, which the CLI resolves it against. */
+  entry: z.string(),
+  /** The absolute path of the Vite config `--vite-config` named. */
+  viteConfig: z.string().optional(),
   /** The composition shell in preview host mode. */
   shellUrl: z.string(),
   /** Server-sent events: `reload` after a served module changed. */

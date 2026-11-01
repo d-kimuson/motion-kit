@@ -1,5 +1,6 @@
 import { type LoadingDescriptor, type MountReceipt } from '../lib/loading-protocol.ts';
 import {
+  type InspectedElement,
   previewFailedSchema,
   previewProtocolVersion,
   previewReadySchema,
@@ -22,6 +23,8 @@ export type Realm = Readonly<{
   list: () => Promise<Result<readonly LoadingDescriptor[]>>;
   mount: (compositionId: string | undefined, props: unknown) => Promise<Result<MountReceipt>>;
   show: (frame: number) => Promise<ShowOutcome>;
+  /** The element at a design-pixel point of the mounted Composition; null when there is none. */
+  inspect: (x: number, y: number) => Promise<Result<InspectedElement | null>>;
   /** Rejects every pending request; the realm's page goes with its frame. */
   close: () => void;
 }>;
@@ -75,6 +78,12 @@ const client = (port: MessagePort): Realm => {
         'shown',
         (id) => ({ type: 'show', id, frame }),
         (reply) => (reply.type === 'shown' ? reply.outcome : unreachable()),
+      ),
+    inspect: (x, y) =>
+      send(
+        'inspected',
+        (id) => ({ type: 'inspect', id, x, y }),
+        (reply) => (reply.type === 'inspected' ? reply.result : unreachable()),
       ),
     close: () => {
       for (const waiting of pending.values()) waiting.reject(closed());
