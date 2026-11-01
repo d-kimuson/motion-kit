@@ -96,7 +96,6 @@
     "@arethetypeswrong/cli": "0.18.5",
     "@base-ui/react": "1.9.0",
     "@react-three/fiber": "9.8.2",
-    "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",
     "@tsconfig/strictest": "2.0.8",
     "@types/node": "26.6.5",
