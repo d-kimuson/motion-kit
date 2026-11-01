@@ -123,10 +123,20 @@ const Card = () => (
         Hello{'   '}world
       </h1>
     </section>
+    {/* A later shot faded out over the title: it paints nothing, so a click goes through it. */}
+    <div style={{ opacity: 0 }}>
+      <p style={{ position: 'absolute', left: 0, top: 0, width: 320, height: 60, margin: 0 }}>
+        Next
+      </p>
+    </div>
+    {/* A layout box whose items have not risen yet: it is visible but paints nothing itself. */}
+    <div style={{ position: 'absolute', left: 20, top: 10, width: 200, height: 60 }}>
+      <span style={{ opacity: 0 }}>Agenda</span>
+    </div>
   </div>
 );
 
-it('describes the element at a design-pixel point of the shown frame, and nothing outside it', async () => {
+it('describes the visible element at a design-pixel point of the shown frame, and nothing outside it', async () => {
   container();
   const page = createLoadingPage(
     defineCompositions([

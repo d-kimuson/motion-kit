@@ -148,7 +148,7 @@ export const PreviewView = ({
         {previewCss}
       </style>
       {/* The stage and the side menu share the top row; the bottom menu spans the page. */}
-      <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)_20rem] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+      <div className="isolate grid h-screen grid-cols-[minmax(0,1fr)_22rem] grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
         <div className="relative grid place-items-center overflow-hidden bg-black" ref={stage}>
           <iframe
             ref={frame}

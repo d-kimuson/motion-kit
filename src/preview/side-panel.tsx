@@ -179,14 +179,16 @@ export const SidePanel = ({
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b p-2">
         <TabsList className="w-full">
-          <TabsTrigger value="composition">Composition</TabsTrigger>
-          <TabsTrigger value="sequences">
+          <TabsTrigger value="composition" className="text-xs">
+            Composition
+          </TabsTrigger>
+          <TabsTrigger value="sequences" className="text-xs">
             Sequences <Count value={state.spans.length} />
           </TabsTrigger>
-          <TabsTrigger value="audio">
+          <TabsTrigger value="audio" className="text-xs">
             Audio <Count value={new Set((descriptor.audio ?? []).map((track) => track.src)).size} />
           </TabsTrigger>
-          <TabsTrigger value="comments">
+          <TabsTrigger value="comments" className="text-xs">
             Comments <Count value={comments.length} />
           </TabsTrigger>
         </TabsList>

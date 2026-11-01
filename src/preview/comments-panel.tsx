@@ -54,7 +54,7 @@ const Composer = ({
   const [body, setBody] = useState('');
   const save = () => review.controller.save(body);
   return (
-    <div data-slot="comment-draft" className="grid gap-2 rounded-lg border bg-card p-2">
+    <div data-slot="comment-draft" className="grid grid-cols-1 gap-2 rounded-lg border bg-card p-2">
       <div className="flex items-center gap-2 text-xs">
         <span className="font-mono">{timeLabel(commentTime(draft.anchor, draft.end), fps)}</span>
         <span className="min-w-0 flex-1 truncate text-right text-muted-foreground">
@@ -189,9 +189,9 @@ export const CommentsPanel = ({
     sorted,
   );
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-1 gap-3">
       {draft === undefined ? (
-        <div className="grid gap-2">
+        <div className="grid grid-cols-1 gap-2">
           <p className="px-1 text-xs text-muted-foreground">
             Turn on comment mode (C) and click the stage to comment on an element, or comment on the
             whole frame at the playhead.
@@ -211,12 +211,12 @@ export const CommentsPanel = ({
         />
       )}
       {sorted.length === 0 ? undefined : (
-        <ol className="grid gap-1">
+        <ol className="grid grid-cols-1 gap-1">
           {sorted.map((comment, index) => (
             <li
               key={comment.id}
               data-slot="comment"
-              className="grid gap-0.5 rounded-md px-1.5 py-1 hover:bg-muted/50"
+              className="grid grid-cols-1 gap-0.5 rounded-md px-1.5 py-1 hover:bg-muted/50"
             >
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">{index + 1}.</span>
