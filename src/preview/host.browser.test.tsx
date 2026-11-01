@@ -88,7 +88,7 @@ const fakeController = (overrides: Partial<PreviewState> = {}) => {
     pause: () => calls.push('pause'),
     seek: (frame) => calls.push(`seek ${frame}`),
     step: (delta) => calls.push(`step ${delta}`),
-    toggleMute: () => {},
+    toggleMute: (src) => calls.push(`toggle ${src}`),
     dispose: () => {},
   };
   return { controller, calls };
@@ -177,8 +177,8 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
   });
   act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
   expect(
-    [...root.querySelectorAll('.mk-row')].map((row) =>
-      [...row.querySelectorAll('.mk-bar')].map((bar) => bar.textContent),
+    [...root.querySelectorAll('[data-slot=timeline-lane]')].map((row) =>
+      [...row.querySelectorAll('[data-slot=timeline-span]')].map((bar) => bar.textContent),
     ),
   ).toEqual([['intro', 'outro'], ['intro › title']]);
 });
@@ -207,7 +207,7 @@ it('keeps the controls row the same width while the shown frame lags, and hides 
       root.remove();
     });
     act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
-    const lag = root.querySelector<HTMLElement>('.mk-lag');
+    const lag = root.querySelector<HTMLElement>('[data-slot=lag]');
     return lag === null ? 'absent' : getComputedStyle(lag).visibility;
   };
   const shown = (frame: number) => ({ status: 'shown' as const, frame, sequences: [] });
@@ -251,7 +251,104 @@ it('highlights only the spans the shown frame is inside, not every mounted one',
     root.remove();
   });
   act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
-  expect([...root.querySelectorAll('.mk-bar.mk-active')].map((bar) => bar.textContent)).toEqual([
-    'outro',
+  expect(
+    [...root.querySelectorAll('[data-slot=timeline-span][data-active]')].map(
+      (bar) => bar.textContent,
+    ),
+  ).toEqual(['outro']);
+});
+
+const readySession = (durationInFrames: number) => {
+  const fps = createFrameRate({ numerator: 30, denominator: 1 });
+  if (!fps.ok) throw new Error('No frame rate');
+  return {
+    kind: 'ready' as const,
+    descriptor: {
+      id: 'clip',
+      width: 320,
+      height: 180,
+      fps: { numerator: 30, denominator: 1 },
+      durationInFrames,
+      audio: [
+        { src: 'voice/a.mp3', startInFrames: 0, endInFrames: 30 },
+        { src: 'voice/a.mp3', startInFrames: 30, endInFrames: 60 },
+        { src: 'bgm.mp3' },
+      ],
+    },
+    fps: fps.value,
+  };
+};
+
+const mount = (controller: PreviewController) => {
+  const root = document.createElement('div');
+  document.body.append(root);
+  const view = createRoot(root);
+  cleanups.push(() => {
+    act(() => view.unmount());
+    root.remove();
+  });
+  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  const tab = (name: string) => {
+    const element = [...root.querySelectorAll<HTMLElement>('[role=tab]')].find((item) =>
+      item.textContent.startsWith(name),
+    );
+    if (element === undefined) throw new Error(`No ${name} tab`);
+    return element;
+  };
+  const panelButtons = () => [...root.querySelectorAll<HTMLElement>('[role=tabpanel] button')];
+  return { root, tab, panelButtons };
+};
+
+it('hoists its stylesheet into <head>, so the page text and accessibility tree stay free of CSS', () => {
+  const { controller } = fakeController({ session: readySession(60) });
+  const { root } = mount(controller);
+  expect(document.head.querySelector('style[data-href="motion-kit-preview"]')).not.toBeNull();
+  expect(root.querySelector('style')).toBeNull();
+  expect(root.textContent).not.toContain('tailwindcss');
+});
+
+it('lists each audio source once in the side panel, and its toggle mutes that source', () => {
+  const { controller, calls } = fakeController({
+    session: readySession(60),
+    muted: new Set(['bgm.mp3']),
+  });
+  const { tab, panelButtons } = mount(controller);
+  act(() => tab('Audio').click());
+  expect(panelButtons().map((toggle) => toggle.getAttribute('aria-label'))).toEqual([
+    'Mute voice/a.mp3',
+    'Unmute bgm.mp3',
   ]);
+  act(() => panelButtons()[1]?.click());
+  expect(calls).toEqual(['toggle bgm.mp3']);
+});
+
+it('seeks to the start of a named Sequence chosen in the side panel', () => {
+  const { controller, calls } = fakeController({
+    session: readySession(60),
+    spans: [
+      { path: ['intro'], startFrame: 0, endFrame: 30 },
+      { path: ['outro'], startFrame: 30, endFrame: 60 },
+    ],
+  });
+  const { tab, panelButtons } = mount(controller);
+  act(() => tab('Sequences').click());
+  act(() =>
+    panelButtons()
+      .find((item) => item.textContent.startsWith('outro'))
+      ?.click(),
+  );
+  expect(calls).toEqual(['seek 30']);
+});
+
+it('leaves the arrow keys to a focused side panel tab', () => {
+  const { controller, calls } = fakeController({ session: readySession(60) });
+  const { tab } = mount(controller);
+  const composition = tab('Composition');
+  act(() => composition.focus());
+  act(() => {
+    composition.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+    );
+  });
+  expect(calls).toEqual([]);
 });

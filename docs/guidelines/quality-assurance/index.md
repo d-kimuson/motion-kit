@@ -53,7 +53,7 @@ Write the following in the format of the destination (Markdown for a PR or issue
 
 ## Reproducing a failure
 
-- One test file: `pnpm vitest run src/path/to/file.test.ts`; one test: add `-t "<test name>"`.
+- One test file: `pnpm vitest run src/path/to/file.test.ts`; one test: add `-t "<test name>"`. This skips `pretest`, so run `pnpm build` first in a fresh worktree or after changing a class name under `src/preview`: the preview tests import the generated `src/preview/styles.generated.ts`.
 - A passing test's console output is hidden when Vitest runs under an agent: it then selects its `minimal` reporter, which prints logs only for failed tests. Add `--silent=false` to see them, including a browser page's `console.log`: `pnpm vitest run src/three/foo.browser.test.tsx --silent=false`.
 - A property-based test prints `seed` and `path` on failure. Replay with `fc.assert(property, { seed: <seed>, path: "<path>", endOnFailure: true })` in that test, then remove the options.
 - A differential test reports the counterexample (the input) and the two results. Ask the oracle by hand: `echo '{"fn":"<Name>","args":{...}}' | .lake/build/bin/spec-oracle`. If `.lake/build/bin/spec-oracle` is missing, run `lake build`.

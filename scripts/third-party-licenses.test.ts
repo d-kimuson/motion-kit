@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertNoticeCurrent,
+  bundledRoots,
   collectNoticeEntries,
+  dependencyClosure,
+  importedPackages,
   renderNotice,
   type PackageSource,
 } from './third-party-licenses.ts';
@@ -164,6 +167,17 @@ describe('collectNoticeEntries', () => {
 });
 
 describe('renderNotice', () => {
+  it('lists a package that is both declared and bundled once', () => {
+    const entry = {
+      name: 'clsx',
+      version: '2.1.1',
+      license: 'MIT',
+      licenseText: 'clsx license',
+      attributions: [],
+    };
+    expect(renderNotice([entry, { ...entry }]).split('## clsx').length).toBe(2);
+  });
+
   it('sorts packages, keeps a stable format and ends with one newline', () => {
     const entries = [
       {
@@ -249,5 +263,59 @@ describe('assertNoticeCurrent', () => {
     expect(() => assertNoticeCurrent('notice\n', readCommitted)).toThrow(
       `THIRD_PARTY_LICENSES.md is missing from HEAD: ${action}`,
     );
+  });
+});
+
+describe('importedPackages', () => {
+  it('names the package of bare script and CSS imports, not relative or node: ones', () => {
+    const imported = importedPackages([
+      `import { Tabs } from '@base-ui/react/tabs';\nimport { cn } from './utils.ts';`,
+      `import { readFile } from 'node:fs';\nconst lazy = import("lucide-react");`,
+      `@import "tailwindcss" source(none);\n@import "tw-animate-css";\n@import "./local.css";`,
+    ]);
+    expect([...imported].sort()).toEqual([
+      '@base-ui/react',
+      'lucide-react',
+      'tailwindcss',
+      'tw-animate-css',
+    ]);
+  });
+});
+
+describe('bundledRoots', () => {
+  it('keeps the imported devDependencies, since dependencies and peers stay external', () => {
+    const packageJson = {
+      dependencies: { zod: '4.0.0' },
+      devDependencies: { clsx: '2.1.1', vitest: '5.0.0', '@base-ui/react': '1.9.0' },
+    };
+    expect(bundledRoots(packageJson, new Set(['zod', 'react', 'clsx', '@base-ui/react']))).toEqual([
+      '@base-ui/react',
+      'clsx',
+    ]);
+  });
+});
+
+describe('dependencyClosure', () => {
+  it('follows dependencies from where each package is installed, visiting each once', () => {
+    const installed: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+      '/repo': { cva: '/store/cva', ui: '/store/ui' },
+      '/store/cva': { clsx: '/store/clsx-2' },
+      '/store/ui': { clsx: '/store/clsx-1', cva: '/store/cva' },
+      '/store/clsx-1': {},
+      '/store/clsx-2': {},
+    };
+    const locate = (from: string | undefined, name: string) => {
+      const found = installed[from ?? '/repo']?.[name];
+      if (found === undefined) throw new Error(`${name}: not installed`);
+      return found;
+    };
+    const dependenciesAt = (directory: string) =>
+      directory === '/store/ui' ? ['clsx', 'cva'] : directory === '/store/cva' ? ['clsx'] : [];
+    expect(dependencyClosure(['ui', 'cva'], locate, dependenciesAt)).toEqual([
+      '/store/clsx-1',
+      '/store/clsx-2',
+      '/store/cva',
+      '/store/ui',
+    ]);
   });
 });
