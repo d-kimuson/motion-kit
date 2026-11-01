@@ -172,6 +172,7 @@ describe('motion-kit preview', () => {
   it.each([
     ['--preview-fps', '0', 'Use --preview-fps with an integer from 1 to 60.'],
     ['--preview-fps', '61', 'Use --preview-fps with an integer from 1 to 60.'],
+    ['--preview-fps', '1.5', 'Use --preview-fps with an integer from 1 to 60.'],
     ['--port', '65536', 'Use --port with an integer from 0 to 65535.'],
     ['--port', 'http', 'Use --port with an integer from 0 to 65535.'],
   ])('exits 2 with cli.invalid-arguments for %s %s', async (flag, value, hint) => {

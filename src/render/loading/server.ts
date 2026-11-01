@@ -79,6 +79,8 @@ const failureName = (error: unknown): string | undefined => {
  * The optimizer gets its own Diagnostic because it rejects installed dependencies too,
  * so the project's `vite.config.ts` is not necessarily at fault. */
 let resolvingConfig = true;
+/** Set once `ready` is sent. */
+let serving = false;
 const failed = (error: unknown) => {
   if (viteOptimizerFailure(error)) return optimizerFailure(configPath);
   if (
@@ -118,7 +120,12 @@ try {
       warnOnce: (message) => console.error(message),
       error: (message, options) => {
         console.error(message);
-        if (options?.error !== undefined) report(options.error);
+        const error = options?.error;
+        if (error === undefined) return;
+        // A served preview answers a module that fails to transform (a typo being saved) with
+        // that request's error, and the next save reloads it; only the optimizer ends it.
+        if (input.mode === 'preview' && serving && !viteOptimizerFailure(error)) return;
+        report(error);
       },
       clearScreen: () => {},
       hasErrorLogged: () => false,
@@ -366,7 +373,12 @@ try {
   previewRoutes = servePreview;
   const http = createHttpServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (url.pathname === shellPath) serveHtml(response, shellPath, htmlShell());
+    if (url.pathname === shellPath)
+      serveHtml(
+        response,
+        shellPath,
+        htmlShell(input.mode === 'preview' && url.searchParams.get('host') === 'preview'),
+      );
     else
       server.middlewares(request, response, () => {
         response.statusCode = 404;
@@ -440,6 +452,7 @@ try {
         process.disconnect?.();
       })();
   });
+  serving = true;
   send({
     type: 'ready',
     url: `http://127.0.0.1:${address.port}${shellPath}`,

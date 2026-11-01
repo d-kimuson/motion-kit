@@ -1,0 +1,112 @@
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, expect, it } from 'vitest';
+
+import { previewFailureReporter } from '../lib/preview-protocol.ts';
+import { connectRealm } from './connection.ts';
+import { type PreviewController, type PreviewState } from './controller.ts';
+import { PreviewView } from './view.tsx';
+
+const cleanups: (() => void)[] = [];
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) cleanup();
+});
+
+/**
+ * Connect to a frame whose document is `body` behind the shell's failure reporter. A blob URL keeps
+ * this origin in `location.origin`, which a `srcdoc` frame reports as `null`.
+ */
+const connectTo = (body: string) => {
+  const element = document.createElement('iframe');
+  document.body.append(element);
+  const url = URL.createObjectURL(
+    new Blob(
+      [`<!doctype html><html><head>${previewFailureReporter}</head><body>${body}</body></html>`],
+      {
+        type: 'text/html',
+      },
+    ),
+  );
+  cleanups.push(() => {
+    element.remove();
+    URL.revokeObjectURL(url);
+  });
+  const frame = element.contentWindow;
+  if (frame === null) throw new Error('No frame window');
+  const connecting = connectRealm({ events: window, frame, origin: window.location.origin });
+  element.src = url;
+  return connecting;
+};
+
+it('reports an entry script that fails to load', async () => {
+  await expect(
+    connectTo(
+      `<script type="module" src="${window.location.origin}/__missing__/entry.js"></script>`,
+    ),
+  ).rejects.toThrow('Preview realm failed to start');
+});
+
+it('reports an entry that throws while it runs', async () => {
+  await expect(connectTo('<script type="module">throw new Error("boom")</script>')).rejects.toThrow(
+    'Preview realm failed to start',
+  );
+});
+
+it('waits for an entry that awaits past its frame load before announcing', async () => {
+  const realm = await connectTo(
+    `<script type="module">await new Promise((done) => addEventListener('load', () => setTimeout(done, 1500)));
+parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1 }, location.origin);</script>`,
+  );
+  realm.close();
+});
+
+const fakeController = () => {
+  const calls: string[] = [];
+  const state: PreviewState = {
+    session: { kind: 'connecting' },
+    playback: { kind: 'paused', frame: 0 },
+    playhead: 0,
+    shown: undefined,
+    spans: [],
+    muted: new Set(),
+    unplayable: [],
+  };
+  const controller: PreviewController = {
+    state: () => state,
+    subscribe: () => () => {},
+    reload: () => Promise.resolve(),
+    choose: () => Promise.resolve(),
+    play: () => {
+      calls.push('play');
+      return Promise.resolve();
+    },
+    pause: () => calls.push('pause'),
+    seek: (frame) => calls.push(`seek ${frame}`),
+    step: (delta) => calls.push(`step ${delta}`),
+    toggleMute: () => {},
+    dispose: () => {},
+  };
+  return { controller, calls };
+};
+
+it('maps the playback keys anywhere on the page except in an input or on a held Space', () => {
+  const { controller, calls } = fakeController();
+  const root = document.createElement('div');
+  const input = document.createElement('input');
+  document.body.append(root, input);
+  const view = createRoot(root);
+  cleanups.push(() => {
+    act(() => view.unmount());
+    root.remove();
+    input.remove();
+  });
+  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+  press(' ');
+  press(' ', { repeat: true });
+  press('ArrowRight');
+  press('ArrowLeft', { shiftKey: true });
+  press(' ', {}, input);
+  expect(calls).toEqual(['play', 'step 1', 'step -10']);
+});

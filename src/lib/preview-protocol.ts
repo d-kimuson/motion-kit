@@ -23,6 +23,18 @@ export const previewReadySchema = z.object({
   type: z.literal('motion-kit-preview-ready'),
   protocolVersion: z.literal(previewProtocolVersion),
 });
+/**
+ * The realm's shell posts this when its entry failed to load or run before the realm could
+ * announce itself; a slow entry (top-level await) simply announces later.
+ */
+export const previewFailedType = 'motion-kit-preview-failed';
+export const previewFailedSchema = z.object({ type: z.literal(previewFailedType) });
+/**
+ * The classic script a preview realm's shell carries ahead of its entry. It runs before the module
+ * graph, so it sees the entry's script fail to load or throw; capturing on the window also reaches
+ * the script element's own error event.
+ */
+export const previewFailureReporter = `<script>addEventListener('error',function(e){if(e instanceof ErrorEvent||e.target instanceof HTMLScriptElement)parent.postMessage({type:${JSON.stringify(previewFailedType)}},location.origin)},true)</script>`;
 /** The host answers with this message and transfers the port requests travel on. */
 export const previewConnectSchema = z.object({
   type: z.literal('motion-kit-preview-connect'),

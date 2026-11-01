@@ -102,6 +102,17 @@ it('drops malformed or unknown replies and rejects what is pending on close', as
   await expect(pending).rejects.toThrow('Preview realm closed');
 });
 
+it('rejects when the frame reports that its entry failed, and only from that frame', async () => {
+  const fake = harness(() => undefined);
+  const connecting = connectRealm(fake.window);
+  fake.announce({ type: 'motion-kit-preview-failed' }, { source: {} });
+  fake.announce({ type: 'motion-kit-preview-failed' }, { origin: 'http://evil.example' });
+  fake.announce({ type: 'motion-kit-preview-failed' });
+  await expect(connecting).rejects.toThrow('Preview realm failed to start');
+  fake.announce(ready);
+  expect(fake.connects).toEqual([]);
+});
+
 it('stops waiting for an announcement once aborted', async () => {
   const fake = harness(() => undefined);
   const controller = new AbortController();

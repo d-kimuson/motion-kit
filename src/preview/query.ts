@@ -5,15 +5,20 @@ import { type Result } from '../lib/result.ts';
 /** Playback samples this many frames per second unless the query says otherwise. */
 export const defaultPreviewFps = 12;
 
-/** The selection a preview host page carries in its query, so the server keeps none. */
-export type PreviewQuery = Readonly<{
-  compositionId?: string;
-  props: Readonly<Record<string, unknown>>;
-  fps: number;
-}>;
-
-const fpsSchema = z.coerce.number().int().min(1).max(60);
+/** The rates playback may sample at; `--preview-fps` takes the same range. */
+export const previewFpsSchema = z.int().min(1).max(60);
 const propsSchema = z.record(z.string(), z.unknown());
+/** The selection a preview host page carries in its query, so the server keeps none. */
+const previewQuerySchema = z
+  .object({
+    compositionId: z.string().optional(),
+    props: propsSchema.readonly(),
+    fps: previewFpsSchema,
+  })
+  .readonly();
+export type PreviewQuery = z.infer<typeof previewQuerySchema>;
+
+const fpsSchema = z.coerce.number().pipe(previewFpsSchema);
 const invalid = (message: string, hint: string): Result<never> => ({
   ok: false,
   error: { code: 'cli.invalid-arguments', severity: 'error', message, hint },

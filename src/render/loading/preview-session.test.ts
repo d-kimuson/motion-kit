@@ -177,6 +177,29 @@ it('emits reload when a served module changes and serves the new source', async 
   expect(await (await fetch(module)).text()).toContain('second');
 });
 
+it('keeps serving after a module fails to transform, so the next save recovers', async () => {
+  const root = fixture();
+  const result = await open(root);
+  if (!result.ok) throw new Error('Preview failed to start');
+  const module = new URL(`/@fs${join(root, 'entry.tsx')}`, result.value.url);
+  const events = new URL('/__motion-kit/preview/events', result.value.url).href;
+  await writeUntil(
+    nextEvent(events, (text) => text.startsWith('event: reload')),
+    () => writeFileSync(join(root, 'entry.tsx'), 'const = ;'),
+  );
+  expect((await fetch(module)).ok).toBe(false);
+  const ended = await Promise.race([
+    result.value.failed.then(() => true),
+    new Promise<false>((settle) => setTimeout(() => settle(false), 500)),
+  ]);
+  expect(ended).toBe(false);
+  await writeUntil(
+    nextEvent(events, (text) => text.startsWith('event: reload')),
+    () => writeFileSync(join(root, 'entry.tsx'), scene('fixed')),
+  );
+  expect(await (await fetch(module)).text()).toContain('fixed');
+});
+
 it('emits reload when an audio file the host fetched changes', async () => {
   const root = fixture();
   const result = await open(root);

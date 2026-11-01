@@ -79,7 +79,11 @@ export const servePreviewPort = (page: LoadingPage, host: PreviewHostWindow): vo
     port.addEventListener('message', (message) => {
       const request = previewRequestSchema.safeParse(message.data);
       if (request.success)
-        void answerPreview(page, request.data).then((reply) => port.postMessage(reply));
+        void answerPreview(page, request.data).then(
+          (reply) => port.postMessage(reply),
+          // The host's request then stays pending until the next reload replaces this realm.
+          (error: unknown) => console.error(error),
+        );
     });
     port.start();
   });

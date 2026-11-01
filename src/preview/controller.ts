@@ -40,7 +40,7 @@ export type PreviewDependencies = Readonly<{
   query: PreviewQuery;
   /**
    * Load (or reload) the realm frame and connect to it. Rejects without `signal` aborting when the
-   * frame loaded but its realm never announced itself.
+   * frame's shell reports that the entry failed to load or run.
    */
   connect: (signal: AbortSignal) => Promise<Realm>;
   audio: AudioPlayer;

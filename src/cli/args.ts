@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { previewFpsSchema } from '../preview/query.ts';
 import { checkHistories, type CheckHistory } from '../render/check/history.ts';
 import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
 
@@ -236,6 +237,7 @@ export const DocsArgsSchema = z
       });
   });
 
+const previewFpsHint = 'Use --preview-fps with an integer from 1 to 60.';
 export const PreviewArgsSchema = z.strictObject({
   command: z.literal('preview'),
   projectRoot: rendererConfig.projectRoot,
@@ -246,8 +248,9 @@ export const PreviewArgsSchema = z.strictObject({
   /** Frames the preview samples per second while playing; low by default (TASK-246). */
   previewFps: z
     .string()
-    .regex(/^(?:[1-9]|[1-5][0-9]|60)$/u, 'Use --preview-fps with an integer from 1 to 60.')
+    .regex(/^\d+$/u, previewFpsHint)
     .transform(Number)
+    .refine((fps) => previewFpsSchema.safeParse(fps).success, previewFpsHint)
     .optional(),
   /** Loopback port; an ephemeral one when omitted. */
   port: z

@@ -1,5 +1,6 @@
 import { type LoadingDescriptor, type MountReceipt } from '../lib/loading-protocol.ts';
 import {
+  previewFailedSchema,
   previewProtocolVersion,
   previewReadySchema,
   previewReplySchema,
@@ -89,13 +90,19 @@ const unreachable = (): never => {
 
 /**
  * Wait for the realm in `frame` to announce itself, then transfer the port requests travel on.
- * Only the frame at the host's own origin is accepted.
+ * Only the frame at the host's own origin is accepted. Rejects when the frame's shell reports that
+ * the entry failed to start; there is no deadline, since an entry may await before announcing.
  */
 export const connectRealm = (host: RealmWindow, signal?: AbortSignal): Promise<Realm> =>
   new Promise((resolve, reject) => {
     const onMessage = (event: Event) => {
       if (!(event instanceof MessageEvent)) return;
       if (event.source !== host.frame || event.origin !== host.origin) return;
+      if (previewFailedSchema.safeParse(event.data).success) {
+        stop();
+        reject(new Error('Preview realm failed to start'));
+        return;
+      }
       if (!previewReadySchema.safeParse(event.data).success) return;
       stop();
       const channel = new MessageChannel();

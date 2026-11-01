@@ -250,6 +250,8 @@ export const PreviewView = ({
       const delta = event.shiftKey ? 10 : 1;
       if (event.key === ' ') {
         event.preventDefault();
+        // A held Space would toggle playback on every repeat.
+        if (event.repeat) return;
         if (controller.state().playback.kind === 'playing') controller.pause();
         else void controller.play();
       } else if (event.key === 'ArrowLeft') controller.step(-delta);

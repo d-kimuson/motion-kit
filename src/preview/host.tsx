@@ -7,9 +7,6 @@ import { createPreviewController } from './controller.ts';
 import { parsePreviewQuery } from './query.ts';
 import { PreviewView } from './view.tsx';
 
-// The realm announces itself while its entry module runs, so before its frame's load event.
-const startGraceMs = 1000;
-
 const fail = (root: HTMLElement, message: string) => {
   root.textContent = message;
 };
@@ -43,24 +40,13 @@ export const startPreviewHost = (): void => {
       const target = element?.contentWindow;
       if (element === null || target === null || target === undefined)
         return Promise.reject(new Error('Preview frame is not attached'));
-      // A frame that loads without announcing its realm failed to import or run the entry.
-      const silent = new AbortController();
-      let grace: ReturnType<typeof setTimeout> | undefined;
-      const onLoad = () => {
-        if (target.location.href === 'about:blank') return;
-        grace = setTimeout(() => silent.abort(), startGraceMs);
-      };
-      element.addEventListener('load', onLoad);
       const connecting = connectRealm(
         { events: window, frame: target, origin: window.location.origin },
-        AbortSignal.any([signal, silent.signal]),
+        signal,
       );
       // Assigning the same URL navigates again, which is the reload.
       element.src = shellUrl;
-      return connecting.finally(() => {
-        element.removeEventListener('load', onLoad);
-        clearTimeout(grace);
-      });
+      return connecting;
     },
     audio: createAudioPlayer(context, async (src) => {
       const response = await fetch(`${audioUrl}?${new URLSearchParams({ src }).toString()}`);
