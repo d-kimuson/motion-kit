@@ -288,11 +288,6 @@ export const Timeline = ({
   );
 };
 
-/**
- * The timeline under the transport, with a tab for the audio clips and one for the asset groups:
- * both stacked would push the lanes of one out of view. The rows scroll under the tabs. Until a
- * tab is chosen, a Composition without audio opens on its assets.
- */
 /** How far the scan realm read the Composition, while it reads; nothing once it is done. */
 const ScanStatus = ({ state }: { state: PreviewState }) => {
   const t = useMessages().timeline;
@@ -315,6 +310,11 @@ const ScanStatus = ({ state }: { state: PreviewState }) => {
   );
 };
 
+/**
+ * The timeline under the transport, with a tab for the audio clips and one for the asset groups:
+ * both stacked would push the lanes of one out of view. The rows scroll under the tabs. Until a
+ * tab is chosen, a Composition without audio opens on its assets.
+ */
 export const TimelinePanel = ({
   layer,
   onChooseLayer,

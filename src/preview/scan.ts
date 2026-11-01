@@ -10,8 +10,9 @@ export type ScanProgress = Readonly<{ scanned: number; total: number }>;
  * Show every frame of a mounted Composition in order, one at a time, and report what they told
  * `batch` frames at a time, so the host learns the named Sequences and the assets of frames
  * nobody played. Before each frame it waits, by `wake`, while `idle` does not hold, since
- * playback shares the machine with it; the frames read so far are reported before the wait. Stops when `signal` aborts or a
- * `show` rejects (the realm closed); the last report has `scanned === total`.
+ * playback shares the machine with it; the frames read so far are reported before the wait.
+ * Stops when `signal` aborts or a `show` rejects (the realm closed); the last report has
+ * `scanned === total`.
  */
 export const scanFrames = async ({
   show,

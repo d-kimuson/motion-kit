@@ -64,10 +64,14 @@ export type PreviewDependencies = Readonly<{
    */
   connect: (signal: AbortSignal) => Promise<Realm>;
   /**
-   * Load (or reload) a second, hidden realm frame and connect to it; it shows every frame of the
-   * mounted Composition in turn, so the timeline knows the frames nobody played.
+   * Load (or reload) a second, hidden realm frame as large as the Composition and connect to it; it
+   * shows every frame of the mounted Composition in turn, so the timeline knows the frames nobody
+   * played. Closing that realm unloads its page, and the images it holds with it.
    */
-  connectScanner: (signal: AbortSignal) => Promise<Realm>;
+  connectScanner: (
+    signal: AbortSignal,
+    size: Readonly<{ width: number; height: number }>,
+  ) => Promise<Realm>;
   audio: AudioPlayer;
   /**
    * The `AudioContext` clock in seconds; `latency` is how long a sound started now takes to be
@@ -169,7 +173,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   const update = (next: Partial<PreviewState>) => {
     state = { ...state, ...next };
     for (const listener of listeners) listener();
-    if (waking.length > 0 && scanMayRun()) for (const wake of waking.splice(0)) wake();
+    wakeScan();
   };
   let realm: Realm | undefined;
   let connection: AbortController | undefined;
@@ -205,6 +209,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
         const step = frameAnswered(presenter);
         presenter = step.state;
         present(step.send);
+        wakeScan();
       },
       // The realm closed for a reload; its successor shows the playhead again.
       () => {},
@@ -219,9 +224,13 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   const ready = () => (state.session.kind === 'ready' ? state.session : undefined);
   const playing = () => state.playback.kind === 'playing';
 
-  // The scan waits while playback runs or is about to, so it does not take the frames' time.
+  // The scan waits while playback runs or is about to, and while the stage is showing a frame, so
+  // it does not take the time of the frames on screen.
   let waking: (() => void)[] = [];
-  const scanMayRun = () => !playing() && !state.starting;
+  const scanMayRun = () => !playing() && !state.starting && presenter.inFlight === undefined;
+  const wakeScan = () => {
+    if (waking.length > 0 && scanMayRun()) for (const wake of waking.splice(0)) wake();
+  };
   let scanning: AbortController | undefined;
   let scanner: Realm | undefined;
   const stopScan = () => {
@@ -239,11 +248,13 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     update({ scan: { scanned: 0, total } });
     // A scan that cannot start leaves the timeline to the frames shown, as before there was one.
     const giveUp = () => {
-      if (!controller.signal.aborted) update({ scan: undefined });
+      if (controller.signal.aborted) return;
+      stopScan();
+      update({ scan: undefined });
     };
     let current: Realm;
     try {
-      current = await deps.connectScanner(controller.signal);
+      current = await deps.connectScanner(controller.signal, descriptor);
     } catch {
       giveUp();
       return;
@@ -275,6 +286,12 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       batch: scanBatch,
       signal: controller.signal,
     });
+    // Every frame read: the realm is no longer needed, and holds every image the frames used.
+    if (scanning === controller) {
+      scanning = undefined;
+      scanner?.close();
+      scanner = undefined;
+    }
   };
 
   const halt = () => {

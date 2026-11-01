@@ -85,7 +85,7 @@ const sameAsset = (a: RegisteredAsset, b: RegisteredAsset) =>
 
 /**
  * The fonts and images the frames shown since the reload registered, with their latest status;
- * those of the shown frame are marked, and choosing one seeks to where it was first seen.
+ * those of the shown frame are marked, and choosing one seeks to the earliest frame known to use it.
  */
 const RegisteredAssets = ({
   state,

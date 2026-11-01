@@ -75,7 +75,7 @@ const en = {
     none: 'No frame shown so far has registered a font or image with `useAsset`.',
     failed: 'failed',
     pending: 'loading',
-    seek: 'Seek to the frame it was first seen at',
+    seek: 'Seek to the earliest frame that uses it',
     dataUrl: 'data: URL',
     kind: (kind: string) => (kind === 'font' ? 'Font' : kind === 'image' ? 'Image' : kind),
   },
