@@ -401,7 +401,7 @@ describe('Composition runtime ownership', () => {
       assetContext,
     ).diagnostic;
     if (thrown === undefined) throw new Error('missing thrown diagnostic');
-    runtime.fail(thrown, 1);
+    runtime.fail(thrown);
     const settled = await pending;
     expect(settled.status).toBe('failed');
     if (settled.status !== 'failed') throw new Error('expected failure');
@@ -447,8 +447,8 @@ describe('Composition runtime ownership', () => {
       ],
       cause: new Error('boundary'),
     });
-    runtime.fail(boundary, 1);
-    runtime.fail(boundary, 1);
+    runtime.fail(boundary);
+    runtime.fail(boundary);
     const settled = await pending;
     expect(settled.status).toBe('failed');
     if (settled.status !== 'failed') throw new Error('expected failure');

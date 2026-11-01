@@ -610,13 +610,13 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
           message: 'An integration has uncontrolled time or history-dependent state.',
           hint: 'Use a qualified absolute-time integration before claiming traversal-independent output.',
         })),
-    // `generation` is the frame the failure happened in: a held frame commits after the next
-    // request starts, and its failure must not end that request.
-    fail: (diagnostic: Diagnostic, generation: number) => {
+    // `generation` is the frame the failure happened in, the active one when omitted: a held
+    // frame commits after the next request starts, and its failure must not end that request.
+    fail: (diagnostic: Diagnostic, generation?: number) => {
       if (
         active === undefined ||
         active.terminal !== undefined ||
-        active.snapshot.generation !== generation
+        (generation !== undefined && active.snapshot.generation !== generation)
       )
         return;
       // Terminating here drops registrations whose loaders have not rejected yet.

@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import {
@@ -239,6 +239,8 @@ it('shows the next frame again after a frame failed to load its picture', async 
   expect(await answerPreview(page, { type: 'show', id: 3, frame: 2 })).toMatchObject({
     outcome: { status: 'failed', diagnostics: [{ code: 'asset.load-failed' }] },
   });
+  // The failure clears the frame once React commits it, which may be after the reply.
+  await vi.waitFor(() => expect(root.querySelector('#frame')).toBeNull());
   expect(await answerPreview(page, { type: 'show', id: 4, frame: 3 })).toMatchObject({
     outcome: { status: 'shown', frame: 3 },
   });
