@@ -46,8 +46,8 @@ const AssetIcon = ({ kind }: { kind: string }) =>
   );
 
 /**
- * One asset span. It is as wide as its frames, at least a pixel, so the one-frame spans of a video
- * made of stills do not pile up. It is drawn again only when its span or place changes: the spans
+ * One asset span. It is as wide as its frames, at least a pixel, not as wide as its label, so the
+ * one-frame spans of a video made of stills stay within their frames. It is drawn again only when its span or place changes: the spans
  * pile up while playing, and a frame changes a few of them.
  */
 const AssetBar = memo(function AssetBar({
