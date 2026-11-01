@@ -88,6 +88,7 @@ const fakeController = (
     assetSpans: [],
     muted: new Set(),
     unplayable: [],
+    scan: undefined,
     ...overrides,
   };
   const controller: PreviewController = {
@@ -326,6 +327,23 @@ it('opens a Composition without audio on its assets and keeps the tab chosen thr
   expect(root.querySelector('[data-slot=timeline-lane]')).toBeNull();
   change({ ...current, session: ready });
   expect(timelineTab(root, 'Assets').getAttribute('aria-selected')).toBe('true');
+});
+
+it('shows how far the scan read the frames not played, and nothing once it is done', () => {
+  const status = (overrides: Partial<PreviewState>) => {
+    const { controller } = fakeController({ session: readySession(60), ...overrides });
+    const { root } = mount(controller);
+    return root.querySelector('[role=status]')?.textContent ?? null;
+  };
+  expect(status({ scan: { scanned: 31, total: 60 } })).toBe('Reading the frames not played: 51%');
+  expect(
+    status({
+      scan: { scanned: 31, total: 60 },
+      playback: { kind: 'playing', anchorFrame: 0, anchorTime: 0 },
+    }),
+  ).toBe('Reading the frames not played: 51% (waits while playing)');
+  expect(status({ scan: { scanned: 60, total: 60 } })).toBeNull();
+  expect(status({ scan: undefined })).toBeNull();
 });
 
 it('drags the bottom panel taller and keeps its height for the next load', async () => {

@@ -44,6 +44,7 @@ const setup = () => {
     ],
     muted: new Set(),
     unplayable: [],
+    scan: undefined,
   };
   const events: string[] = [];
   const inspections: { x: number; answer: (result: Result<InspectedElement | null>) => void }[] =

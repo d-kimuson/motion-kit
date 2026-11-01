@@ -26,6 +26,22 @@ const siteStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
   }
 };
 
+/**
+ * The hidden frame of the scan realm. Hidden by visibility rather than `display: none`, so its
+ * page still lays out and runs its animation frames, and as large as the window, so a Composition
+ * that measures its box lays out as it does on the stage.
+ */
+const scannerFrame = () => {
+  const element = document.createElement('iframe');
+  element.title = 'motion-kit timeline scan';
+  element.tabIndex = -1;
+  element.setAttribute('aria-hidden', 'true');
+  element.style.cssText =
+    'position:fixed;inset:0;width:100%;height:100%;border:0;visibility:hidden;pointer-events:none;z-index:-1';
+  document.body.append(element);
+  return element;
+};
+
 const fail = (root: HTMLElement, message: string) => {
   root.textContent = message;
 };
@@ -53,27 +69,30 @@ export const startPreviewHost = (): void => {
     config.data;
   const storage = siteStorage();
   let frame: HTMLIFrameElement | null = null;
+  const scanner = scannerFrame();
   let loads = 0;
+  const connect = (element: HTMLIFrameElement | null, signal: AbortSignal) => {
+    const target = element?.contentWindow;
+    if (target === null || target === undefined)
+      return Promise.reject(new Error('Preview frame is not attached'));
+    loads += 1;
+    const load = String(loads);
+    const connecting = connectRealm(
+      { events: window, frame: target, origin: window.location.origin },
+      load,
+      signal,
+    );
+    const url = new URL(shellUrl, window.location.href);
+    url.searchParams.set(previewLoadParameter, load);
+    // Replacing the location keeps reloads out of the session history, so Back leaves the preview.
+    target.location.replace(url.href);
+    return connecting;
+  };
   const context = new AudioContext();
   const controller = createPreviewController({
     query: query.value,
-    connect: (signal) => {
-      const target = frame?.contentWindow;
-      if (target === null || target === undefined)
-        return Promise.reject(new Error('Preview frame is not attached'));
-      loads += 1;
-      const load = String(loads);
-      const connecting = connectRealm(
-        { events: window, frame: target, origin: window.location.origin },
-        load,
-        signal,
-      );
-      const url = new URL(shellUrl, window.location.href);
-      url.searchParams.set(previewLoadParameter, load);
-      // Replacing the location keeps reloads out of the session history, so Back leaves the preview.
-      target.location.replace(url.href);
-      return connecting;
-    },
+    connect: (signal) => connect(frame, signal),
+    connectScanner: (signal) => connect(scanner, signal),
     audio: createAudioPlayer(context, async (src) => {
       const response = await fetch(`${audioUrl}?${new URLSearchParams({ src }).toString()}`);
       if (!response.ok) throw new Error(`Audio ${src} answered ${response.status}`);

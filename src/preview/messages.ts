@@ -40,6 +40,8 @@ const en = {
     audio: 'Audio',
     assets: 'Assets',
     failed: ', failed to load',
+    scanning: (percent: number) => `Reading the frames not played: ${percent}%`,
+    scanHeld: 'waits while playing',
   },
   tabs: {
     info: 'Info',
@@ -145,6 +147,8 @@ const ja: Messages = {
     audio: '音声',
     assets: 'アセット',
     failed: '、読み込みに失敗',
+    scanning: (percent: number) => `未再生のフレームを読み込み中: ${percent}%`,
+    scanHeld: '再生中は待機',
   },
   tabs: {
     info: '情報',
