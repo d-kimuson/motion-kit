@@ -105,6 +105,7 @@ export default defineConfig({
             'src/core/composition/**/*.browser.test.tsx',
             'src/core/runtime/**/*.browser.test.tsx',
             'src/core/assets/**/*.browser.test.tsx',
+            'src/preview/**/*.browser.test.tsx',
           ],
           setupFiles: ['configs/vitest/time.setup.ts'],
           browser: {

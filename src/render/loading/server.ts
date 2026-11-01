@@ -1,21 +1,30 @@
 import type { ResolvedConfig } from 'vite';
 
-import { existsSync } from 'node:fs';
-import { createServer as createHttpServer } from 'node:http';
-import { join, resolve } from 'node:path';
+import { createReadStream, existsSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
+import { join, relative, resolve } from 'node:path';
+import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
+import { previewReloadEvent } from '../../lib/preview-protocol.ts';
 import { installBundledVite } from './config-loader.ts';
 import {
   configFailure,
   LoadingConfigError,
   loadingFailure,
   optimizerFailure,
+  portFailure,
   preprocessorFailure,
+  previewConfigChanged,
   viteOptimizerFailure,
 } from './diagnostics.ts';
-import { htmlShell } from './html-shell.ts';
+import { htmlShell, previewShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
 import { loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
 
@@ -25,6 +34,10 @@ const input = z
     entry: z.string(),
     workspace: z.string(),
     viteConfig: z.string().optional(),
+    /** `preview` also serves the preview host and reloads it on source changes. */
+    mode: z.enum(['render', 'preview']).default('render'),
+    /** Loopback port; an ephemeral one when omitted. */
+    port: z.int().min(0).max(65_535).optional(),
   })
   .parse(JSON.parse(process.argv[2] ?? '{}'));
 const entry = resolve(input.projectRoot, input.entry);
@@ -67,8 +80,18 @@ const failureName = (error: unknown): string | undefined => {
  * The optimizer gets its own Diagnostic because it rejects installed dependencies too,
  * so the project's `vite.config.ts` is not necessarily at fault. */
 let resolvingConfig = true;
+/** Set once `ready` is sent. */
+let serving = false;
 const failed = (error: unknown) => {
   if (viteOptimizerFailure(error)) return optimizerFailure(configPath);
+  if (
+    input.port !== undefined &&
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'EADDRINUSE'
+  )
+    return portFailure(input.port);
   const name = failureName(error);
   return resolvingConfig || name !== undefined
     ? configFailure(name ?? 'configuration', configPath)
@@ -98,7 +121,12 @@ try {
       warnOnce: (message) => console.error(message),
       error: (message, options) => {
         console.error(message);
-        if (options?.error !== undefined) report(options.error);
+        const error = options?.error;
+        if (error === undefined) return;
+        // A served preview answers a module that fails to transform (a typo being saved) with
+        // that request's error, and the next save reloads it; only the optimizer ends it.
+        if (input.mode === 'preview' && serving && !viteOptimizerFailure(error)) return;
+        report(error);
       },
       clearScreen: () => {},
       hasErrorLogged: () => false,
@@ -115,6 +143,8 @@ try {
   configPath = loaded?.path ?? configPath;
   const config = loaded?.config ?? {};
   let enforceOwned: (() => void) | undefined;
+  // Set once the dev server exists; answers true for a request it handled.
+  let previewRoutes: ((request: IncomingMessage, response: ServerResponse) => boolean) | undefined;
   const resolved = await vite.resolveConfig(
     {
       ...config,
@@ -123,6 +153,16 @@ try {
       mode: 'development',
       plugins: [
         loadingPlugin(entry),
+        {
+          name: 'motion-kit-preview-routes',
+          // A middleware added here runs right after Vite's own Host check (server.allowedHosts),
+          // so a DNS-rebound page cannot read the preview routes.
+          configureServer(server) {
+            server.middlewares.use((request, response, next) => {
+              if (previewRoutes?.(request, response) !== true) next();
+            });
+          },
+        },
         ...(await namedPlugins(config.plugins ?? [], report)),
         {
           name: 'motion-kit-loading-policy',
@@ -213,6 +253,10 @@ try {
           ws: false,
           open: false,
           host: '127.0.0.1',
+          // The service always answers plain http, and Vite skips its Host check under
+          // https or allowedHosts: true, which would open every route to DNS rebinding.
+          https: undefined,
+          allowedHosts: resolved.server.allowedHosts === true ? [] : resolved.server.allowedHosts,
         });
         resolved.server.fs.allow = allow;
         resolved.resolve.alias = aliases;
@@ -248,20 +292,102 @@ try {
   resolvingConfig = false;
   const server = await vite.createServer(resolved);
   const base = server.config.base;
+  const shellPath = `${base}__motion-kit/`;
+  const previewPath = `${shellPath}preview/`;
+  const preview = {
+    projectRoot: input.projectRoot,
+    shellUrl: `${shellPath}?host=preview`,
+    eventsUrl: `${previewPath}events`,
+    audioUrl: `${previewPath}audio`,
+  };
+  const reloadStreams = new Set<ServerResponse>();
+  // Audio the host fetched is no module, so its changes reach the preview through this set.
+  const audioFiles = new Set<string>();
+  const serveHtml = (response: ServerResponse, path: string, html: string) =>
+    void server.transformIndexHtml(path, html).then(
+      (transformed) => {
+        response.setHeader('Content-Type', 'text/html');
+        response.end(transformed);
+      },
+      (error: unknown) => {
+        report(error);
+        response.statusCode = 500;
+        response.end('Composition shell failed.');
+      },
+    );
+  // Preview routes exist only in a preview session; the renderer's server stays as it was.
+  const servePreview = (request: IncomingMessage, response: ServerResponse): boolean => {
+    if (input.mode !== 'preview') return false;
+    const url = URL.parse(request.url ?? '/', 'http://127.0.0.1');
+    if (url === null) return false;
+    const path = url.pathname;
+    if (path !== previewPath && path !== preview.eventsUrl && path !== preview.audioUrl)
+      return false;
+    if (path === previewPath) serveHtml(response, previewPath, previewShell(preview));
+    else if (path === preview.eventsUrl) {
+      response.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      response.write(': connected\n\n');
+      reloadStreams.add(response);
+      response.on('close', () => reloadStreams.delete(response));
+    } else if (path === preview.audioUrl) {
+      // Served here, not through /@fs/, whose URL decoding cannot reach a name with `#` or `?`.
+      // The same server.fs policy applies, so preview reads no file Vite would refuse.
+      const src = url.searchParams.get('src');
+      if (src === null || src === '') {
+        response.statusCode = 400;
+        response.end();
+      } else {
+        const file = vite.normalizePath(resolve(input.projectRoot, src));
+        if (!vite.isFileLoadingAllowed(server.config, file)) {
+          response.statusCode = 403;
+          response.end();
+        } else {
+          // Watched before it is read, so a source created after the host first asked is heard.
+          audioFiles.add(file);
+          server.watcher.add(file);
+          void stat(file).then(
+            (stats) => {
+              if (!stats.isFile()) {
+                response.statusCode = 404;
+                response.end();
+                return;
+              }
+              // A reload after the file changed must not get the old bytes from the HTTP cache.
+              response.writeHead(200, {
+                'Content-Type': 'application/octet-stream',
+                'Cache-Control': 'no-store',
+              });
+              // pipeline closes the file when the host drops the fetch, as a reload does.
+              pipeline(createReadStream(file), response, () => {});
+            },
+            () => {
+              response.statusCode = 404;
+              response.end();
+            },
+          );
+        }
+      }
+    }
+    return true;
+  };
+  previewRoutes = servePreview;
   const http = createHttpServer((request, response) => {
-    if (request.url?.split('?')[0] === `${base}__motion-kit/`) {
-      void server.transformIndexHtml(`${base}__motion-kit/`, htmlShell()).then(
-        (html) => {
-          response.setHeader('Content-Type', 'text/html');
-          response.end(html);
-        },
-        (error: unknown) => {
-          report(error);
-          response.statusCode = 500;
-          response.end('Composition shell failed.');
-        },
+    // A raw request target need not parse as a URL, and a throw here would end the service.
+    const url = URL.parse(request.url ?? '/', 'http://127.0.0.1');
+    if (url === null) {
+      response.statusCode = 400;
+      response.end();
+    } else if (url.pathname === shellPath)
+      serveHtml(
+        response,
+        shellPath,
+        htmlShell(input.mode === 'preview' && url.searchParams.get('host') === 'preview'),
       );
-    } else
+    else
       server.middlewares(request, response, () => {
         response.statusCode = 404;
         response.end();
@@ -269,7 +395,7 @@ try {
   });
   await new Promise<void>((done, reject) => {
     http.once('error', reject);
-    http.listen(0, '127.0.0.1', done);
+    http.listen(input.port ?? 0, '127.0.0.1', done);
   });
   const address = http.address();
   if (address === null || typeof address === 'string') throw new Error('Missing loopback address');
@@ -278,22 +404,54 @@ try {
     ...(loaded?.dependencies ?? []),
     ...(loaded === null ? [] : [loaded.path]),
   ]);
-  const sourceFiles = new Set(
-    [entry, ...(loaded?.dependencies ?? []), ...(loaded === null ? [] : [loaded.path])].map(
-      (path) => vite.normalizePath(path),
+  const configFiles = new Set(
+    [...(loaded?.dependencies ?? []), ...(loaded === null ? [] : [loaded.path])].map((path) =>
+      vite.normalizePath(path),
     ),
   );
-  const isSource = (path: unknown): boolean => {
-    if (typeof path !== 'string') return false;
-    const normalized = vite.normalizePath(path);
-    return (
-      sourceFiles.has(normalized) || server.moduleGraph.getModulesByFile(normalized) !== undefined
+  const isModule = (path: string): boolean =>
+    path === vite.normalizePath(entry) || server.moduleGraph.getModulesByFile(path) !== undefined;
+  // A preview reloads its realm on a module or audio change, once per burst of watcher events. The
+  // Vite config and its dependencies decide the plugins and module graph, so they still end the
+  // session.
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  const changedFiles = new Set<string>();
+  // Vite invalidates a changed module only after its plugins' watchChange hooks settle, and a
+  // realm that reloads earlier would get the stale transform.
+  const invalidated = () =>
+    [...changedFiles].every((file) =>
+      [...(server.environments.client.moduleGraph.getModulesByFile(file) ?? [])].every(
+        (node) => node.transformResult === null,
+      ),
     );
+  const announce = (attempt: number) => {
+    if (attempt < 40 && !invalidated()) {
+      reloadTimer = setTimeout(() => announce(attempt + 1), 25);
+      return;
+    }
+    const audio = [...changedFiles].some((file) => audioFiles.has(file));
+    changedFiles.clear();
+    for (const stream of reloadStreams)
+      stream.write(`event: ${previewReloadEvent}\ndata: ${JSON.stringify({ audio })}\n\n`);
+  };
+  const reload = (file: string) => {
+    changedFiles.add(file);
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => announce(0), 50);
   };
   for (const event of ['change', 'unlink', 'add'] as const)
-    server.watcher.on(event, (path) => {
-      if (isSource(path))
-        send({ type: 'failure', error: loadingFailure('source changed; start a fresh session') });
+    server.watcher.on(event, (changed: string) => {
+      const path = vite.normalizePath(changed);
+      if (input.mode === 'preview' && !configFiles.has(path)) {
+        if (isModule(path) || audioFiles.has(path)) reload(path);
+      } else if (configFiles.has(path) || isModule(path))
+        send({
+          type: 'failure',
+          error:
+            input.mode === 'preview'
+              ? previewConfigChanged(relative(input.projectRoot, resolve(changed)))
+              : loadingFailure('source changed; start a fresh session'),
+        });
     });
   process.on('message', (message) => {
     if (message === 'dispose')
@@ -304,9 +462,10 @@ try {
         process.disconnect?.();
       })();
   });
+  serving = true;
   send({
     type: 'ready',
-    url: `http://127.0.0.1:${address.port}${base}__motion-kit/`,
+    url: `http://127.0.0.1:${address.port}${shellPath}`,
     configPath,
     dependencies: loaded?.dependencies ?? [],
   });

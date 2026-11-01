@@ -14,7 +14,8 @@ Loading sessions use the pinned Playwright Chromium. Reuse an installed browser;
 ## Operation
 
 - Library (`src/core`, `src/motion`, `src/theme`, `src/three`, `src/presets`): write a scratch script or a temporary vitest file that imports the public entry (root or subpath) as a consumer would, evaluates the changed component or function at chosen times, and prints or asserts the values. Compare sequential evaluation with a random seek order.
-- CLI (`src/cli`, once it exists): run the command (`render`, `frame`, `inspect`, `validate`) against a composition, and check the exit code, the JSON diagnostics on stdout, and the files written.
+- CLI (`src/cli`): run the command (`render`, `frame`, `check`, `docs`) against a composition, and check the exit code, the JSON diagnostics on stdout, and the files written.
+- Preview (`motion-kit preview`, `src/preview`): start it against a composition in the background, open the printed URL with the `browser-ops` skill, and operate play, scrub, step and the timeline. Edit the composition source while it runs and check the realm reloads. Stop the process when done.
 - Loading only (internal `src/render/loading/session.ts`, imported by relative path): call `openLoadingSession({ projectRoot, entry })`, inspect descriptors, select a composition and change props, then await and check `dispose()`. Assert the service PID is reused across selections, realm instance changes, and the workspace/processes disappear on disposal. `select` only prepares a root: no scene content, frame or PNG is expected. Exercise a missing browser and an incompatible config and inspect their returned Diagnostics.
 - Rendered output: open the PNG frames the `frame` command writes and look at them; compare frames rendered sequentially and by seek.
 

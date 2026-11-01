@@ -142,6 +142,21 @@ captured frame 60 to /Users/kaito/hello-video/still.png (1920x1080) in 962.6ms
 file, so the directory must already exist (`mkdir -p out` before `--out out/still.png`); `render`
 creates the directories its output needs.
 
+## Preview in the browser
+
+```bash
+pnpm exec motion-kit preview entry.tsx
+```
+
+```text
+serving http://127.0.0.1:53124/__motion-kit/preview/ (Ctrl-C to stop); ready
+```
+
+Open the URL in your own browser to play, scrub and step the Composition with its declared audio, and
+to see its named Sequences and audio clips on a timeline. Saving a source file reloads it at the same
+frame. The preview samples frames at a low rate and mixes audio in the browser, so it can differ from
+the `.mp4`; render to check the result. See [the `preview` command](cli.md#preview).
+
 ## Read the result as JSON
 
 Add `--json` to any command and stdout carries one versioned envelope and nothing else:
@@ -217,7 +232,7 @@ The CLI's project root is the directory you run it in (`process.cwd()`):
 
 ## Next steps
 
-- [CLI reference](cli.md) — `render`, `frame` and `docs`, every flag, the envelope and the exit codes.
+- [CLI reference](cli.md) — `render`, `frame`, `check`, `preview` and `docs`, every flag, the envelope and the exit codes.
 - [Authoring](authoring.md) — Composition, Sequence, TransitionSeries, hooks, `useAsset`, audio.
 - [Determinism](determinism.md) — what "every frame is a pure function of time" guarantees, and
   what it does not.

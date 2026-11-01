@@ -23,6 +23,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 │   ├── three/                 # three context: the only place that imports Three.js / R3F
 │   ├── presets/               # presets context: schema-first scene templates with metadata
 │   ├── render/                # render context: browser capture, media, encoding (Node only)
+│   ├── preview/               # preview context: browser host page of `motion-kit preview` (browser only)
 │   ├── agent/                 # agent context: inspect/validate for coding agents
 │   └── cli/                   # agent context: `motion-kit` CLI (Node only)
 ├── spec/                      # Lean oracle (Oracle.lean) and the differential-test helper (oracle.ts)

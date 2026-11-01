@@ -1,5 +1,5 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import {
   cpSync,
   existsSync,
@@ -29,6 +29,7 @@ const execFileAsync = promisify(execFile);
 // layout fails this gate. `pretest` runs `pnpm build` first.
 const distCli = new URL('../../dist/cli.js', import.meta.url).pathname;
 const distRender = new URL('../../dist/render.js', import.meta.url).pathname;
+const distPreview = new URL('../../dist/preview.js', import.meta.url).pathname;
 const validateJson = new Ajv2020({ strictTypes: false }).compile(committedSchema);
 const renderedResultSchema = z.object({
   ok: z.literal(true),
@@ -272,5 +273,45 @@ describe('built package layout', () => {
     expect(rendered.bytes).toBeGreaterThan(0);
     expect(statSync(output).isFile()).toBe(true);
     expect(readFileSync(output).length).toBe(rendered.bytes);
+  }, 120_000);
+
+  it('serves the preview host from the dist/preview.js bundle through dist/cli.js', async () => {
+    expect(existsSync(distPreview)).toBe(true);
+    const child = spawn(process.execPath, [distCli, 'preview', 'entry.tsx', '--json'], {
+      cwd: projectRoot,
+    });
+    let stdout = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    const exit = new Promise<number | null>((resolve) => child.once('exit', resolve));
+    try {
+      const line = await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('preview did not become ready')), 60_000);
+        child.stdout.on('data', () => {
+          if (!stdout.includes('\n')) return;
+          clearTimeout(timer);
+          resolve(stdout.trim());
+        });
+      });
+      const value: unknown = JSON.parse(line);
+      expect(validateJson(value)).toBe(true);
+      const envelope = EnvelopeSchema.parse(value);
+      const url = envelope.command === 'preview' ? (envelope.data?.url ?? '') : '';
+      expect(await (await fetch(url)).text()).toContain('/@id/virtual:motion-kit-preview-entry');
+      // The host module imports the shipped bundle, not the source the checkout has.
+      const host = await (
+        await fetch(new URL('/@id/virtual:motion-kit-preview-entry', url))
+      ).text();
+      const imported = /from\s+["']([^"']+)["']/u.exec(host)?.[1] ?? '';
+      expect(imported).toContain('dist/preview.js');
+      const bundle = await fetch(new URL(imported, url));
+      expect(bundle.status).toBe(200);
+      expect(await bundle.text()).toContain('startPreviewHost');
+      child.kill('SIGINT');
+      expect(await exit).toBe(0);
+    } finally {
+      child.kill('SIGKILL');
+    }
   }, 120_000);
 });

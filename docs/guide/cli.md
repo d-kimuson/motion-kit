@@ -1,14 +1,14 @@
 # CLI
 
-`motion-kit` renders Compositions out of an entry file. It ships four commands today, `render`,
-`frame`, `check` and `docs`, and all speak the same output contract: without `--json` they print their
+`motion-kit` renders Compositions out of an entry file. It ships five commands today, `render`,
+`frame`, `check`, `preview` and `docs`, and all speak the same output contract: without `--json` they print their
 result as text, and with it exactly one versioned JSON envelope on stdout.
 
 ```text
 motion-kit <command> [args]
 ```
 
-For `render`, `frame` and `check`, the first argument is an entry file relative to the project root
+For `render`, `frame`, `check` and `preview`, the first argument is an entry file relative to the project root
 (the directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions`
 (see [authoring](authoring.md#the-registry)).
 
@@ -26,6 +26,9 @@ motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | di
 motion-kit check <entry> [--composition <id>] --frame <n[,n...]> \
   [--predecessor <n[,n...]>] [--history <name[,name...]>] [--exact] \
   [--channel-tolerance <0-255>] [--changed-ratio <0..1>] [--props <json>] [--json]
+
+# A browser page to scrub, step and play a Composition with its audio; runs until stopped.
+motion-kit preview <entry> [--composition <id>] [--props <json>] [--preview-fps <n>] [--port <n>] [--json]
 
 # The guide, or one topic, printed verbatim.
 motion-kit docs [topic] [--list] [--json]
@@ -46,7 +49,7 @@ directory of the repository are written.
 
 ## Renderer configuration
 
-`render`, `frame` and `check` accept these options:
+`render`, `frame` and `check` accept these options. `preview` accepts only `--project-root` and `--vite-config` of them (see [`preview`](#preview)).
 
 | Flag                   | Environment override         | Meaning                                                                                           |
 | ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -292,19 +295,85 @@ The three diagnostics `check` adds are errors:
 | `check.history-not-run`   | A requested history could not run, or the sample had no comparable capture. `details` carries `frame`, `history` and `reason`.      |
 | `check.uncontrolled-time` | A capture emitted `seek.uncontrolled`, so the check refuses to certify it; the forwarded warning stays in `diagnostics`.            |
 
+## `preview`
+
+`preview` serves a browser page where you scrub, step and play a Composition with its declared audio and
+a timeline of its named Sequences and audio clips. It renders nothing to disk, launches no browser (open
+the printed URL in your own) and needs no FFmpeg. It runs until you stop it.
+
+| Option                 | Meaning                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--composition <id>`   | Which Composition to open. Without it, a registry of one opens directly and a larger one shows a chooser in the page.                                            |
+| `--props <json>`       | Props object as a JSON string. The CLI requires a JSON object; the page validates it against the Composition's schema and shows a failure there as a Diagnostic. |
+| `--preview-fps <n>`    | Frames sampled per second while playing, an integer from 1 to 60, default 12. Scrubbing and stepping always show that frame.                                     |
+| `--port <n>`           | Loopback port to listen on, 0 to 65535; default an ephemeral one. A port that is taken is `render.page-error`.                                                   |
+| `--project-root <dir>` | As in [renderer configuration](#renderer-configuration); `--software-webgl` and `--disable-sandbox` do not apply.                                                |
+| `--vite-config <path>` | As in [renderer configuration](#renderer-configuration).                                                                                                         |
+| `--json`               | Print the readiness envelope instead of the line below.                                                                                                          |
+
+```bash
+motion-kit preview entry.tsx --composition teaser --preview-fps 15
+# serving http://127.0.0.1:53124/__motion-kit/preview/?composition=teaser&fps=15 (Ctrl-C to stop); ready
+```
+
+The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
+click on the timeline seek. The keys work wherever the focus is on the page, including the scrubber; a focused button or checkbox keeps Space for itself, and a key with Alt, Ctrl or Cmd stays with the browser. The timecode shows `mm:ss.cc` and the frame number; when the picture is behind
+the playhead (while paused, or by more than half a second while playing), `showing <n>` names the frame actually on screen. Each declared audio source has a
+checkbox, ticked while it is audible; clearing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
+fetched or decoded is marked in the page and skipped.
+
+Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
+component state restarts. A change to the Vite config or its dependencies ends the preview with
+`render.page-error` ("The Vite config vite.config.ts changed, so the preview stopped."). The timeline lists every top-level named Sequence from the start, and a nested one once
+the playhead has been inside its parent, because the runtime reports a Sequence only while it is mounted.
+
+The preview is for authoring, not for sign-off: it samples frames at a low rate, mixes audio with Web
+Audio rather than FFmpeg, and may differ from the `.mp4` (WebGL implementation, mix). Check the render.
+
+### Readiness is the result
+
+`preview` is the one command that runs until it is stopped, so its result is the moment it is ready:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "preview",
+  "ok": true,
+  "data": {
+    "format": "preview",
+    "url": "http://127.0.0.1:53124/__motion-kit/preview/?composition=teaser"
+  },
+  "diagnostics": [],
+  "durationMs": 1432.7
+}
+```
+
+With `--json` that envelope is the whole of stdout, written once the page is being served; without it,
+the line `serving <url> (Ctrl-C to stop); ready` is. Then the process serves until a stop signal:
+
+- A stop after readiness (`Ctrl-C`, `SIGTERM`, `SIGHUP`) is the normal end: exit `0`, nothing more on
+  stdout.
+- A failure before readiness is the usual failure envelope: exit `1` for a Vite config or plugin failure
+  or a taken `--port`, and `2` for an invocation error, which includes an entry that is not found.
+- A stop before readiness is a cancellation as for every command: no envelope, the stderr line
+  `preview aborted; nothing is being served`, exit `128` plus the signal number.
+- A failure after readiness, such as a Vite config change, writes one line to stderr,
+  `severity: code: message — hint`, and exits `1`. The envelope was already written, so there is no
+  second document.
+
 ## The JSON envelope
 
 `--json` writes exactly one JSON document to stdout, for successes and failures alike, and moves
 human-facing logs to stderr. Every document has these fields:
 
-| Field           | Type             | Meaning                                                                                                               |
-| --------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                   |
-| `command`       | string, nullable | `render`, `frame`, `check`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
-| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                               |
-| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                             |
-| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                    |
-| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                             |
+| Field           | Type             | Meaning                                                                                                                          |
+| --------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                              |
+| `command`       | string, nullable | `render`, `frame`, `check`, `preview`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
+| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                                          |
+| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                                        |
+| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                               |
+| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                                        |
 
 `render`'s `data` is a union on `format`:
 
@@ -422,15 +491,15 @@ in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes th
 
 ## Exit codes
 
-| Code  | Meaning                                                                                                      |
-| ----- | ------------------------------------------------------------------------------------------------------------ |
-| `0`   | Success; warnings and infos allowed.                                                                         |
-| `1`   | Domain failure: invalid props, an asset or page failure, a render or encode failure, a differing check.      |
-| `2`   | Invocation error: unknown flag, missing argument, entry not found, unknown Composition, no known subcommand. |
-| `3`   | Internal failure: a bug or an unconverted exception. The stack goes to stderr, never into JSON.              |
-| `130` | Cancelled by `SIGINT`.                                                                                       |
-| `143` | Cancelled by `SIGTERM`.                                                                                      |
-| `129` | Cancelled by `SIGHUP`.                                                                                       |
+| Code  | Meaning                                                                                                                                            |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`   | Success; warnings and infos allowed. For `preview`, also a stop after it was ready.                                                                |
+| `1`   | Domain failure: invalid props, an asset or page failure, a render or encode failure, a differing check, a `preview` that fails after it was ready. |
+| `2`   | Invocation error: unknown flag, missing argument, entry not found, unknown Composition, no known subcommand.                                       |
+| `3`   | Internal failure: a bug or an unconverted exception. The stack goes to stderr, never into JSON.                                                    |
+| `130` | Cancelled by `SIGINT`.                                                                                                                             |
+| `143` | Cancelled by `SIGTERM`.                                                                                                                            |
+| `129` | Cancelled by `SIGHUP`.                                                                                                                             |
 
 The exit code is not a field of the envelope; it follows from `ok` and from the codes present.
 
@@ -461,7 +530,8 @@ emits **no envelope** — `--json` prints nothing at all — writes one line to 
 plus the signal number (`130`, `143`, `129`). The `.mp4` route kills its FFmpeg child and removes the
 temporary file, leaving no target; the frames route stops before writing `manifest.json`, so any PNG
 frames already written stay and no manifest claims the sequence is complete. A second `Ctrl-C` ends
-the process immediately with the same guarantees.
+the process immediately with the same guarantees. `preview` is the exception after it was ready: a stop
+then is its normal end (exit `0`); see [readiness is the result](#readiness-is-the-result).
 
 ## Related
 

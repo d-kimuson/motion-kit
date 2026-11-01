@@ -10,6 +10,7 @@ import {
   mountRequestSchema,
   type LoadingPage,
 } from '../../lib/loading-protocol.ts';
+import { previewLoadParameter } from '../../lib/preview-protocol.ts';
 import { type Result } from '../../lib/result.ts';
 import { Composition } from '../composition/composition.tsx';
 import {
@@ -22,8 +23,28 @@ import {
   assetsOf,
   createCompositionRuntime,
   type CompositionRuntime,
+  type CompositionRuntimeOptions,
+  type HostSource,
 } from './composition-runtime.ts';
+import { servePreviewPort } from './preview-port.ts';
 
+// The renderer grants ownership from Node and supervises the deadline (render CONTEXT.md).
+const rendererOwnership = (
+  runtime: () => CompositionRuntime,
+): Pick<CompositionRuntimeOptions, 'acquire' | 'externalDeadline'> => ({
+  externalDeadline: true,
+  acquire: async (snapshot, signal, requestId) => {
+    const granted = await window.__motionKitOwnership?.({
+      requestId,
+      source: 'renderer',
+      instance: snapshot.instance,
+      revision: snapshot.revision,
+      generation: snapshot.generation,
+      globalFrame: snapshot.globalFrame,
+    });
+    if (granted !== true || signal.aborted) runtime().cancel(requestId);
+  },
+});
 type Registry = CompositionRegistry<readonly Result<CompositionEntry>[]>;
 const failure = () =>
   compositionFailure(
@@ -32,8 +53,12 @@ const failure = () =>
     'Export the named compositions Result from defineCompositions.',
   );
 
-/** Browser-only bootstrap; mount never implies an initial seek or readiness. */
-export const bootstrapComposition = (input: unknown): void => {
+/**
+ * The Loading Page over a registry, for one host: the renderer (Playwright ownership grants and
+ * an external deadline) or a preview host (in-page grants, core's own frame timeout). Requests
+ * and leases from the other host are refused.
+ */
+export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage => {
   let registry: Registry | undefined;
   let declaration: Result<never> | undefined;
   const parsed = z
@@ -65,24 +90,25 @@ export const bootstrapComposition = (input: unknown): void => {
     protocolVersion: loadingProtocolVersion,
     settleFrame: async (frame, request) => {
       const checked = frameRequestSchema.safeParse(request);
-      if (!checked.success || runtime === undefined) return { status: 'aborted' };
+      if (!checked.success || checked.data.source !== host || runtime === undefined)
+        return { status: 'aborted' };
       return runtime.settleFrame(frame, checked.data);
     },
     resettle: async (lease) => {
       const checked = captureLeaseSchema.safeParse(lease);
-      return checked.success && checked.data.source === 'renderer' && runtime !== undefined
+      return checked.success && checked.data.source === host && runtime !== undefined
         ? runtime.resettle(checked.data)
         : { status: 'aborted' };
     },
     validateCapture: (lease) => {
       const checked = captureLeaseSchema.safeParse(lease);
-      return checked.success && checked.data.source === 'renderer' && runtime !== undefined
+      return checked.success && checked.data.source === host && runtime !== undefined
         ? runtime.validateCapture(checked.data)
         : { status: 'aborted' };
     },
     completeCapture: (lease) => {
       const checked = captureLeaseSchema.safeParse(lease);
-      return checked.success && checked.data.source === 'renderer' && runtime !== undefined
+      return checked.success && checked.data.source === host && runtime !== undefined
         ? runtime.completeCapture(checked.data)
         : { status: 'aborted' };
     },
@@ -159,18 +185,7 @@ export const bootstrapComposition = (input: unknown): void => {
         instance: request.instance,
         frameTimeoutMs: request.frameTimeoutMs,
         queueTimeoutMs: request.queueTimeoutMs,
-        externalDeadline: true,
-        acquire: async (snapshot, signal, requestId) => {
-          const granted = await window.__motionKitOwnership?.({
-            requestId,
-            source: 'renderer',
-            instance: snapshot.instance,
-            revision: snapshot.revision,
-            generation: snapshot.generation,
-            globalFrame: snapshot.globalFrame,
-          });
-          if (granted !== true || signal.aborted) selectedRuntime.cancel(requestId);
-        },
+        ...(host === 'renderer' ? rendererOwnership(() => selectedRuntime) : {}),
       });
       runtime = selectedRuntime;
       root = createRoot(container);
@@ -199,6 +214,22 @@ export const bootstrapComposition = (input: unknown): void => {
       return result;
     },
   };
-  window.__motionKit = api;
+  return api;
+};
+
+/** Browser-only bootstrap; mount never implies an initial seek or readiness. The shell URL fixes
+ * the host: `?host=preview` serves a preview host over a port, anything else the renderer. */
+export const bootstrapComposition = (input: unknown): void => {
+  const parameters = new URLSearchParams(window.location.search);
+  if (parameters.get('host') === 'preview') {
+    servePreviewPort(createLoadingPage(input, 'preview'), {
+      events: window,
+      parent: window.parent,
+      origin: window.location.origin,
+      load: parameters.get(previewLoadParameter) ?? '',
+    });
+    return;
+  }
+  window.__motionKit = createLoadingPage(input, 'renderer');
   void window.__motionKitLoadingEvent?.({ protocolVersion: loadingProtocolVersion });
 };

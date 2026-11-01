@@ -1,13 +1,11 @@
-import { fork, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { type BrowserContext, type Page } from 'playwright';
 import { z } from 'zod';
 
-import { DiagnosticSchema, type Diagnostic } from '../../lib/diagnostic.ts';
-import { coverOnExit } from '../../lib/exit.ts';
+import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { ownershipSchema, type Ownership } from '../../lib/frame-protocol.ts';
 import {
   descriptorSchema,
@@ -20,6 +18,7 @@ import {
 import { type Result } from '../../lib/result.ts';
 import { launchBrowser, type BrowserOptions, type OwnedBrowser } from '../browser/launch.ts';
 import { loadingFailure } from './diagnostics.ts';
+import { startLoadingService, type LoadingService } from './service.ts';
 
 export type LoadingSessionOptions = BrowserOptions & {
   projectRoot: string;
@@ -59,15 +58,6 @@ class LoadingError extends Error {
     this.diagnostic = diagnostic;
   }
 }
-const childMessage = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('ready'),
-    url: z.url(),
-    configPath: z.string(),
-    dependencies: z.array(z.string()),
-  }),
-  z.object({ type: z.literal('failure'), error: DiagnosticSchema }),
-]);
 const timeoutDiagnostic = (operation: string): Diagnostic => ({
   code: 'render.page-error',
   severity: 'error',
@@ -85,8 +75,7 @@ export const openLoadingSession = async (
     return { ok: false, error: loadingFailure('timeout option') };
   let workspace: string | undefined;
   let creatingWorkspace: Promise<string> | undefined;
-  let child: ChildProcess | undefined;
-  let releaseServiceCover: (() => void) | undefined;
+  let service: LoadingService | undefined;
   let owned: OwnedBrowser | undefined;
   let launching: ReturnType<typeof launchBrowser> | undefined;
   let published = false;
@@ -124,31 +113,6 @@ export const openLoadingSession = async (
       clearTimeout(timer);
     }
   };
-  const terminateChild = async () => {
-    const processHandle = child;
-    if (processHandle?.pid === undefined) return;
-    const exited =
-      processHandle.exitCode !== null || processHandle.signalCode !== null
-        ? Promise.resolve()
-        : new Promise<void>((done) => processHandle.once('close', () => done()));
-    if (processHandle.connected) {
-      processHandle.send('dispose');
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([
-        exited,
-        new Promise<void>((done) => {
-          timer = setTimeout(done, 250);
-        }),
-      ]);
-      clearTimeout(timer);
-    }
-    try {
-      process.kill(-processHandle.pid, 'SIGKILL');
-    } catch {
-      processHandle.kill('SIGKILL');
-    }
-    await exited;
-  };
   // Internal failure cleanup must preserve its Diagnostic; only the public
   // disposal entry point is caller cancellation.
   const dispose = (): Promise<Result<undefined>> => {
@@ -179,11 +143,8 @@ export const openLoadingSession = async (
           const browser = owned ?? (launched?.ok === true ? launched.value : undefined);
           await browser?.server.kill();
         })(),
-        terminateChild(),
+        service?.terminate(),
       ]);
-      // The service is gone, so the exit guard has nothing left to do.
-      releaseServiceCover?.();
-      releaseServiceCover = undefined;
       try {
         const directory = workspace ?? (await creatingWorkspace);
         if (directory !== undefined) await rm(directory, { recursive: true, force: true });
@@ -241,49 +202,16 @@ export const openLoadingSession = async (
         await rm(workspace, { recursive: true, force: true });
         throw new Error('Disposed');
       }
-      child = fork(
-        new URL('./child.js', import.meta.url),
-        [
-          JSON.stringify({
-            projectRoot: resolve(options.projectRoot),
-            entry: resolve(options.projectRoot, options.entry),
-            ...(options.viteConfig === undefined
-              ? {}
-              : { viteConfig: resolve(options.viteConfig) }),
-            workspace,
-          }),
-        ],
-        { detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], execArgv: [] },
+      service = startLoadingService(
+        {
+          projectRoot: options.projectRoot,
+          entry: options.entry,
+          ...(options.viteConfig === undefined ? {} : { viteConfig: options.viteConfig }),
+          workspace,
+        },
+        fail,
       );
-      // The service is its own process-group leader, so it outlives an abrupt exit unless it is
-      // killed on the way out; disposal is asynchronous and cannot be the only owner
-      // (lib/exit.ts).
-      const service = child;
-      releaseServiceCover = coverOnExit(() => {
-        if (service.pid === undefined) return;
-        try {
-          process.kill(-service.pid, 'SIGKILL');
-        } catch {
-          service.kill('SIGKILL');
-        }
-      });
-      child.stdout?.pipe(process.stderr, { end: false });
-      child.stderr?.pipe(process.stderr, { end: false });
-      const ready = Promise.withResolvers<string>();
-      child.on('message', (message: unknown) => {
-        const parsed = childMessage.safeParse(message);
-        if (!parsed.success) {
-          fail(loadingFailure('service protocol'));
-          return;
-        }
-        if (parsed.data.type === 'failure') fail(parsed.data.error);
-        else ready.resolve(parsed.data.url);
-      });
-      child.on('error', () => fail(loadingFailure('service startup')));
-      child.on('exit', () => {
-        if (!disposed) fail(loadingFailure('service exited'));
-      });
-      const url = await ready.promise;
+      const url = await service.ready;
       if (disposed) throw new Error('Disposed');
       launching = launchBrowser(
         options,
@@ -300,7 +228,7 @@ export const openLoadingSession = async (
       return { url, compositions };
     });
     const revision = randomUUID();
-    const pid = child?.pid;
+    const pid = service?.pid;
     if (pid === undefined || workspace === undefined) throw new Error('Service ownership missing');
     const browserPid = owned?.server.process().pid;
     if (browserPid === undefined) throw new Error('Browser process ownership missing');

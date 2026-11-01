@@ -224,6 +224,31 @@ and avoidable rather than real bugs:
 
 Anything else: keep the envelope and the stack, and report it.
 
+## `preview` problems
+
+- **`render.page-error`: "Port N on 127.0.0.1 is already in use."** Another process listens on the
+  `--port` you passed. Stop it, pick another port, or omit `--port` to get a free one.
+- **The preview ended with `render.page-error`: "The Vite config vite.config.ts changed, so the preview stopped.".** The
+  Vite config or something it imports changed, which a reload cannot pick up. Run `preview` again. The
+  line is on stderr and the exit code is `1`; the earlier readiness envelope is the only stdout output.
+- **A Composition or props error appears in the page, not in the terminal.** `preview` does not load the
+  entry in the CLI: an unknown `--composition`, props the schema rejects and registry errors are shown in the page as Diagnostics (a `--props` that is not a JSON object is still `cli.invalid-arguments`),
+  and the page recovers on the next save. Use `check` or `frame` to get them as an envelope.
+- **A source is marked unplayable, or there is no sound.** The audio file could not be fetched or
+  decoded by the browser, or it lies outside what Vite's `server.fs.allow` serves (an absolute `src`
+  elsewhere renders but does not play in the preview: add its directory to `server.fs.allow`); the
+  source is skipped and the rest plays. Browsers also start audio only after a click, so press Play. Check that
+  the source's checkbox is ticked; a cleared one mutes it.
+- **The page shows `render.page-error`: "The composition page loaded, but the entry did not start."**
+  The entry failed to import or run in the browser, for example a syntax error or a module that throws
+  at import. The browser console and the terminal running `preview` name the error; save a fix and the
+  page reloads.
+- **The timeline lacks a named Sequence.** A nested one appears once the playhead has been inside its
+  parent; scrub through the Composition once.
+- **Ctrl-C printed nothing, or `preview aborted; nothing is being served`.** After the preview was
+  ready, a stop is its normal end and exits `0`. The aborted line means the stop came before it was
+  ready, and the exit code is `128` plus the signal number.
+
 ## A cancelled run
 
 `Ctrl-C` is not a failure and produces no envelope. The run prints one line to stderr and exits `130`

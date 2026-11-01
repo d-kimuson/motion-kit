@@ -4,7 +4,14 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { bootstrapId, entryId, entrySource } from './entry-source.ts';
+import {
+  bootstrapId,
+  entryId,
+  entrySource,
+  previewEntryId,
+  previewEntrySource,
+  previewHostId,
+} from './entry-source.ts';
 
 const isAliasArray = (value: AliasOptions): value is readonly Alias[] => Array.isArray(value);
 const normalizeAliases = (aliases: AliasOptions = {}): readonly Alias[] =>
@@ -25,6 +32,10 @@ export const packageEntry = builtRoot
 export const browserEntry = builtRoot
   ? join(dirname(fileURLToPath(import.meta.url)), 'browser.js')
   : fileURLToPath(new URL('../../core/runtime/browser-entry.ts', import.meta.url));
+/** The preview host page's bundle, private like the bootstrap. */
+export const previewEntry = builtRoot
+  ? join(dirname(fileURLToPath(import.meta.url)), 'preview.js')
+  : fileURLToPath(new URL('../../preview/host.tsx', import.meta.url));
 /** Ids the loading plugin owns. Vite's alias plugin runs before `enforce: 'pre'` plugins,
  * so a project alias for these would shadow the bootstrap instead of the other way round.
  * They are prepended to `resolve.alias` so motion-kit's reserved ids win over a conflicting
@@ -32,9 +43,11 @@ export const browserEntry = builtRoot
  * `entrySource()` imports it by id, so a project alias must not swap the entry module. */
 export const reservedAliases = (entry: string): readonly Alias[] => [
   { find: /^@kimuson\/motion-kit\/browser$/, replacement: browserEntry },
+  { find: /^@kimuson\/motion-kit\/preview$/, replacement: previewEntry },
   { find: /^@kimuson\/motion-kit$/, replacement: packageEntry },
   { find: /^motion-kit$/, replacement: packageEntry },
   { find: /^virtual:motion-kit-entry$/, replacement: `\u0000${entryId}` },
+  { find: /^virtual:motion-kit-preview-entry$/, replacement: `\u0000${previewEntryId}` },
   { find: /^virtual:motion-kit-user-entry$/, replacement: entry },
 ];
 export const loadingPlugin = (entry: string): Plugin => ({
@@ -43,12 +56,15 @@ export const loadingPlugin = (entry: string): Plugin => ({
   resolveId(id) {
     if (id === entryId) return `\0${entryId}`;
     if (id === 'virtual:motion-kit-user-entry') return entry;
+    if (id === previewEntryId) return `\0${previewEntryId}`;
     if (id === bootstrapId) return browserEntry;
+    if (id === previewHostId) return previewEntry;
     if (id === '@kimuson/motion-kit' || id === 'motion-kit') return packageEntry;
     return undefined;
   },
   load(id) {
-    return id === `\0${entryId}` ? entrySource('virtual:motion-kit-user-entry') : undefined;
+    if (id === `\0${entryId}`) return entrySource('virtual:motion-kit-user-entry');
+    return id === `\0${previewEntryId}` ? previewEntrySource() : undefined;
   },
 });
 

@@ -70,7 +70,7 @@ export type AssetSettlement =
   | { readonly ok: false; readonly error: readonly Diagnostic[] }
   | { readonly ok: false; readonly aborted: true };
 export const frameRequestSchema = z.object({
-  source: z.literal('renderer'),
+  source: z.enum(['renderer', 'preview']),
   requestId: z.string(),
 });
 export type FramePage = {

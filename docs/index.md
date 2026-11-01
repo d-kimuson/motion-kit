@@ -160,7 +160,7 @@ the directory you run the command in, and `render` creates the directories its o
 
 - [Getting started](guide/getting-started.md) — requirements, install, a first entry and render,
   props overrides, and the frames output.
-- [CLI](guide/cli.md) — `render`, `frame`, `check` and `docs`, every flag, the `--json` envelope,
+- [CLI](guide/cli.md) — `render`, `frame`, `check`, `preview` and `docs`, every flag, the `--json` envelope,
   diagnostic codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
@@ -191,7 +191,7 @@ Only four subpaths are exported in 0.0.1:
 - `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types; `three` and
   `@react-three/fiber` are optional peer dependencies you install.
 
-Not in 0.0.1: the preview UI, preview audio, audio-reactive visuals, video assets, the `/motion`,
+Not in 0.0.1: the preview UI and preview audio (both unreleased, in `motion-kit preview`), audio-reactive visuals, video assets, the `/motion`,
 `/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. Motion is plain
 arithmetic on `useTime()` and `useSequence()` until `/motion` lands, which is what the reference
 examples do.

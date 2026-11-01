@@ -15,6 +15,8 @@ export default defineConfig({
     // runtime; `./browser` becomes a public subpath with TASK-190.
     child: 'src/render/loading/child.js',
     browser: 'src/core/runtime/browser-entry.ts',
+    // The preview host page's bundle, served by the loading server in preview mode.
+    preview: 'src/preview/host.tsx',
   },
   format: ['esm'],
   platform: 'node',
