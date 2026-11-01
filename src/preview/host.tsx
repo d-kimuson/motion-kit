@@ -52,9 +52,8 @@ export const startPreviewHost = (): void => {
   const controller = createPreviewController({
     query: query.value,
     connect: (signal) => {
-      const element = frame;
-      const target = element?.contentWindow;
-      if (element === null || target === null || target === undefined)
+      const target = frame?.contentWindow;
+      if (target === null || target === undefined)
         return Promise.reject(new Error('Preview frame is not attached'));
       loads += 1;
       const load = String(loads);
@@ -65,7 +64,8 @@ export const startPreviewHost = (): void => {
       );
       const url = new URL(shellUrl, window.location.href);
       url.searchParams.set(previewLoadParameter, load);
-      element.src = url.href;
+      // Replacing the location keeps reloads out of the session history, so Back leaves the preview.
+      target.location.replace(url.href);
       return connecting;
     },
     audio: createAudioPlayer(context, async (src) => {

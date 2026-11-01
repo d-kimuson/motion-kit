@@ -167,7 +167,6 @@ const Controls = ({
   const fps = state.session.kind === 'ready' ? state.session.fps : undefined;
   const last = Math.max(descriptor.durationInFrames - 1, 0);
   const shownFrame = state.shown?.status === 'shown' ? state.shown.frame : undefined;
-  // A play waiting for its audio already shows pause, so a second press withdraws it.
   const digits = String(last).length;
   // Playback is a frame or two behind on every tick; only half a second behind is worth showing.
   const tolerated =
@@ -175,6 +174,7 @@ const Controls = ({
       ? descriptor.fps.numerator / descriptor.fps.denominator / 2
       : 0;
   const lagging = shownFrame !== undefined && Math.abs(state.playhead - shownFrame) > tolerated;
+  // A play waiting for its audio already shows pause, so a second press withdraws it.
   const playing = state.playback.kind === 'playing' || state.starting;
   return (
     <div className="mk-controls">
