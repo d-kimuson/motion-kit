@@ -157,6 +157,55 @@ it('reports the assets a frame registered, a failed one with the failure', async
   });
 });
 
+it('reads the Sequences and assets of a frame in a dry page without loading or showing it', async () => {
+  const root = container();
+  const source = '/dry-never-fetched.png';
+  const DryScene = () => (
+    <>
+      <Sequence name="intro" from={0} duration={1}>
+        <span>intro</span>
+      </Sequence>
+      <Picture source={source} />
+      {/* The scene's own markup: only the document it is in keeps it from loading. */}
+      <img alt="" src="/dry-never-fetched-markup.png" />
+    </>
+  );
+  const page = createLoadingPage(
+    defineCompositions([
+      defineComposition({
+        id: 'dry',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 60,
+        component: DryScene,
+        schema: z.object({}),
+      }),
+    ]),
+    'preview',
+    { dry: true },
+  );
+  pages.push(page);
+  await answerPreview(page, { type: 'mount', id: 1, props: {} });
+  // A missing picture still stands in as ready: a dry page cannot tell which load would fail.
+  expect(await answerPreview(page, { type: 'show', id: 2, frame: 0 })).toMatchObject({
+    outcome: {
+      status: 'shown',
+      sequences: [{ path: ['intro'], startFrame: 0, endFrame: 30 }],
+      assets: [{ kind: 'image', source, status: 'ready' }],
+    },
+  });
+  expect(root.childNodes).toHaveLength(0);
+  // A picture asked for afterwards in the page is fetched, and the scene's never were.
+  const control = new Image();
+  const fetched = new Promise((resolve) => control.addEventListener('error', resolve));
+  control.src = '/dry-control.png';
+  await fetched;
+  const names = performance.getEntriesByType('resource').map(({ name }) => name);
+  expect(names.some((name) => name.endsWith('/dry-control.png'))).toBe(true);
+  expect(names.filter((name) => name.includes('/dry-never-fetched'))).toEqual([]);
+});
+
 // A clip drawn as one picture per frame, like an image sequence, in a boundary of its own.
 const framePicture = (frame: number) =>
   `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${frame + 1}' height='1'/>`)}`;

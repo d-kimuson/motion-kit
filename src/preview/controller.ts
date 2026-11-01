@@ -8,7 +8,7 @@ import {
   type ShowOutcome,
 } from '../lib/preview-protocol.ts';
 import { type Result } from '../lib/result.ts';
-import { observeAssets, type AssetSpan } from './asset-usage.ts';
+import { observeAssetFrames, type AssetFrame, type AssetSpan } from './asset-usage.ts';
 import { type AudioPlayer } from './audio.ts';
 import { type Realm } from './connection.ts';
 import { type PreviewQuery } from './query.ts';
@@ -30,9 +30,17 @@ export type Session =
   | Readonly<{ kind: 'failed'; diagnostic: Diagnostic }>
   | Readonly<{ kind: 'ready'; descriptor: LoadingDescriptor; fps: FrameRate }>;
 
-/** A registered asset as the frames shown so far report it. */
-export type SeenAsset = RegisteredAsset &
-  Readonly<{ /** The earliest frame seen to use it, by the stage or the scan. */ frame: number }>;
+/**
+ * A registered asset as the frames shown or scanned so far report it. The scan stands in for the
+ * assets instead of loading them, so one only the scan has seen is `unchecked`.
+ */
+export type SeenAsset = Readonly<{
+  kind: RegisteredAsset['kind'];
+  source: string;
+  status: RegisteredAsset['status'] | 'unchecked';
+  /** The earliest frame seen to use it, by the stage or the scan. */
+  frame: number;
+}>;
 
 export type PreviewState = Readonly<{
   session: Session;
@@ -64,14 +72,11 @@ export type PreviewDependencies = Readonly<{
    */
   connect: (signal: AbortSignal) => Promise<Realm>;
   /**
-   * Load (or reload) a second, hidden realm frame as large as the Composition and connect to it; it
-   * shows every frame of the mounted Composition in turn, so the timeline knows the frames nobody
-   * played. Closing that realm unloads its page, and the images it holds with it.
+   * Load (or reload) a second, hidden realm frame, a dry realm (core), and connect to it; it shows
+   * every frame of the mounted Composition in turn, so the timeline knows the frames nobody played.
+   * Closing that realm unloads its page, and the React tree it holds with it.
    */
-  connectScanner: (
-    signal: AbortSignal,
-    size: Readonly<{ width: number; height: number }>,
-  ) => Promise<Realm>;
+  connectScanner: (signal: AbortSignal) => Promise<Realm>;
   audio: AudioPlayer;
   /**
    * The `AudioContext` clock in seconds; `latency` is how long a sound started now takes to be
@@ -116,34 +121,50 @@ const accumulate = (spans: readonly SequenceSpan[], seen: readonly SequenceSpan[
   ...spans,
   ...seen.filter((span) => !spans.some((known) => sameSpan(known, span))),
 ];
-const sameAsset = (a: RegisteredAsset, b: RegisteredAsset) =>
-  a.kind === b.kind && a.source === b.source;
-const see = (assets: readonly SeenAsset[], seen: readonly RegisteredAsset[], frame: number) => [
-  ...assets.map((known) => {
-    const latest = seen.find((asset) => sameAsset(asset, known));
-    return latest === undefined
-      ? known
-      : { ...known, status: latest.status, frame: Math.min(known.frame, frame) };
-  }),
-  ...seen
-    .filter((asset) => !assets.some((known) => sameAsset(known, asset)))
-    .map((asset) => ({ ...asset, frame })),
-];
-/** What a frame's answer adds to the state; `continued` as for `observeAssets`. */
+const assetKey = ({ kind, source }: Pick<RegisteredAsset, 'kind' | 'source'>) =>
+  `${kind}\0${source}`;
+/** One answered frame; `continued` as for `observeAssetFrames`. */
+type Observation = Readonly<{
+  frame: number;
+  outcome: ShowOutcome;
+  continued?: number | undefined;
+}>;
+/**
+ * What the answers of frames, in order, add to the state. A frame the stage showed (`checked`)
+ * sets the status of each asset it used; a scanned one adds the assets not seen before, unchecked.
+ */
 const observe = (
   state: PreviewState,
-  frame: number,
-  outcome: ShowOutcome,
-  continued?: number,
-): Partial<PreviewState> => ({
-  ...(outcome.status === 'shown' ? { spans: accumulate(state.spans, outcome.sequences) } : {}),
-  ...(outcome.status === 'aborted'
-    ? {}
-    : {
-        assets: see(state.assets, outcome.assets, frame),
-        assetSpans: observeAssets(state.assetSpans, frame, outcome.assets, continued),
-      }),
-});
+  observations: readonly Observation[],
+  checked: boolean,
+): Pick<PreviewState, 'spans' | 'assets' | 'assetSpans'> => {
+  let { spans } = state;
+  const assets = new Map(state.assets.map((asset) => [assetKey(asset), asset]));
+  const frames: AssetFrame[] = [];
+  for (const { frame, outcome, continued } of observations) {
+    if (outcome.status === 'shown') spans = accumulate(spans, outcome.sequences);
+    if (outcome.status === 'aborted') continue;
+    frames.push({ frame, assets: outcome.assets, continued });
+    for (const { kind, source, status } of outcome.assets) {
+      const known = assets.get(assetKey({ kind, source }));
+      assets.set(
+        assetKey({ kind, source }),
+        known === undefined
+          ? { kind, source, status: checked ? status : 'unchecked', frame }
+          : {
+              ...known,
+              status: checked ? status : known.status,
+              frame: Math.min(known.frame, frame),
+            },
+      );
+    }
+  }
+  return {
+    spans,
+    assets: frames.length === 0 ? state.assets : [...assets.values()],
+    assetSpans: observeAssetFrames(state.assetSpans, frames),
+  };
+};
 // The scan reports this many frames at once, so the lanes are not packed again for every frame.
 const scanBatch = 30;
 const lastFrame = (descriptor: LoadingDescriptor) => Math.max(descriptor.durationInFrames - 1, 0);
@@ -205,7 +226,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
         const continued =
           sentIn !== undefined && lastShown?.run === sentIn ? lastShown.frame : undefined;
         if (outcome.status !== 'aborted') lastShown = { run: sentIn, frame };
-        update({ shown: outcome, ...observe(state, frame, outcome, continued) });
+        update({ shown: outcome, ...observe(state, [{ frame, outcome, continued }], true) });
         const step = frameAnswered(presenter);
         presenter = step.state;
         present(step.send);
@@ -254,7 +275,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     };
     let current: Realm;
     try {
-      current = await deps.connectScanner(controller.signal, descriptor);
+      current = await deps.connectScanner(controller.signal);
     } catch {
       giveUp();
       return;
@@ -277,16 +298,11 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
         new Promise((resolve) => {
           waking.push(resolve);
         }),
-      report: (steps, progress) => {
-        let next: PreviewState = { ...state, scan: progress };
-        for (const { frame, outcome } of steps)
-          next = { ...next, ...observe(next, frame, outcome) };
-        update(next);
-      },
+      report: (steps, progress) => update({ scan: progress, ...observe(state, steps, false) }),
       batch: scanBatch,
       signal: controller.signal,
     });
-    // Every frame read: the realm is no longer needed, and holds every image the frames used.
+    // Every frame read: the realm is no longer needed.
     if (scanning === controller) {
       scanning = undefined;
       scanner?.close();

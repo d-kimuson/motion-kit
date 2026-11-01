@@ -1,7 +1,14 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { type RegisteredAsset } from '../lib/preview-protocol.ts';
-import { assetGroup, observeAssets, type AssetSpan } from './asset-usage.ts';
+import {
+  assetGroup,
+  observeAssetFrames,
+  observeAssets,
+  type AssetFrame,
+  type AssetSpan,
+} from './asset-usage.ts';
 
 const image = (source: string, status: RegisteredAsset['status'] = 'ready'): RegisteredAsset => ({
   kind: 'image',
@@ -112,5 +119,45 @@ describe('observeAssets', () => {
   it('keeps the spans unchanged when a frame used nothing new', () => {
     const spans = observeAssets([], 0, [photo('vows')]);
     expect(observeAssets(spans, 0, [photo('vows')])).toBe(spans);
+  });
+});
+
+describe('observeAssetFrames', () => {
+  const assetFrame: fc.Arbitrary<AssetFrame> = fc.record({
+    frame: fc.nat(30),
+    assets: fc.array(
+      fc.record({
+        kind: fc.constant('image' as const),
+        source: fc.constantFrom('a.png', 'b.png', 'data:image/png;base64,AA'),
+        status: fc.constantFrom('ready' as const, 'failed' as const),
+      }),
+      { maxLength: 3 },
+    ),
+    continued: fc.option(fc.nat(30), { nil: undefined }),
+  });
+
+  const oneByOne = (spans: readonly AssetSpan[], frames: readonly AssetFrame[]) =>
+    frames.reduce(
+      (folded, { frame, assets, continued }) => observeAssets(folded, frame, assets, continued),
+      spans,
+    );
+
+  it('folds a batch of frames onto the spans so far as one frame at a time would', () => {
+    fc.assert(
+      fc.property(
+        fc.array(assetFrame, { maxLength: 12 }),
+        fc.array(assetFrame, { maxLength: 12 }),
+        (before, batch) => {
+          const spans = oneByOne([], before);
+          expect(observeAssetFrames(spans, batch)).toEqual(oneByOne(spans, batch));
+        },
+      ),
+    );
+  });
+
+  it('keeps the spans themselves when no frame used anything new', () => {
+    const spans = observeAssets([], 0, [photo('vows')]);
+    expect(observeAssetFrames(spans, [])).toBe(spans);
+    expect(observeAssetFrames(spans, [{ frame: 0, assets: [photo('vows')] }])).toBe(spans);
   });
 });

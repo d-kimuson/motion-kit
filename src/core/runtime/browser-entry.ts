@@ -10,7 +10,7 @@ import {
   mountRequestSchema,
   type LoadingPage,
 } from '../../lib/loading-protocol.ts';
-import { previewLoadParameter } from '../../lib/preview-protocol.ts';
+import { previewDryParameter, previewLoadParameter } from '../../lib/preview-protocol.ts';
 import { type Result } from '../../lib/result.ts';
 import { Composition } from '../composition/composition.tsx';
 import {
@@ -58,7 +58,11 @@ const failure = () =>
  * an external deadline) or a preview host (in-page grants, core's own frame timeout). Requests
  * and leases from the other host are refused.
  */
-export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage => {
+export const createLoadingPage = (
+  input: unknown,
+  host: HostSource,
+  { dry = false }: Readonly<{ dry?: boolean }> = {},
+): LoadingPage => {
   let registry: Registry | undefined;
   let declaration: Result<never> | undefined;
   const parsed = z
@@ -175,7 +179,7 @@ export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage
       );
       if (!prepared.ok) return prepared;
       if (disposed) return failure();
-      const container = document.getElementById('motion-kit-root');
+      const container = dry ? inertContainer() : document.getElementById('motion-kit-root');
       if (container === null) return failure();
       container.style.width = `${prepared.value.descriptor.width}px`;
       container.style.height = `${prepared.value.descriptor.height}px`;
@@ -186,6 +190,7 @@ export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage
         frameTimeoutMs: request.frameTimeoutMs,
         queueTimeoutMs: request.queueTimeoutMs,
         ...(host === 'renderer' ? rendererOwnership(() => selectedRuntime) : {}),
+        dry,
       });
       runtime = selectedRuntime;
       root = createRoot(container);
@@ -218,17 +223,31 @@ export const createLoadingPage = (input: unknown, host: HostSource): LoadingPage
   return api;
 };
 
+/**
+ * A root in a document with no browsing context: React commits into it, so Sequences and assets
+ * register, but nothing in it lays out, paints or fetches.
+ */
+const inertContainer = (): HTMLElement => {
+  const inert = document.implementation.createHTMLDocument('');
+  const container = inert.createElement('div');
+  inert.body.append(container);
+  return container;
+};
+
 /** Browser-only bootstrap; mount never implies an initial seek or readiness. The shell URL fixes
  * the host: `?host=preview` serves a preview host over a port, anything else the renderer. */
 export const bootstrapComposition = (input: unknown): void => {
   const parameters = new URLSearchParams(window.location.search);
   if (parameters.get('host') === 'preview') {
-    servePreviewPort(createLoadingPage(input, 'preview'), {
-      events: window,
-      parent: window.parent,
-      origin: window.location.origin,
-      load: parameters.get(previewLoadParameter) ?? '',
-    });
+    servePreviewPort(
+      createLoadingPage(input, 'preview', { dry: parameters.get(previewDryParameter) === '1' }),
+      {
+        events: window,
+        parent: window.parent,
+        origin: window.location.origin,
+        load: parameters.get(previewLoadParameter) ?? '',
+      },
+    );
     return;
   }
   window.__motionKit = createLoadingPage(input, 'renderer');

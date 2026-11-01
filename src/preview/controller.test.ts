@@ -125,7 +125,6 @@ const setup = (
 ) => {
   const realms: ReturnType<typeof fakeRealm>[] = [];
   const scanners: ReturnType<typeof fakeRealm>[] = [];
-  const scannerSizes: Readonly<{ width: number; height: number }>[] = [];
   const started: { clips: readonly ScheduledClip[]; muted: ReadonlySet<string> }[] = [];
   const events: string[] = [];
   const saved: ReadonlySet<string>[] = [];
@@ -161,9 +160,8 @@ const setup = (
       realms.push(realm);
       return Promise.resolve(realm.realm);
     },
-    connectScanner: (_signal, size) => {
+    connectScanner: () => {
       if (options.scanner !== true) return Promise.reject(new Error('Preview realm closed'));
-      scannerSizes.push({ width: size.width, height: size.height });
       const realm = fakeRealm(
         options.scanned ??
           (realms.length > 1 ? options.later : undefined) ??
@@ -198,7 +196,6 @@ const setup = (
     controller,
     realms,
     scanners,
-    scannerSizes,
     started,
     events,
     saved,
@@ -620,7 +617,6 @@ it('reads every frame in a scan realm, so the timeline knows the frames nobody p
   const host = setup({ scanner: true });
   await host.controller.reload();
   const scanner = host.scanners[0];
-  expect(host.scannerSizes).toEqual([{ width: 320, height: 180 }]);
   expect(scanner?.mounts).toEqual([{ compositionId: 'clip', props: { title: 'hi' } }]);
   expect(host.controller.state().scan).toEqual({ scanned: 0, total: 60 });
   // The stage shows its first frame before the scan takes any.
@@ -662,6 +658,39 @@ it('keeps the earliest frame an asset was seen at, whichever realm saw it first'
   expect(host.controller.state().assets[1]).toMatchObject({ source: '/photo.png', frame: 45 });
   await answerScan(host.scanners[0]);
   expect(host.controller.state().assets[1]).toMatchObject({ source: '/photo.png', frame: 30 });
+});
+
+it('leaves an asset only the scan saw unchecked until the stage shows a frame that uses it', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  host.realms[0]?.shows[0]?.answer();
+  // The scan stands in for every asset, so what it reports says nothing about loading.
+  await answerScan(host.scanners[0], (frame) => ({
+    status: 'shown',
+    frame,
+    sequences: [],
+    assets: [{ kind: 'image', source: '/photo.png', status: 'ready' }],
+  }));
+  expect(host.controller.state().assets).toEqual([
+    { kind: 'font', source: '/inter.woff2', status: 'ready', frame: 0 },
+    { kind: 'image', source: '/photo.png', status: 'unchecked', frame: 0 },
+  ]);
+  host.controller.seek(45);
+  host.realms[0]?.shows[1]?.answer({
+    status: 'shown',
+    frame: 45,
+    sequences: [],
+    assets: [{ kind: 'image', source: '/photo.png', status: 'failed' }],
+  });
+  await flush();
+  expect(host.controller.state().assets[1]).toEqual({
+    kind: 'image',
+    source: '/photo.png',
+    status: 'failed',
+    frame: 0,
+  });
+  // The timeline marks it failed too.
+  expect(host.controller.state().assetSpans.map(({ failed }) => failed)).toContain(true);
 });
 
 it('holds the scan while playback runs or waits for its audio, and goes on after a pause', async () => {
