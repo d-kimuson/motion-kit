@@ -183,6 +183,43 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
   ).toEqual([['intro', 'outro'], ['intro › title']]);
 });
 
+it('keeps the controls row the same width while the shown frame lags, and hides the usual lag of playback', () => {
+  const fps = createFrameRate({ numerator: 30, denominator: 1 });
+  if (!fps.ok) throw new Error('No frame rate');
+  const session = {
+    kind: 'ready' as const,
+    descriptor: {
+      id: 'clip',
+      width: 320,
+      height: 180,
+      fps: { numerator: 30, denominator: 1 },
+      durationInFrames: 6659,
+    },
+    fps: fps.value,
+  };
+  const lagOf = (overrides: Partial<PreviewState>) => {
+    const { controller } = fakeController({ session, ...overrides });
+    const root = document.createElement('div');
+    document.body.append(root);
+    const view = createRoot(root);
+    cleanups.push(() => {
+      act(() => view.unmount());
+      root.remove();
+    });
+    act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+    const lag = root.querySelector<HTMLElement>('.mk-lag');
+    return lag === null ? 'absent' : getComputedStyle(lag).visibility;
+  };
+  const shown = (frame: number) => ({ status: 'shown' as const, frame, sequences: [] });
+  const playing = { kind: 'playing' as const, anchorFrame: 0, anchorTime: 0 };
+  // The slot is always laid out, so the scrubber never resizes as the lag comes and goes.
+  expect(lagOf({ playhead: 205, shown: shown(205) })).toBe('hidden');
+  expect(lagOf({ playhead: 205, shown: shown(200) })).toBe('visible');
+  // A frame or two behind is every tick of playback; only half a second behind is worth showing.
+  expect(lagOf({ playback: playing, playhead: 205, shown: shown(203) })).toBe('hidden');
+  expect(lagOf({ playback: playing, playhead: 205, shown: shown(180) })).toBe('visible');
+});
+
 it('highlights only the spans the shown frame is inside, not every mounted one', () => {
   const fps = createFrameRate({ numerator: 30, denominator: 1 });
   if (!fps.ok) throw new Error('No frame rate');

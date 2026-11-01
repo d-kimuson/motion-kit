@@ -83,7 +83,7 @@ type ShowOutcome =
 
 `mount` runs the Loading Page's mount with a fresh revision and instance and a 30 s loading timeout. `show` runs `settleFrame(frame, { source: 'preview' })`, then `completeCapture(lease)` once the frame is committed (`resettle` while the lease asks for it), and replies with the spans `sequences()` reports. Completing the lease is the preview's presentation: it releases ownership without a screenshot. Ownership is granted inside the realm and core's own frame timeout bounds the work, because no external host can recycle the user's browser. A Loading Page serves one host source: renderer requests and leases are rejected in a preview realm, and preview ones in a renderer realm. A request whose handling throws still gets a reply of its type, carrying `internal.unexpected` (a failed `Result` or a failed `ShowOutcome`), so the single `show` in flight never blocks playback.
 
-The host keeps at most one `show` in flight (`Presenter`). When it replies, the host requests the latest wanted frame if it differs from the one shown. A frame slower than the playback interval is therefore shown late, never starved by supersession, and the UI shows the lag (`showing <n>` next to the playhead).
+The host keeps at most one `show` in flight (`Presenter`). When it replies, the host requests the latest wanted frame if it differs from the one shown. A frame slower than the playback interval is therefore shown late, never starved by supersession, and the UI shows the lag (`showing <n>` next to the playhead): always while paused, and during playback only past half a second, since every tick is a frame or two behind. Its slot is always laid out, so the controls row never changes width as it comes and goes.
 
 ### Host state
 

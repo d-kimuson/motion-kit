@@ -168,6 +168,13 @@ const Controls = ({
   const last = Math.max(descriptor.durationInFrames - 1, 0);
   const shownFrame = state.shown?.status === 'shown' ? state.shown.frame : undefined;
   // A play waiting for its audio already shows pause, so a second press withdraws it.
+  const digits = String(last).length;
+  // Playback is a frame or two behind on every tick; only half a second behind is worth showing.
+  const tolerated =
+    state.playback.kind === 'playing'
+      ? descriptor.fps.numerator / descriptor.fps.denominator / 2
+      : 0;
+  const lagging = shownFrame !== undefined && Math.abs(state.playhead - shownFrame) > tolerated;
   const playing = state.playback.kind === 'playing' || state.starting;
   return (
     <div className="mk-controls">
@@ -196,14 +203,17 @@ const Controls = ({
           ? ''
           : `${timecode(state.playhead, fps)} / ${timecode(descriptor.durationInFrames, fps)}`}
       </span>
-      <span>
+      <span style={{ minWidth: `${2 * digits + 9}ch` }}>
         frame {state.playhead} / {last}
       </span>
-      {shownFrame !== undefined && shownFrame !== state.playhead ? (
-        <span className="mk-lag" title="The realm is still rendering the playhead">
-          showing {shownFrame}
-        </span>
-      ) : undefined}
+      {/* Always laid out, so the scrubber does not resize as the lag comes and goes. */}
+      <span
+        className="mk-lag"
+        style={{ minWidth: `${digits + 8}ch`, visibility: lagging ? 'visible' : 'hidden' }}
+        title="The realm is still rendering the playhead"
+      >
+        showing {shownFrame ?? state.playhead}
+      </span>
     </div>
   );
 };
