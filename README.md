@@ -12,7 +12,7 @@ named `@kimuson/motion-kit`.
 muxing, and the determinism suite that keeps frame bytes independent of capture order. `CHANGELOG.md`
 in the repository lists what is in it and what is known to be limited.
 
-Not in 0.0.1: the preview UI, in-browser preview audio, audio-reactive visuals, video assets, the
+Not in 0.0.1: the preview UI and in-browser preview audio (both unreleased, in `motion-kit preview`), audio-reactive visuals, video assets, the
 `/motion`, `/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. The
 [package surface](#package-surface) says what is exported today; each later context gets its own
 subpath when it lands.

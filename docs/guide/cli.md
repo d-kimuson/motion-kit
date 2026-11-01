@@ -49,7 +49,7 @@ directory of the repository are written.
 
 ## Renderer configuration
 
-`render`, `frame` and `check` accept these options; `preview` accepts only `--project-root` and `--vite-config`:
+`render`, `frame` and `check` accept these options. `preview` accepts only `--project-root` and `--vite-config` of them (see [`preview`](#preview)).
 
 | Flag                   | Environment override         | Meaning                                                                                           |
 | ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |

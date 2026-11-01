@@ -39,7 +39,7 @@ The names are the ones in `src/`; [preview CONTEXT](../contexts/preview/CONTEXT.
 | Host↔realm messages and the host page configuration    | `src/lib/preview-protocol.ts`                                                                 | both sides                    |
 | Host UI, its state machine and pure scheduling         | `src/preview` (context `preview`)                                                             | host page, outside the iframe |
 
-`preview` depends on `core` (Time Module) and `src/lib`; it never imports `render`, `agent`, `cli`, `three`, Vite, Playwright or Node APIs (lint: `PREVIEW_RESTRICTION` in `oxlint.config.ts`). The CLI imports only the query helpers from it (`src/preview/query.ts`).
+`preview` depends on `core` (Time Module) and `src/lib`; it never imports `render`, `agent`, `cli`, `three`, `motion`, `theme`, `presets`, Vite, Playwright or Node APIs (lint: `PREVIEW_RESTRICTION` in `oxlint.config.ts`). The CLI imports only the query helpers from it (`src/preview/query.ts`).
 
 The loading server serves the host bundle through two reserved ids, like the bootstrap (`@kimuson/motion-kit/browser`): the generated page module `virtual:motion-kit-preview-entry` (`previewEntrySource`), which imports `@kimuson/motion-kit/preview` and calls `startPreviewHost()`. `@kimuson/motion-kit/preview` resolves to `src/preview/host.tsx` in the repository and to `dist/preview.js` in the built package (`tsdown.config.ts` entry `preview`). It is not a public subpath: a project alias for either id is overridden, as for the bootstrap ids. The child process lifecycle that `session.ts` and `preview-session.ts` share lives in `service.ts` (`startLoadingService`).
 
