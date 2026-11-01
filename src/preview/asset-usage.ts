@@ -1,8 +1,10 @@
 import { type RegisteredAsset } from '../lib/preview-protocol.ts';
 
 /**
- * The assets one timeline item stands for: one file, or every numbered frame of an image sequence
- * (`clips/vows/f_00001.jpg`, `f_00002.jpg`, ...), which a video made of stills registers one per frame.
+ * The assets one timeline item stands for: one file, or every data URL of a kind. A numbered name is
+ * not taken for a frame of an image sequence: photos named by the time they were taken
+ * (`IMG20261031111549.jpg`) number as closely as the frames of one, so a video made of stills
+ * shows as a run of short items, one per still.
  */
 export type AssetGroup = Readonly<{ kind: string; key: string; label: string }>;
 
@@ -14,20 +16,10 @@ export type AssetSpan = Readonly<{
   failed: boolean;
 }>;
 
-// The number at the end of a file name's stem; the extension (`.woff2`) may hold digits too.
-const frameNumber = /\d+$/;
-
 export const assetGroup = ({ kind, source }: RegisteredAsset): AssetGroup => {
   // A data URL has no name, and each one is different, so they are one group per kind.
   if (source.startsWith('data:')) return { kind, key: 'data:', label: 'data: URL' };
-  const slash = source.lastIndexOf('/');
-  const name = source.slice(slash + 1);
-  const dot = name.lastIndexOf('.');
-  const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
-  if (!frameNumber.test(stem)) return { kind, key: source, label: name };
-  const key = source.slice(0, slash + 1) + stem.replace(frameNumber, '*') + extension;
-  // The folder usually names the sequence, so it stays in the label.
-  return { kind, key, label: key.split('/').slice(-2).join('/') };
+  return { kind, key: source, label: source.slice(source.lastIndexOf('/') + 1) };
 };
 
 const sameGroup = (a: AssetGroup, b: AssetGroup) => a.kind === b.kind && a.key === b.key;

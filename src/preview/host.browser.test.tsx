@@ -252,13 +252,13 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
 
 it('lays the asset groups out over the frames that used them, in lanes of their own', () => {
   const group = (key: string, label: string, kind = 'image') => ({ kind, key, label });
-  const vows = group('clips/vows/f_*.jpg', 'vows/f_*.jpg');
+  const vows = group('photos/vows.jpg', 'vows.jpg');
   const { controller } = fakeController({
     session: readySession(60),
     assetSpans: [
       { group: vows, start: 0, end: 30, failed: false },
       { group: group('/inter.woff2', 'inter.woff2', 'font'), start: 0, end: 60, failed: false },
-      { group: group('clips/toast/f_*.jpg', 'toast/f_*.jpg'), start: 30, end: 90, failed: true },
+      { group: group('photos/toast.jpg', 'toast.jpg'), start: 30, end: 90, failed: true },
     ],
   });
   const { root } = mount(controller);
@@ -275,17 +275,17 @@ it('lays the asset groups out over the frames that used them, in lanes of their 
     ),
   ).toEqual([
     [
-      ['vows/f_*.jpg', '0%', 'calc(50%)'],
+      ['vows.jpg', '0%', 'calc(50%)'],
       // A span past the end is cut at the end of the Composition.
-      ['toast/f_*.jpg', '50%', 'calc(0%)'],
+      ['toast.jpg', '50%', 'calc(0%)'],
     ],
     [['inter.woff2', '0%', 'calc(0%)']],
   ]);
   expect(root.textContent).toContain('Assets');
   const failed = root.querySelector<HTMLElement>(
-    '[data-slot=timeline-asset][title^="clips/toast"]',
+    '[data-slot=timeline-asset][title^="photos/toast"]',
   );
-  expect(failed?.title).toBe('clips/toast/f_*.jpg [30, 90), failed to load');
+  expect(failed?.title).toBe('photos/toast.jpg [30, 90), failed to load');
   expect(failed?.className).toContain('bg-destructive');
 });
 

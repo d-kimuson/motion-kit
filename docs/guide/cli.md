@@ -329,7 +329,7 @@ To leave a note for a coding agent, press Comment (or C): playback pauses and th
 Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
 component state restarts. A change to the Vite config or its dependencies ends the preview with
 `render.page-error` ("The Vite config vite.config.ts changed, so the preview stopped."). The timeline lists every top-level named Sequence from the start, and a nested one once
-the playhead has been inside its parent, because the runtime reports a Sequence only while it is mounted. The Assets lanes fill the same way: each image or font is drawn over the frames shown so far that used it, the numbered frames of an image sequence (`f_00001.jpg`, `f_00002.jpg`, ...) as one bar, and one that failed to load in red.
+the playhead has been inside its parent, because the runtime reports a Sequence only while it is mounted. The Assets lanes fill the same way: each image or font is drawn over the frames shown so far that used it, so the stills of a video made of images (`f_00001.jpg`, `f_00002.jpg`, ...) are a run of short bars in one lane, and one that failed to load is drawn in red.
 
 The preview is for authoring, not for sign-off: it samples frames at a low rate, mixes audio with Web
 Audio rather than FFmpeg, and may differ from the `.mp4` (WebGL implementation, mix). Check the render.
