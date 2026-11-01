@@ -18,6 +18,8 @@ export type ReviewState = Readonly<{
 export type ReviewDependencies = Readonly<{
   preview: Pick<PreviewController, 'state' | 'pause' | 'inspect'>;
   book: Pick<CommentBook, 'add'>;
+  /** The props the page mounts Compositions with; a comment keeps them. */
+  props: Readonly<Record<string, unknown>>;
 }>;
 
 export type ReviewController = Readonly<{
@@ -104,6 +106,7 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
       const time = commentTime(state.draft.anchor, state.draft.end);
       deps.book.add({
         compositionId: session.descriptor.id,
+        props: deps.props,
         time,
         place: state.draft.place,
         sequences: activeSequences(spans, firstFrame(time)).map(({ path }) => [...path]),

@@ -66,6 +66,7 @@ const setup = () => {
         }),
     },
     book,
+    props: { title: 'hi' },
   };
   return {
     review: createReviewController(deps),
@@ -123,7 +124,7 @@ describe('createReviewController', () => {
     expect(host.review.state().draft?.place).toEqual({ kind: 'point', x: 300, y: 100 });
   });
 
-  it('saves a range with the named Sequences at its first frame, earliest end first', () => {
+  it('saves a range with the named Sequences at its first frame and the props, earliest end first', () => {
     const host = setup();
     host.review.commentFrame();
     expect(host.events).toEqual(['pause']);
@@ -134,6 +135,7 @@ describe('createReviewController', () => {
     expect(host.added).toEqual([
       {
         compositionId: 'intro',
+        props: { title: 'hi' },
         time: { kind: 'range', start: 10, end: 40 },
         place: { kind: 'frame' },
         sequences: [['intro']],

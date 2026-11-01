@@ -116,9 +116,9 @@ const reviewOf = (controller: PreviewController): Review => {
     'entry.tsx',
   );
   return {
-    controller: createReviewController({ preview: controller, book }),
+    controller: createReviewController({ preview: controller, book, props: {} }),
     book,
-    site: { projectRoot: '/work/app', realProjectRoot: '/work/app', entry: 'entry.tsx', props: {} },
+    site: { projectRoot: '/work/app', realProjectRoot: '/work/app', entry: 'entry.tsx' },
   };
 };
 
@@ -444,8 +444,17 @@ it('comments on the element clicked in comment mode and copies the review as Mar
     );
     field.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  // Picking again moves the draft to the new target and keeps what was typed.
+  act(() => void press('c'));
+  await act(async () => {
+    layer.dispatchEvent(new MouseEvent('click', { ...at, clientX: box.left + box.width / 2 }));
+    await Promise.resolve();
+  });
+  const kept = root.querySelector<HTMLTextAreaElement>('textarea[aria-label=Comment]');
+  expect(kept?.value).toBe('Bigger title');
+  expect(document.activeElement).toBe(kept);
   act(() => {
-    field.dispatchEvent(
+    kept?.dispatchEvent(
       new KeyboardEvent('keydown', {
         key: 'Enter',
         metaKey: true,
@@ -471,7 +480,7 @@ it('comments on the element clicked in comment mode and copies the review as Mar
     [
       '## 1. 00:00.40 (frame 12)',
       '',
-      '- Element: `h1.title` "Hello" from `src/title.tsx:3:7`, box (20, 30) 100×40, clicked at (80, 90)',
+      '- Element: `h1.title` "Hello" from `src/title.tsx:3:7`, box (20, 30) 100×40, clicked at (160, 90)',
       '',
       '> Bigger title',
     ].join('\n'),

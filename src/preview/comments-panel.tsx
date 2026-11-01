@@ -1,5 +1,5 @@
 import { Check, Copy, MessageSquarePlus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
@@ -39,7 +39,10 @@ const placeLabel = (place: CommentPlace, site: ReviewSite) => {
   return source === null ? selector : `${selector} · ${relativeSource(source, site)}`;
 };
 
-/** The comment being written; Ctrl/⌘+Enter saves it and Escape drops it. */
+/**
+ * The comment being written; Ctrl/⌘+Enter saves it and Escape drops it. Picking another target
+ * moves the draft and keeps its text, and the field takes the focus again.
+ */
 const Composer = ({
   draft,
   playhead,
@@ -52,6 +55,8 @@ const Composer = ({
   review: Review;
 }) => {
   const [body, setBody] = useState('');
+  const field = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => field.current?.focus(), [draft.anchor, draft.place]);
   const save = () => review.controller.save(body);
   return (
     <div data-slot="comment-draft" className="grid grid-cols-1 gap-2 rounded-lg border bg-card p-2">
@@ -62,7 +67,7 @@ const Composer = ({
         </span>
       </div>
       <Textarea
-        autoFocus
+        ref={field}
         aria-label="Comment"
         placeholder="What should change here?"
         value={body}
@@ -202,13 +207,7 @@ export const CommentsPanel = ({
           </Button>
         </div>
       ) : (
-        <Composer
-          key={`${draft.anchor}:${JSON.stringify(draft.place)}`}
-          draft={draft}
-          playhead={state.playhead}
-          fps={fps}
-          review={review}
-        />
+        <Composer draft={draft} playhead={state.playhead} fps={fps} review={review} />
       )}
       {sorted.length === 0 ? undefined : (
         <ol className="grid grid-cols-1 gap-1">

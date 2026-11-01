@@ -5,6 +5,7 @@ import { type CommentDraft } from './comments.ts';
 
 const draft = (overrides: Partial<CommentDraft> = {}): CommentDraft => ({
   compositionId: 'intro',
+  props: {},
   time: { kind: 'frame', frame: 45 },
   place: { kind: 'frame' },
   sequences: [],

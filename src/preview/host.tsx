@@ -112,14 +112,13 @@ export const startPreviewHost = (): void => {
   });
   const book = createCommentBook(storage, projectRoot, entry);
   const review = {
-    controller: createReviewController({ preview: controller, book }),
+    controller: createReviewController({ preview: controller, book, props: query.value.props }),
     book,
     site: {
       projectRoot,
       realProjectRoot,
       entry,
       ...(viteConfig === undefined ? {} : { viteConfig }),
-      props: query.value.props,
     },
   };
   createRoot(root).render(

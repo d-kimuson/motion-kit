@@ -21,7 +21,6 @@ const context: ReviewContext = {
   realProjectRoot: '/private/work/app',
   entry: 'src/entry.tsx',
   compositionId: 'intro',
-  props: {},
   fps: rate(30),
   width: 1920,
   height: 1080,
@@ -30,6 +29,7 @@ const context: ReviewContext = {
 const comment = (overrides: Partial<ReviewComment> = {}): ReviewComment => ({
   id: 1,
   compositionId: 'intro',
+  props: {},
   time: { kind: 'frame', frame: 45 },
   place: { kind: 'frame' },
   sequences: [],
@@ -132,11 +132,11 @@ describe('reviewMarkdown', () => {
       {
         ...context,
         fps: rate(30000, 1001),
-        props: { title: "it's" },
         viteConfig: 'vite.preview.ts',
       },
       [
         comment({
+          props: { title: "it's" },
           time: { kind: 'range', start: 30, end: 90 },
           place: {
             kind: 'element',
@@ -160,6 +160,40 @@ describe('reviewMarkdown', () => {
     expect(markdown).toContain('> (no text)');
     expect(markdown).toContain(
       `motion-kit frame src/entry.tsx --project-root /work/app --vite-config vite.preview.ts --composition intro --frame 30,90 --out review/frames-30-90 --props '{"title":"it'\\''s"}'`,
+    );
+  });
+
+  it('gives each comment the props it was made with when they differ', () => {
+    const markdown = reviewMarkdown(context, [
+      comment({ id: 1, props: { title: 'A' } }),
+      comment({ id: 2, time: { kind: 'frame', frame: 60 } }),
+    ]);
+    expect(markdown.split('\n## ')[0]).not.toContain('Props');
+    expect(markdown).toContain(
+      [
+        '## 1. 00:01.50 (frame 45)',
+        '',
+        '- Props: `{"title":"A"}`',
+        '',
+        '> Too fast.',
+        '',
+        '```sh',
+        `motion-kit frame src/entry.tsx --project-root /work/app --composition intro --frame 45 --out review/frame-45.png --props '{"title":"A"}'`,
+        '```',
+      ].join('\n'),
+    );
+    expect(markdown).toContain(
+      [
+        '## 2. 00:02.00 (frame 60)',
+        '',
+        '- Props: `{}`',
+        '',
+        '> Too fast.',
+        '',
+        '```sh',
+        'motion-kit frame src/entry.tsx --project-root /work/app --composition intro --frame 60 --out review/frame-60.png',
+        '```',
+      ].join('\n'),
     );
   });
 

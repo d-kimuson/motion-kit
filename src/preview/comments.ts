@@ -29,6 +29,8 @@ export type CommentPlace = z.infer<typeof commentPlaceSchema>;
 export const reviewCommentSchema = z.object({
   id: z.int().positive(),
   compositionId: z.string(),
+  /** The props the Composition was mounted with, so its command renders the frame commented on. */
+  props: z.record(z.string(), z.unknown()),
   time: commentTimeSchema,
   place: commentPlaceSchema,
   /** Paths of the named Sequences showing at the first frame, outer before inner. */
@@ -57,7 +59,6 @@ export type ReviewContext = Readonly<{
   entry: string;
   viteConfig?: string;
   compositionId: string;
-  props: Readonly<Record<string, unknown>>;
   fps: FrameRate;
   width: number;
   height: number;
@@ -98,8 +99,9 @@ const frames = (time: CommentTime) =>
   time.kind === 'frame' ? [time.frame] : [time.start, time.end];
 
 /** A `motion-kit frame` command that renders the frames a comment is about. */
-export const reproduceCommand = (context: ReviewContext, time: CommentTime): string => {
-  const props = JSON.stringify(context.props);
+export const reproduceCommand = (context: ReviewContext, comment: ReviewComment): string => {
+  const { time } = comment;
+  const props = JSON.stringify(comment.props);
   return [
     'motion-kit frame',
     shellWord(context.entry),
@@ -126,12 +128,14 @@ const innermost = (paths: readonly (readonly string[])[]) =>
       ),
   );
 
-const facts = (context: ReviewContext, comment: ReviewComment): string[] => {
+const facts = (context: ReviewContext, comment: ReviewComment, ownProps: boolean): string[] => {
   const sequences = innermost(comment.sequences).map((path) => path.map(code).join(' › '));
-  const lines =
-    sequences.length === 0
+  const lines = [
+    ...(ownProps ? [`- Props: ${code(JSON.stringify(comment.props))}`] : []),
+    ...(sequences.length === 0
       ? []
-      : [`- ${sequences.length === 1 ? 'Sequence' : 'Sequences'}: ${sequences.join(', ')}`];
+      : [`- ${sequences.length === 1 ? 'Sequence' : 'Sequences'}: ${sequences.join(', ')}`]),
+  ];
   const { place } = comment;
   if (place.kind === 'point') lines.push(`- Point: ${position(place.x, place.y)}`);
   if (place.kind === 'element') {
@@ -158,19 +162,21 @@ const quote = (body: string) =>
 /**
  * The comments on one Composition as Markdown for a coding agent: each with its time, the named
  * Sequences and the element it is about, and a command that renders its frames, earliest first.
+ * Props shared by every comment are stated once; otherwise each comment states its own.
  */
 export const reviewMarkdown = (
   context: ReviewContext,
   comments: readonly ReviewComment[],
 ): string => {
-  const props = JSON.stringify(context.props);
+  const propsOf = comments.map((comment) => JSON.stringify(comment.props));
+  const shared = propsOf.every((props) => props === propsOf[0]) ? propsOf[0] : undefined;
   const header = [
     `# Preview review of ${code(context.compositionId)}`,
     [
       `- Entry: ${code(context.entry)} in ${code(context.projectRoot)}`,
       ...(context.viteConfig === undefined ? [] : [`- Vite config: ${code(context.viteConfig)}`]),
       `- Composition: ${code(context.compositionId)}, ${context.width}×${context.height} at ${frameRate(context.fps)} fps. Positions are design pixels from the top-left corner.`,
-      ...(props === '{}' ? [] : [`- Props: ${code(props)}`]),
+      ...(shared === undefined || shared === '{}' ? [] : [`- Props: ${code(shared)}`]),
       '- Each command renders the frames a comment is about.',
     ].join('\n'),
   ];
@@ -178,12 +184,12 @@ export const reviewMarkdown = (
     (a, b) => firstFrame(a.time) - firstFrame(b.time) || a.id - b.id,
   );
   const sections = sorted.flatMap((comment, index) => {
-    const lines = facts(context, comment);
+    const lines = facts(context, comment, shared === undefined);
     return [
       heading(index + 1, comment.time, context.fps),
       ...(lines.length === 0 ? [] : [lines.join('\n')]),
       quote(comment.body),
-      ['```sh', reproduceCommand(context, comment.time), '```'].join('\n'),
+      ['```sh', reproduceCommand(context, comment), '```'].join('\n'),
     ];
   });
   return `${[...header, ...(sections.length === 0 ? ['No comments yet.'] : sections)].join('\n\n')}\n`;
