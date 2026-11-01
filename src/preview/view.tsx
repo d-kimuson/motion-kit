@@ -10,7 +10,7 @@ import { type LocaleSetting } from './locale.ts';
 import { messages, MessagesContext, useMessages } from './messages.ts';
 import { SidePanel } from './side-panel.tsx';
 import { previewCss } from './styles.generated.ts';
-import { TimelinePanel } from './timeline.tsx';
+import { type TimelineLayer, TimelinePanel } from './timeline.tsx';
 import { Transport } from './transport.tsx';
 import { Button } from './ui/button.tsx';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable.tsx';
@@ -109,7 +109,7 @@ export const PreviewView = ({
   controller: PreviewController;
   frame: (element: HTMLIFrameElement | null) => void;
   review: Review;
-  /** Where the width the side panel was dragged to is kept across reloads. */
+  /** Where the side panel's width and the bottom panel's height, once dragged, are kept across loads. */
   layoutStorage: LayoutStorage;
   /** The language of the page, which the page switches. */
   locale: LocaleSetting;
@@ -124,6 +124,8 @@ export const PreviewView = ({
   const comments = allComments.filter((comment) => comment.compositionId === descriptor?.id);
   // The box an element row of the side panel points at.
   const [highlight, setHighlight] = useState<ElementBox>();
+  // Kept here, not in the timeline, which a reload after a save unmounts.
+  const [timelineLayer, setTimelineLayer] = useState<TimelineLayer>();
   const layout = useDefaultLayout({
     id: 'motion-kit-preview:layout',
     panelIds: ['stage', 'side'],
@@ -261,7 +263,7 @@ export const PreviewView = ({
             <ResizablePanel
               id="bottom"
               defaultSize="16rem"
-              minSize="7rem"
+              minSize="9rem"
               maxSize="75%"
               groupResizeBehavior="preserve-pixel-size"
             >
@@ -291,6 +293,8 @@ export const PreviewView = ({
                       fps={ready.fps}
                       controller={controller}
                       comments={comments}
+                      layer={timelineLayer}
+                      onChooseLayer={setTimelineLayer}
                     />
                   </>
                 )}

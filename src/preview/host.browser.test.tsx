@@ -295,6 +295,39 @@ it('shows the audio clips or the asset groups under the named Sequences, by the 
   expect(new Set(slots())).toEqual(new Set(['timeline-span', 'timeline-asset']));
 });
 
+it('opens a Composition without audio on its assets and keeps the tab chosen through a reload', () => {
+  const ready = readySession(60);
+  const silent = { ...ready, descriptor: { ...ready.descriptor, audio: [] } };
+  expect(
+    timelineTab(mount(fakeController({ session: silent }).controller).root, 'Assets').getAttribute(
+      'aria-selected',
+    ),
+  ).toBe('true');
+  const { controller } = fakeController({ session: ready });
+  let current = controller.state();
+  const listeners = new Set<() => void>();
+  const { root } = mount({
+    ...controller,
+    state: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const change = (next: PreviewState) => {
+    current = next;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+  };
+  act(() => timelineTab(root, 'Assets').click());
+  // A save reloads the realm, which unmounts the timeline until the Composition is mounted again.
+  change({ ...current, session: { kind: 'connecting' } });
+  expect(root.querySelector('[data-slot=timeline-lane]')).toBeNull();
+  change({ ...current, session: ready });
+  expect(timelineTab(root, 'Assets').getAttribute('aria-selected')).toBe('true');
+});
+
 it('drags the bottom panel taller and keeps its height for the next load', async () => {
   const storage = memoryStorage();
   const { controller, calls } = fakeController({ session: readySession(60) });

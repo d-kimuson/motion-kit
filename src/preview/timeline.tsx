@@ -1,5 +1,5 @@
 import { Image, Type } from 'lucide-react';
-import { memo, type PointerEvent, useMemo, useState } from 'react';
+import { memo, type PointerEvent, useMemo } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
@@ -290,14 +290,26 @@ export const Timeline = ({
 
 /**
  * The timeline under the transport, with a tab for the audio clips and one for the asset groups:
- * both stacked would push the lanes of one out of view. Only the lanes scroll.
+ * both stacked would push the lanes of one out of view. The rows scroll under the tabs. Until a
+ * tab is chosen, a Composition without audio opens on its assets.
  */
-export const TimelinePanel = (props: Omit<Parameters<typeof Timeline>[0], 'layer'>) => {
+export const TimelinePanel = ({
+  layer,
+  onChooseLayer,
+  ...props
+}: Omit<Parameters<typeof Timeline>[0], 'layer'> & {
+  layer: TimelineLayer | undefined;
+  onChooseLayer: (layer: TimelineLayer) => void;
+}) => {
   const t = useMessages().timeline;
-  const [layer, setLayer] = useState<unknown>('audio');
-  const shown: TimelineLayer = layer === 'assets' ? 'assets' : 'audio';
+  const shown: TimelineLayer =
+    layer ?? ((props.descriptor.audio ?? []).length > 0 ? 'audio' : 'assets');
   return (
-    <Tabs value={shown} onValueChange={setLayer} className="min-h-0 flex-1 gap-0 border-t">
+    <Tabs
+      value={shown}
+      onValueChange={(value: unknown) => onChooseLayer(value === 'assets' ? 'assets' : 'audio')}
+      className="min-h-0 flex-1 gap-0 border-t"
+    >
       <TabsList variant="line" className="h-7 shrink-0 px-3 pt-1">
         <TabsTrigger value="audio" className="px-2 text-xs">
           {t.audio}
