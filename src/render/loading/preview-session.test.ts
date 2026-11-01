@@ -113,6 +113,8 @@ it('serves the host page, the preview shell and audio under the Vite fs policy',
   );
   expect(config).toEqual({
     projectRoot: root,
+    realProjectRoot: realpathSync(root),
+    entry: 'entry.tsx',
     shellUrl: '/__motion-kit/?host=preview',
     eventsUrl: '/__motion-kit/preview/events',
     audioUrl: '/__motion-kit/preview/audio',

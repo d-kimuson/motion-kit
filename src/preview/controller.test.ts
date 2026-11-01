@@ -77,6 +77,13 @@ const fakeRealm = (compositions: readonly LoadingDescriptor[], hold = false) => 
             ),
         });
       }),
+    inspect: (x, y) =>
+      closed
+        ? Promise.reject(new Error('Preview realm closed'))
+        : Promise.resolve({
+            ok: true,
+            value: { selector: 'p', text: '', source: null, box: { x, y, width: 1, height: 1 } },
+          }),
     close: () => {
       closed = true;
       reject?.(new Error('Preview realm closed'));
@@ -474,4 +481,16 @@ it('seeks to whole frames', async () => {
     playhead: 12,
     playback: { kind: 'paused', frame: 12 },
   });
+});
+
+it('asks the mounted realm what element is at a point, and answers none without one', async () => {
+  const host = setup();
+  expect(await host.controller.inspect(1, 2)).toEqual({ ok: true, value: null });
+  await host.controller.reload();
+  expect(await host.controller.inspect(3, 4)).toMatchObject({
+    ok: true,
+    value: { box: { x: 3, y: 4 } },
+  });
+  host.realms[0]?.realm.close();
+  expect(await host.controller.inspect(5, 6)).toEqual({ ok: true, value: null });
 });

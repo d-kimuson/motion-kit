@@ -127,7 +127,14 @@ export const previewReloadSchema = z.object({ audio: z.boolean() });
 
 /** What the server inlines into the host page; every URL is absolute-path, under Vite's base. */
 export const previewHostConfigSchema = z.object({
+  /** The resolved project root; review comments name it for `--project-root`. */
   projectRoot: z.string(),
+  /** Its real path, the prefix of the file names in `data-source`. */
+  realProjectRoot: z.string(),
+  /** The entry relative to the project root, which the CLI resolves it against. */
+  entry: z.string(),
+  /** The absolute path of the Vite config `--vite-config` named. */
+  viteConfig: z.string().optional(),
   /** The composition shell in preview host mode. */
   shellUrl: z.string(),
   /** Server-sent events: `reload` after a served module changed. */

@@ -1,6 +1,6 @@
 import type { ResolvedConfig } from 'vite';
 
-import { createReadStream, existsSync } from 'node:fs';
+import { createReadStream, existsSync, realpathSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import {
   createServer as createHttpServer,
@@ -26,7 +26,13 @@ import {
 } from './diagnostics.ts';
 import { htmlShell, previewShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
-import { jsxSourcePlugin, loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
+import {
+  jsxSourcePlugin,
+  loadingPlugin,
+  previewEntry,
+  reactResolution,
+  reservedAliases,
+} from './resolution.ts';
 
 const input = z
   .object({
@@ -41,6 +47,9 @@ const input = z
   })
   .parse(JSON.parse(process.argv[2] ?? '{}'));
 const entry = resolve(input.projectRoot, input.entry);
+// The optimizer scans the preview host too: served from source (in tests) it imports dependencies the
+// entry does not, and without HMR a page that hits a re-optimized dependency is never reloaded.
+const scanned = input.mode === 'preview' ? [entry, previewEntry] : [entry];
 // Only React membership is owned; keep each environment's project policy/order.
 // Normalize again after Vite's array merges and all project hooks have finished.
 const withReactDedupe = (dedupe: readonly string[]) => [
@@ -187,7 +196,7 @@ try {
                   alias: [...reservedAliases(entry), ...react.aliases],
                   dedupe: withReactDedupe(final.resolve?.dedupe ?? []),
                 },
-                optimizeDeps: { ...final.optimizeDeps, entries: [entry], include: react.include },
+                optimizeDeps: { ...final.optimizeDeps, entries: scanned, include: react.include },
                 server: {
                   ...final.server,
                   middlewareMode: true,
@@ -262,7 +271,7 @@ try {
         resolved.server.fs.allow = allow;
         resolved.resolve.alias = aliases;
         resolved.resolve.dedupe = withReactDedupe(resolved.resolve.dedupe);
-        resolved.optimizeDeps.entries = [entry];
+        resolved.optimizeDeps.entries = scanned;
         resolved.optimizeDeps.include = include;
         // Vite has already forked environment options. The optimizer and module
         // resolver consume these, not just the top-level compatibility fields.
@@ -279,7 +288,7 @@ try {
         }
         const client = resolved.environments['client'];
         if (client !== undefined) {
-          client.optimizeDeps.entries = [entry];
+          client.optimizeDeps.entries = scanned;
           client.optimizeDeps.include = include;
         }
       };
@@ -297,6 +306,10 @@ try {
   const previewPath = `${shellPath}preview/`;
   const preview = {
     projectRoot: input.projectRoot,
+    realProjectRoot: realpathSync(input.projectRoot),
+    // The CLI resolves an entry against the project root, so the relative path reproduces it.
+    entry: relative(input.projectRoot, entry),
+    ...(input.viteConfig === undefined ? {} : { viteConfig: input.viteConfig }),
     shellUrl: `${shellPath}?host=preview`,
     eventsUrl: `${previewPath}events`,
     audioUrl: `${previewPath}audio`,

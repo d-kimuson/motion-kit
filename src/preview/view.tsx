@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { type Diagnostic } from '../lib/diagnostic.ts';
+import { CommentLayer } from './comment-layer.tsx';
+import { type Review } from './comments-panel.tsx';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { SidePanel } from './side-panel.tsx';
 import { previewCss } from './styles.generated.ts';
@@ -81,6 +83,7 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
   // A tab moves between its siblings with the arrows and is chosen with Space.
   if (target instanceof Element && target.getAttribute('role') === 'tab') return 'all';
+  if (target instanceof HTMLTextAreaElement) return 'all';
   if (target instanceof HTMLButtonElement) return 'space';
   if (!(target instanceof HTMLInputElement)) return 'none';
   if (target.type === 'range') return 'none';
@@ -91,13 +94,18 @@ const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
 export const PreviewView = ({
   controller,
   frame,
+  review,
 }: {
   controller: PreviewController;
   frame: (element: HTMLIFrameElement | null) => void;
+  review: Review;
 }) => {
   const state = useSyncExternalStore(controller.subscribe, controller.state);
+  const reviewState = useSyncExternalStore(review.controller.subscribe, review.controller.state);
+  const allComments = useSyncExternalStore(review.book.subscribe, review.book.comments);
   const ready = state.session.kind === 'ready' ? state.session : undefined;
   const descriptor = ready?.descriptor;
+  const comments = allComments.filter((comment) => comment.compositionId === descriptor?.id);
   const { stage, scale } = useFit(descriptor?.width ?? 1280, descriptor?.height ?? 720);
   useEffect(() => {
     void controller.reload();
@@ -119,6 +127,11 @@ export const PreviewView = ({
         const current = controller.state();
         if (current.playback.kind === 'playing' || current.starting) controller.pause();
         else void controller.play();
+      } else if (event.key === 'c' || event.key === 'C') {
+        if (controller.state().session.kind === 'ready') review.controller.togglePicking();
+      } else if (event.key === 'Escape') {
+        if (review.controller.state().picking) review.controller.togglePicking();
+        else review.controller.cancel();
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         // A focused scrubber would move by itself as well, and the page would scroll.
         event.preventDefault();
@@ -127,7 +140,7 @@ export const PreviewView = ({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [controller]);
+  }, [controller, review]);
   return (
     <TooltipProvider>
       {/* `href` and `precedence` let React hoist the sheet into <head>, out of the accessibility tree. */}
@@ -146,6 +159,20 @@ export const PreviewView = ({
             height={descriptor?.height ?? 720}
             style={{ transform: `scale(${scale})` }}
           />
+          {descriptor === undefined ? undefined : (
+            <CommentLayer
+              width={descriptor.width}
+              height={descriptor.height}
+              scale={scale}
+              state={reviewState}
+              controller={review.controller}
+            />
+          )}
+          {reviewState.picking ? (
+            <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-md bg-comment px-2 py-1 text-xs text-white shadow">
+              Click an element to comment on it · Esc to stop
+            </div>
+          ) : undefined}
           <Overlay state={state} controller={controller} />
         </div>
         <aside className="min-h-0 border-l bg-card/40">
@@ -155,6 +182,9 @@ export const PreviewView = ({
               descriptor={ready.descriptor}
               fps={ready.fps}
               controller={controller}
+              review={review}
+              draft={reviewState.draft}
+              comments={comments}
             />
           )}
         </aside>
@@ -166,6 +196,8 @@ export const PreviewView = ({
                 descriptor={ready.descriptor}
                 fps={ready.fps}
                 controller={controller}
+                picking={reviewState.picking}
+                onTogglePicking={() => review.controller.togglePicking()}
               />
               {state.shown?.status === 'failed' ? (
                 <div className="grid max-h-24 shrink-0 gap-1 overflow-y-auto border-t px-3 py-2">
@@ -181,6 +213,7 @@ export const PreviewView = ({
                     descriptor={ready.descriptor}
                     fps={ready.fps}
                     controller={controller}
+                    comments={comments}
                   />
                 </div>
               </ScrollArea>

@@ -324,6 +324,8 @@ duration; the named Sequences seen so far, where choosing one jumps to its start
 speaker toggle, pressed while it is audible; releasing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
 fetched or decoded is marked in the page and skipped.
 
+To leave a note for a coding agent, press Comment (or C): playback pauses and the pointer outlines the element under it; click one to comment on it. "Comment on this frame" in the Comments tab comments on the whole frame instead. Seek before saving to make the comment cover a range of frames. Copy Markdown puts every comment on the Composition on the clipboard, each with its time, the named Sequences showing, the element (with the file and line of its JSX in your project) and a `motion-kit frame` command that renders the frames it is about. Comments are kept in the browser's `localStorage` per project root and entry, so like the mute choice they stay with the port.
+
 Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
 component state restarts. A change to the Vite config or its dependencies ends the preview with
 `render.page-error` ("The Vite config vite.config.ts changed, so the preview stopped."). The timeline lists every top-level named Sequence from the start, and a nested one once

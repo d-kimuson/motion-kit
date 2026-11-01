@@ -76,6 +76,31 @@ it('connects on the frame announcement and correlates replies by id', async () =
   realm.close();
 });
 
+it('asks the realm what element is at a design-pixel point', async () => {
+  const element = {
+    selector: 'h1',
+    text: 'Hello',
+    source: null,
+    box: { x: 0, y: 0, width: 100, height: 40 },
+  };
+  const fake = harness((request) => {
+    const parsed = previewRequestSchema.parse(request);
+    return parsed.type === 'inspect'
+      ? {
+          type: 'inspected',
+          id: parsed.id,
+          result: { ok: true, value: parsed.x < 100 ? element : null },
+        }
+      : undefined;
+  });
+  const connecting = connectRealm(fake.window, '2');
+  fake.announce(ready);
+  const realm = await connecting;
+  expect(await realm.inspect(10, 20)).toEqual({ ok: true, value: element });
+  expect(await realm.inspect(500, 20)).toEqual({ ok: true, value: null });
+  realm.close();
+});
+
 it('ignores announcements from other windows, origins or protocol versions', async () => {
   const fake = harness((request) => listed(previewRequestSchema.parse(request).id));
   const connecting = connectRealm(fake.window, '2');

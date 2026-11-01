@@ -3,6 +3,7 @@ import { type PointerEvent } from 'react';
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
+import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { packLanes, timecode } from './schedule.ts';
 import { cn } from './ui/utils.ts';
@@ -35,7 +36,7 @@ const BAR =
   'absolute inset-y-0 overflow-hidden rounded-sm px-1.5 text-[11px] leading-5 whitespace-nowrap text-ellipsis';
 
 /**
- * Every named Sequence and audio clip on one time axis, with the playhead. Pressing or dragging
+ * Every review comment, named Sequence and audio clip on one time axis, with the playhead. Pressing or dragging
  * anywhere on it seeks; spans that never overlap share a lane, so many of them stay compact.
  */
 export const Timeline = ({
@@ -43,11 +44,13 @@ export const Timeline = ({
   descriptor,
   fps,
   controller,
+  comments,
 }: {
   state: PreviewState;
   descriptor: LoadingDescriptor;
   fps: FrameRate;
   controller: PreviewController;
+  comments: readonly ReviewComment[];
 }) => {
   const duration = descriptor.durationInFrames;
   // A named Sequence is reported while its parent is mounted, so the shown frame picks the active.
@@ -82,6 +85,7 @@ export const Timeline = ({
     controller.seek(Math.min(Math.floor(ratio * duration), Math.max(duration - 1, 0)));
   };
   const lanes = [
+    ...(comments.length === 0 ? [] : ['Comments']),
     ...spanLanes.map((_, index) => (index === 0 ? 'Sequences' : '')),
     ...audioLanes.map((_, index) => (index === 0 ? 'Audio' : '')),
   ];
@@ -116,6 +120,24 @@ export const Timeline = ({
           ))}
         </div>
         <div className="mt-1 grid gap-y-1">
+          {comments.length === 0 ? undefined : (
+            <div className={LANE} data-slot="timeline-lane">
+              {comments.map(({ id, time, body }) => {
+                // A one-frame comment is a frame wide, so it stays visible on a long Composition.
+                const [start, end] =
+                  time.kind === 'frame' ? [time.frame, time.frame + 1] : [time.start, time.end + 1];
+                return (
+                  <div
+                    key={id}
+                    data-slot="timeline-comment"
+                    className="absolute inset-y-1 min-w-1.5 -translate-x-px rounded-sm bg-comment/70"
+                    style={placed(start, end, duration)}
+                    title={`${timecode(start, fps)} ${body}`}
+                  />
+                );
+              })}
+            </div>
+          )}
           {spanLanes.map((lane, laneIndex) => (
             <div className={LANE} data-slot="timeline-lane" key={`span:${laneIndex}`}>
               {lane.map(({ span, start, end }) => {

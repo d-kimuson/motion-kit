@@ -1,10 +1,13 @@
 import { TriangleAlert, Volume2, VolumeX } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
+import { CommentsPanel, type Review } from './comments-panel.tsx';
+import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { type CommentDraftState } from './review.ts';
 import { timecode } from './schedule.ts';
 import { basename, sameSpan } from './timeline.tsx';
 import { Badge } from './ui/badge.tsx';
@@ -149,42 +152,70 @@ const Count = ({ value }: { value: number }) =>
     </Badge>
   );
 
-/** The side menu next to the stage: a tab per concern, each scrolling on its own. */
+/** The side menu next to the stage: a tab per concern, each scrolling on its own. A new draft opens the comments. */
 export const SidePanel = ({
   state,
   descriptor,
   fps,
   controller,
+  review,
+  draft,
+  comments,
 }: {
   state: PreviewState;
   descriptor: LoadingDescriptor;
   fps: FrameRate;
   controller: PreviewController;
-}) => (
-  <Tabs defaultValue="composition" className="flex h-full min-h-0 flex-col gap-0">
-    <div className="border-b p-2">
-      <TabsList className="w-full">
-        <TabsTrigger value="composition">Composition</TabsTrigger>
-        <TabsTrigger value="sequences">
-          Sequences <Count value={state.spans.length} />
-        </TabsTrigger>
-        <TabsTrigger value="audio">
-          Audio <Count value={new Set((descriptor.audio ?? []).map((track) => track.src)).size} />
-        </TabsTrigger>
-      </TabsList>
-    </div>
-    {(
-      [
-        ['composition', <CompositionFacts descriptor={descriptor} fps={fps} />],
-        ['sequences', <Sequences state={state} fps={fps} controller={controller} />],
-        ['audio', <AudioSources state={state} descriptor={descriptor} controller={controller} />],
-      ] as const
-    ).map(([value, content]) => (
-      <TabsContent key={value} value={value} className="min-h-0">
-        <ScrollArea className="h-full">
-          <div className="p-2">{content}</div>
-        </ScrollArea>
-      </TabsContent>
-    ))}
-  </Tabs>
-);
+  review: Review;
+  draft: CommentDraftState | undefined;
+  comments: readonly ReviewComment[];
+}) => {
+  const [tab, setTab] = useState<unknown>('composition');
+  const drafting = draft !== undefined;
+  useEffect(() => {
+    if (drafting) setTab('comments');
+  }, [drafting]);
+  return (
+    <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
+      <div className="border-b p-2">
+        <TabsList className="w-full">
+          <TabsTrigger value="composition">Composition</TabsTrigger>
+          <TabsTrigger value="sequences">
+            Sequences <Count value={state.spans.length} />
+          </TabsTrigger>
+          <TabsTrigger value="audio">
+            Audio <Count value={new Set((descriptor.audio ?? []).map((track) => track.src)).size} />
+          </TabsTrigger>
+          <TabsTrigger value="comments">
+            Comments <Count value={comments.length} />
+          </TabsTrigger>
+        </TabsList>
+      </div>
+      {(
+        [
+          ['composition', <CompositionFacts descriptor={descriptor} fps={fps} />],
+          ['sequences', <Sequences state={state} fps={fps} controller={controller} />],
+          ['audio', <AudioSources state={state} descriptor={descriptor} controller={controller} />],
+          [
+            'comments',
+            <CommentsPanel
+              state={state}
+              descriptor={descriptor}
+              fps={fps}
+              controller={controller}
+              review={review}
+              draft={draft}
+              comments={comments}
+            />,
+          ],
+        ] as const
+      ).map(([value, content]) => (
+        <TabsContent key={value} value={value} className="min-h-0">
+          <ScrollArea className="h-full">
+            <div className="p-2">{content}</div>
+          </ScrollArea>
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+};

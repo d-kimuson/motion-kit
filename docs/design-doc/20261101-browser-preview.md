@@ -2,19 +2,20 @@
 
 ## Goal
 
-`motion-kit preview <entry>` lets a human scrub, step and play a Composition in their own browser, with its declared audio, without encoding a file (TASK-246). Review comments copied as Markdown for a coding agent follow in TASK-245; named Sequences (TASK-247) give both a semantic location.
+`motion-kit preview <entry>` lets a human scrub, step and play a Composition in their own browser, with its declared audio, without encoding a file (TASK-246), and take review comments on a frame, a range of frames, a point or an element, copied as Markdown for a coding agent with a command that renders each comment's frames (TASK-245); named Sequences (TASK-247) give both a semantic location.
 
 Verified by (all in the repository's test suite):
 
 - unit tests of the host's pure parts: playhead → requested frame, the audio schedule, the `mm:ss.cc` label, the single-flight presenter, timeline lanes (`src/preview/schedule.test.ts`), the preview query (`query.test.ts`), the audio player and muted-source storage (`audio.test.ts`), the realm handshake and requests (`connection.test.ts`), and the controller as a state machine over fakes, including a realm that never starts and Play before the audio is decoded (`controller.test.ts`);
-- a browser test that a composition realm in preview host mode answers list, mount and show over a `MessagePort`, reports props and range failures as data, serves only the first port its parent transfers, and rejects renderer requests and leases (`src/core/runtime/preview-port.browser.test.tsx`);
-- a loading test that a preview session serves the host page, the preview shell and the audio route under Vite's fs policy (file names with `#` and `?` included), emits `reload` on a source change and on a change to an audio file the host fetched, including one created after the host first asked for it, ends when the Vite config changes, listens on a requested port and reports one that is taken, and removes its workspace on disposal (`src/render/loading/preview-session.test.ts`);
-- a browser test of the host page: the realm's start failures, the playback keys and where a focused control keeps them (a side panel tab included), timeline lanes and highlighting, the lag slot, and the side panel's audio mute toggles and Sequence seeks (`src/preview/host.browser.test.tsx`);
+- unit tests of review comments: their Markdown and reproduction command, shell quoting and source paths (`src/preview/comments.test.ts`), the comment store over `localStorage` (`comment-book.test.ts`), and comment mode as a state machine over a fake controller, including a pointer that leaves during a pick (`review.test.ts`);
+- a browser test that a composition realm in preview host mode answers list, mount, show and inspect over a `MessagePort`, reports props and range failures as data, serves only the first port its parent transfers, and rejects renderer requests and leases (`src/core/runtime/preview-port.browser.test.tsx`);
+- a loading test that a preview session serves the host page, the preview shell and the audio route under Vite's fs policy (file names with `#` and `?` included), emits `reload` on a source change and on a change to an audio file the host fetched, including one created after the host first asked for it, ends when the Vite config changes, listens on a requested port and reports one that is taken, marks the project's host elements with `data-source` and leaves an author's own, and removes its workspace on disposal (`src/render/loading/preview-session.test.ts`);
+- a browser test of the host page: the realm's start failures, the playback keys and where a focused control keeps them (a side panel tab included), timeline lanes and highlighting, the lag slot, the side panel's audio mute toggles and Sequence seeks, and a comment on an element picked in comment mode, from the click to the copied Markdown (`src/preview/host.browser.test.tsx`);
 - unit tests that the third-party notice covers what the preview bundles: the imported devDependencies and the packages they depend on (`scripts/third-party-licenses.test.ts`);
 - CLI tests of the `preview` arguments, the readiness envelope and the stop semantics (`src/cli/preview.test.ts`);
 - a built-package test that `dist/cli.js preview` serves the host page whose module imports `dist/preview.js` (`src/cli/built-artifact.test.ts`).
 
-A QA Check in a real browser on an example Composition (scrub, play, audio with per-track mute, reload on edit) is a manual step and is not recorded by this document.
+A QA Check in a real browser on an example Composition (scrub, play, audio with per-track mute, reload on edit, point, range and element comments whose command renders the frame commented on) is a manual step and is not recorded by this document.
 
 ## Non-Goals
 
@@ -25,7 +26,8 @@ A QA Check in a real browser on an example Composition (scrub, play, audio with 
 - Supervising a hung page. Preview cannot terminate the user's browser; a frame that never settles ends in core's own frame timeout.
 - Remote access: the session listens on loopback only.
 - Validating the Composition or its props against the registry in the CLI. The CLI starts no browser and only requires `--props` to be a JSON object; selection and schema failures are shown in the page.
-- Review comments and their Markdown export (TASK-245). Not built; the timeline's Sequence names and the Playhead frame are the anchors it will use.
+- Screenshots in review comments. The Markdown names the frames and a `motion-kit frame` command renders them; an image would be a preview frame, which may differ from the render.
+- Sharing or storing comments on the server. The server stays read-only; comments live in the browser's `localStorage` and leave it as Markdown on the clipboard.
 
 ## Design
 
@@ -72,11 +74,13 @@ The realm's host mode is fixed at bootstrap from the shell URL (`?host=preview`)
 type PreviewRequest =
   | { type: 'list'; id: number }
   | { type: 'mount'; id: number; compositionId?: string; props: unknown }
-  | { type: 'show'; id: number; frame: number };
+  | { type: 'show'; id: number; frame: number }
+  | { type: 'inspect'; id: number; x: number; y: number };
 type PreviewReply =
   | { type: 'listed'; id: number; result: Result<readonly LoadingDescriptor[]> }
   | { type: 'mounted'; id: number; result: Result<MountReceipt> }
-  | { type: 'shown'; id: number; outcome: ShowOutcome };
+  | { type: 'shown'; id: number; outcome: ShowOutcome }
+  | { type: 'inspected'; id: number; result: Result<InspectedElement | null> };
 type ShowOutcome =
   | { status: 'shown'; frame: number; sequences: readonly SequenceSpan[] }
   | { status: 'failed'; diagnostics: readonly [Diagnostic, ...Diagnostic[]] }
@@ -84,6 +88,8 @@ type ShowOutcome =
 ```
 
 `mount` runs the Loading Page's mount with a fresh revision and instance and a 30 s loading timeout. `show` runs `settleFrame(frame, { source: 'preview' })`, then `completeCapture(lease)` once the frame is committed (`resettle` while the lease asks for it), and replies with the spans `sequences()` reports. Completing the lease is the preview's presentation: it releases ownership without a screenshot. Ownership is granted inside the realm and core's own frame timeout bounds the work, because no external host can recycle the user's browser. A Loading Page serves one host source: renderer requests and leases are rejected in a preview realm, and preview ones in a renderer realm. A request whose handling throws still gets a reply of its type, carrying `internal.unexpected` (a failed `Result` or a failed `ShowOutcome`), so the single `show` in flight never blocks playback.
+
+`inspect` answers which element of the mounted Composition is at a point in design pixels (`inspectPoint`, `src/core/runtime/inspect.ts`): its selector (tag, id, classes), its whitespace-collapsed text up to 80 characters, the `data-source` of its nearest marked ancestor, and its box in design pixels, or null where the point hits only the root. It reads the committed DOM and settles nothing, so it does not take a lease or wait for the `show` in flight.
 
 The host keeps at most one `show` in flight (`Presenter`). When it replies, the host requests the latest wanted frame if it differs from the one shown. A frame slower than the playback interval is therefore shown late, never starved by supersession, and the UI shows the lag (`showing <n>` next to the playhead): always while paused, and during playback only past half a second, since every tick is a frame or two behind. Its slot is always laid out, so the controls row never changes width as it comes and goes.
 
@@ -118,15 +124,31 @@ Web Audio decodes each distinct `src` once (`fetch` of the audio route, `decodeA
 
 ### Layout and styling
 
-The page is a grid: the stage (the composition iframe, scaled to fit) and a side panel share the top row, and the bottom row spans both with the transport (play, frame steps, timecode, the scrubber, the frame number and the lag) above the timeline. The bottom row is capped at 40% of the window and only the timeline scrolls in it, so the transport stays in view however many lanes there are. The side panel has a tab per concern, each scrolling on its own: the Composition's facts (id, size, frame rate, duration, number of audio clips), the named Sequences seen since the last reload, indented by depth and seeking to a Sequence's start when chosen, and the audio sources, one row per `src` with its mute toggle, its clip count and an unplayable badge.
+The page is a grid: the stage (the composition iframe, scaled to fit) and a side panel share the top row, and the bottom row spans both with the transport (play, frame steps, timecode, the scrubber, the frame number and the lag) above the timeline. The bottom row is capped at 40% of the window and only the timeline scrolls in it, so the transport stays in view however many lanes there are. The side panel has a tab per concern, each scrolling on its own: the Composition's facts (id, size, frame rate, duration, number of audio clips), the named Sequences seen since the last reload, indented by depth and seeking to a Sequence's start when chosen, the audio sources, one row per `src` with its mute toggle, its clip count and an unplayable badge, and the review comments (below).
 
-The components are shadcn/ui's (style `base-nova`, on Base UI), generated by the shadcn CLI into `src/preview/ui` and adapted to the repository's lint rules; the license is next to them and in `THIRD_PARTY_LICENSES.md`. The scrubber stays a native range input, because the window-wide arrow keys already step a frame and a Base UI slider would step a second time. Styles are Tailwind utilities with shadcn's dark palette and four colors of the preview's own (`playhead`, `sequence`, `audio`, `warning`) in `src/preview/styles.css`. The user's Vite has no Tailwind plugin, so `scripts/preview-css.ts` compiles the stylesheet against the class names in `src/preview/**/*.tsx` into `src/preview/styles.generated.ts` (gitignored; `pnpm build` runs it first) with `tailwindcss` itself, not `@tailwindcss/node`, whose lightningcss is MPL-2.0 and would fail the license allowlist. The view renders the result in a `<style>` element that React hoists into `<head>`, keeping the CSS text out of the accessibility tree agents read. The host page is its own document, so the styles never reach the Composition.
+The components are shadcn/ui's (style `base-nova`, on Base UI), generated by the shadcn CLI into `src/preview/ui` and adapted to the repository's lint rules; the license is next to them and in `THIRD_PARTY_LICENSES.md`. The scrubber stays a native range input, because the window-wide arrow keys already step a frame and a Base UI slider would step a second time. Styles are Tailwind utilities with shadcn's dark palette and five colors of the preview's own (`playhead`, `sequence`, `audio`, `comment`, `warning`) in `src/preview/styles.css`. The user's Vite has no Tailwind plugin, so `scripts/preview-css.ts` compiles the stylesheet against the class names in `src/preview/**/*.tsx` into `src/preview/styles.generated.ts` (gitignored; `pnpm build` runs it first) with `tailwindcss` itself, not `@tailwindcss/node`, whose lightningcss is MPL-2.0 and would fail the license allowlist. The view renders the result in a `<style>` element that React hoists into `<head>`, keeping the CSS text out of the accessibility tree agents read. The host page is its own document, so the styles never reach the Composition.
 
 Base UI imports the CommonJS shims of `use-sync-external-store`, whose `require("react")` has no answer in a browser bundle with React external. The `preview` build aliases them to `src/preview/vendor`: the plain shim re-exports React's own hook, and `with-selector` is a TypeScript port of the original (MIT, notice in the file).
 
 ### Timeline overlay
 
-Rows under the transport show the named Sequences the realm has reported and the declared audio clips, each packed into lanes (`packLanes`) so spans or clips that do not overlap share a row. A named Sequence is reported while it is mounted, which is whenever its ancestors show the frame, active or not (core `CONTEXT.md`). So the top-level ones are listed from the first frame shown, and the host keeps every span it has seen since the last reload; it highlights the spans of the latest `shown` reply that are showing at the shown frame (`activeSequences`), not every reported one. Zero-length spans are not drawn; spans and clips are clipped to the Composition for drawing only.
+Rows under the transport show the named Sequences the realm has reported and the declared audio clips, each packed into lanes (`packLanes`) so spans or clips that do not overlap share a row. A named Sequence is reported while it is mounted, which is whenever its ancestors show the frame, active or not (core `CONTEXT.md`). So the top-level ones are listed from the first frame shown, and the host keeps every span it has seen since the last reload; it highlights the spans of the latest `shown` reply that are showing at the shown frame (`activeSequences`), not every reported one. Zero-length spans are not drawn; spans and clips are clipped to the Composition for drawing only. A last lane marks the mounted Composition's review comments: a range over its frames, a frame comment one frame wide.
+
+### Review comments
+
+A review comment (`ReviewComment`, `src/preview/comments.ts`) is about a time, one frame or a range of frames from `start` through `end`, and a place: the whole frame, a point, or an element, each in design pixels. It also records the paths of the named Sequences showing at its first frame, which are its primary location in the Markdown, because they survive edits that move frames and files.
+
+- **Comment mode.** The Comment toggle in the transport, or C, pauses playback and lays a layer over the stage (`CommentLayer`) at the Composition's size and scale; the realm frame takes no pointer input. Moving the pointer asks the realm to `inspect` the point and outlines the element with its selector; the latest move wins. A click inspects the point and drafts a comment on that element, or on the point where it hits no element or the realm cannot answer, and leaves comment mode. Escape leaves comment mode, or drops the draft. "Comment on this frame" in the Comments tab drafts a whole-frame comment at the playhead.
+- **Draft.** A draft is anchored at the playhead (`createReviewController`, `src/preview/review.ts`). Seeking and "Range to <time>" sets its other end, so the comment covers every frame in between; ⌘/Ctrl+Enter or Save stores it, Escape or Cancel drops it. The Comments tab opens with the draft, and its text field keeps every key, so Space types a space.
+- **Source location.** In preview mode the loading service rewrites the project's own `.jsx`/`.tsx` modules to import a JSX dev runtime (`jsxSourcePlugin`) that adds `data-source="file:line:column"` to each host element from the location esbuild's development transform passes. motion-kit's modules, dependencies and the dependency optimizer are left alone, and an author's own `data-source` is kept. The page shows and copies the path relative to the project root. It is an aid: a component's elements carry the location inside the component, not where it is used.
+- **Storage.** Comments are kept in `localStorage` under `motion-kit-preview:comments:<projectRoot>:<entry>` (`createCommentBook`), so they survive reloads and restarts on the same port, and are shown for the mounted Composition only. An entry that does not parse is skipped; a storage that refuses a write keeps the comments for the page.
+- **Markdown.** Copy Markdown writes `reviewMarkdown(context, comments)` to the clipboard; where the browser refuses, the page shows the text to copy by hand. A header names the entry and project root, the Vite config when one was given, the Composition with its size and fps, and non-empty props. Each comment, earliest first, has a heading with its timecode and frames, the innermost Sequence paths, the point or the element (selector, text, source, box, click position), the text as a quote, and a command that renders its frames:
+
+```sh
+motion-kit frame src/entry.tsx --project-root /work/app --composition intro --frame 12 --out review/frame-12.png
+```
+
+A range renders both ends (`--frame 30,60 --out review/frames-30-60`); `--props` is added when the props are not `{}`. Every word is quoted for a POSIX shell. The server passes the page the project root as given and its real path, the entry and the Vite config (`PreviewHostConfig`), so the command selects the same Composition and props the page shows.
 
 ### CLI
 
@@ -134,7 +156,6 @@ Rows under the transport show the named Sequences the realm has reported and the
 
 ### Open items
 
-- The comment-to-Markdown UI (TASK-245) is not built.
 - The timeline fills as spans are seen: a top-level named Sequence is listed from the first frame shown, and a nested one once the playhead has been inside its ancestors, because the runtime reports a Sequence only while it is mounted. Scrub through the Composition once to see every shot.
 - Nothing bounds a `show` beyond core's frame timeout; a page that hangs the main thread hangs the host page's iframe, not the CLI.
 

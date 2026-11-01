@@ -1,4 +1,4 @@
-import { Pause, Play, StepBack, StepForward } from 'lucide-react';
+import { MessageSquarePlus, Pause, Play, StepBack, StepForward } from 'lucide-react';
 import { type ReactElement } from 'react';
 
 import { type FrameRate } from '../core/timeline/time.ts';
@@ -6,6 +6,7 @@ import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { timecode } from './schedule.ts';
 import { Button } from './ui/button.tsx';
+import { Toggle } from './ui/toggle.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.tsx';
 
 const Hint = ({ label, children }: { label: string; children: ReactElement }) => (
@@ -15,17 +16,24 @@ const Hint = ({ label, children }: { label: string; children: ReactElement }) =>
   </Tooltip>
 );
 
-/** The playback controls and the scrubber, which stay in view above the scrolling timeline. */
+/**
+ * The playback controls, the scrubber and comment mode, which stay in view above the scrolling
+ * timeline.
+ */
 export const Transport = ({
   state,
   descriptor,
   fps,
   controller,
+  picking,
+  onTogglePicking,
 }: {
   state: PreviewState;
   descriptor: LoadingDescriptor;
   fps: FrameRate;
   controller: PreviewController;
+  picking: boolean;
+  onTogglePicking: () => void;
 }) => {
   const last = Math.max(descriptor.durationInFrames - 1, 0);
   const shownFrame = state.shown?.status === 'shown' ? state.shown.frame : undefined;
@@ -102,6 +110,19 @@ export const Transport = ({
       >
         showing {shownFrame ?? state.playhead}
       </span>
+      <Hint label="Comment mode: pause and click the stage (C)">
+        <Toggle
+          variant="outline"
+          size="sm"
+          aria-label="Comment mode"
+          pressed={picking}
+          onPressedChange={onTogglePicking}
+          className="aria-pressed:bg-comment/25 aria-pressed:text-foreground"
+        >
+          <MessageSquarePlus />
+          Comment
+        </Toggle>
+      </Hint>
     </div>
   );
 };
