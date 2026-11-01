@@ -72,14 +72,11 @@ export type PreviewDependencies = Readonly<{
    */
   connect: (signal: AbortSignal) => Promise<Realm>;
   /**
-   * Load (or reload) a second, hidden realm frame as large as the Composition and connect to it; it
-   * shows every frame of the mounted Composition in turn, so the timeline knows the frames nobody
-   * played. Closing that realm unloads its page, and the images it holds with it.
+   * Load (or reload) a second, hidden realm frame, a dry realm (core), and connect to it; it shows
+   * every frame of the mounted Composition in turn, so the timeline knows the frames nobody played.
+   * Closing that realm unloads its page, and the React tree it holds with it.
    */
-  connectScanner: (
-    signal: AbortSignal,
-    size: Readonly<{ width: number; height: number }>,
-  ) => Promise<Realm>;
+  connectScanner: (signal: AbortSignal) => Promise<Realm>;
   audio: AudioPlayer;
   /**
    * The `AudioContext` clock in seconds; `latency` is how long a sound started now takes to be
@@ -278,7 +275,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     };
     let current: Realm;
     try {
-      current = await deps.connectScanner(controller.signal, descriptor);
+      current = await deps.connectScanner(controller.signal);
     } catch {
       giveUp();
       return;
@@ -305,7 +302,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       batch: scanBatch,
       signal: controller.signal,
     });
-    // Every frame read: the realm is no longer needed, and holds every image the frames used.
+    // Every frame read: the realm is no longer needed.
     if (scanning === controller) {
       scanning = undefined;
       scanner?.close();

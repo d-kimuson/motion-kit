@@ -136,15 +136,22 @@ describe('observeAssetFrames', () => {
     continued: fc.option(fc.nat(30), { nil: undefined }),
   });
 
-  it('folds a batch of frames as one frame at a time would', () => {
+  const oneByOne = (spans: readonly AssetSpan[], frames: readonly AssetFrame[]) =>
+    frames.reduce(
+      (folded, { frame, assets, continued }) => observeAssets(folded, frame, assets, continued),
+      spans,
+    );
+
+  it('folds a batch of frames onto the spans so far as one frame at a time would', () => {
     fc.assert(
-      fc.property(fc.array(assetFrame, { maxLength: 12 }), (frames) => {
-        const oneByOne = frames.reduce<readonly AssetSpan[]>(
-          (spans, { frame, assets, continued }) => observeAssets(spans, frame, assets, continued),
-          [],
-        );
-        expect(observeAssetFrames([], frames)).toEqual(oneByOne);
-      }),
+      fc.property(
+        fc.array(assetFrame, { maxLength: 12 }),
+        fc.array(assetFrame, { maxLength: 12 }),
+        (before, batch) => {
+          const spans = oneByOne([], before);
+          expect(observeAssetFrames(spans, batch)).toEqual(oneByOne(spans, batch));
+        },
+      ),
     );
   });
 

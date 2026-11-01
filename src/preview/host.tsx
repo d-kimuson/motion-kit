@@ -28,9 +28,8 @@ const siteStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
 };
 
 /**
- * The hidden frame of the scan realm. Hidden by visibility rather than `display: none`, so its
- * page still lays out and runs its animation frames. The scan sizes it to the Composition before it
- * loads, so a Composition that measures its box lays out as it does when rendered.
+ * The hidden frame of the scan realm, a dry realm. Hidden by visibility rather than
+ * `display: none`, so its page still runs its animation frames.
  */
 const scannerFrame = () => {
   const element = document.createElement('iframe');
@@ -95,9 +94,7 @@ export const startPreviewHost = (): void => {
   const controller = createPreviewController({
     query: query.value,
     connect: (signal) => connect(frame, signal),
-    connectScanner: async (signal, size) => {
-      scanner.style.width = `${size.width}px`;
-      scanner.style.height = `${size.height}px`;
+    connectScanner: async (signal) => {
       scans += 1;
       const scan = scans;
       const realm = await connect(scanner, signal, true);

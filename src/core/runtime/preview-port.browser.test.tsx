@@ -166,6 +166,8 @@ it('reads the Sequences and assets of a frame in a dry page without loading or s
         <span>intro</span>
       </Sequence>
       <Picture source={source} />
+      {/* The scene's own markup: only the document it is in keeps it from loading. */}
+      <img alt="" src="/dry-never-fetched-markup.png" />
     </>
   );
   const page = createLoadingPage(
@@ -194,9 +196,14 @@ it('reads the Sequences and assets of a frame in a dry page without loading or s
     },
   });
   expect(root.childNodes).toHaveLength(0);
-  expect(performance.getEntriesByType('resource').some(({ name }) => name.endsWith(source))).toBe(
-    false,
-  );
+  // A picture asked for afterwards in the page is fetched, and the scene's never were.
+  const control = new Image();
+  const fetched = new Promise((resolve) => control.addEventListener('error', resolve));
+  control.src = '/dry-control.png';
+  await fetched;
+  const names = performance.getEntriesByType('resource').map(({ name }) => name);
+  expect(names.some((name) => name.endsWith('/dry-control.png'))).toBe(true);
+  expect(names.filter((name) => name.includes('/dry-never-fetched'))).toEqual([]);
 });
 
 // A clip drawn as one picture per frame, like an image sequence, in a boundary of its own.

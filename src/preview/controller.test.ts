@@ -125,7 +125,6 @@ const setup = (
 ) => {
   const realms: ReturnType<typeof fakeRealm>[] = [];
   const scanners: ReturnType<typeof fakeRealm>[] = [];
-  const scannerSizes: Readonly<{ width: number; height: number }>[] = [];
   const started: { clips: readonly ScheduledClip[]; muted: ReadonlySet<string> }[] = [];
   const events: string[] = [];
   const saved: ReadonlySet<string>[] = [];
@@ -161,9 +160,8 @@ const setup = (
       realms.push(realm);
       return Promise.resolve(realm.realm);
     },
-    connectScanner: (_signal, size) => {
+    connectScanner: () => {
       if (options.scanner !== true) return Promise.reject(new Error('Preview realm closed'));
-      scannerSizes.push({ width: size.width, height: size.height });
       const realm = fakeRealm(
         options.scanned ??
           (realms.length > 1 ? options.later : undefined) ??
@@ -198,7 +196,6 @@ const setup = (
     controller,
     realms,
     scanners,
-    scannerSizes,
     started,
     events,
     saved,
@@ -620,7 +617,6 @@ it('reads every frame in a scan realm, so the timeline knows the frames nobody p
   const host = setup({ scanner: true });
   await host.controller.reload();
   const scanner = host.scanners[0];
-  expect(host.scannerSizes).toEqual([{ width: 320, height: 180 }]);
   expect(scanner?.mounts).toEqual([{ compositionId: 'clip', props: { title: 'hi' } }]);
   expect(host.controller.state().scan).toEqual({ scanned: 0, total: 60 });
   // The stage shows its first frame before the scan takes any.

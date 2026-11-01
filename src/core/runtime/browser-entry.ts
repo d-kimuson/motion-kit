@@ -12,7 +12,6 @@ import {
 } from '../../lib/loading-protocol.ts';
 import { previewDryParameter, previewLoadParameter } from '../../lib/preview-protocol.ts';
 import { type Result } from '../../lib/result.ts';
-import { standInAsset } from '../assets/loaders.ts';
 import { Composition } from '../composition/composition.tsx';
 import {
   compositionFailure,
@@ -184,16 +183,15 @@ export const createLoadingPage = (
       if (container === null) return failure();
       container.style.width = `${prepared.value.descriptor.width}px`;
       container.style.height = `${prepared.value.descriptor.height}px`;
-      const options = {
+      const selectedRuntime = createCompositionRuntime({
         definition: prepared.value,
         compositionRealm: request.instance,
         instance: request.instance,
         frameTimeoutMs: request.frameTimeoutMs,
         queueTimeoutMs: request.queueTimeoutMs,
         ...(host === 'renderer' ? rendererOwnership(() => selectedRuntime) : {}),
-        ...(dry ? { assetLoader: standInAsset } : {}),
-      };
-      const selectedRuntime = createCompositionRuntime(options);
+        dry,
+      });
       runtime = selectedRuntime;
       root = createRoot(container);
       flushSync(() =>
