@@ -160,13 +160,14 @@ it('reports the assets a frame registered, a failed one with the failure', async
 // A clip drawn as one picture per frame, like an image sequence, in a boundary of its own.
 const framePicture = (frame: number) =>
   `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${frame + 1}' height='1'/>`)}`;
+// Frame 2 of the film is missing its picture.
 const Film = () => {
   const frame = useFrame();
   return (
     <>
       <p id="frame">{frame}</p>
       <Suspense fallback={null}>
-        <Picture source={framePicture(frame)} />
+        <Picture source={frame === 2 ? '/missing.png' : framePicture(frame)} />
       </Suspense>
     </>
   );
@@ -209,10 +210,10 @@ const blanksDuring = async (root: HTMLElement, work: () => Promise<unknown>) => 
 it('keeps the shown frame on screen while the next one loads its picture', async () => {
   const { root, page } = await filmPage();
   expect(
-    await blanksDuring(root, () => answerPreview(page, { type: 'show', id: 3, frame: 2 })),
+    await blanksDuring(root, () => answerPreview(page, { type: 'show', id: 3, frame: 4 })),
   ).toBe(false);
-  expect(root.querySelector('#frame')?.textContent).toBe('2');
-  expect(root.querySelector('img')?.getAttribute('src')).toBe(framePicture(2));
+  expect(root.querySelector('#frame')?.textContent).toBe('4');
+  expect(root.querySelector('img')?.getAttribute('src')).toBe(framePicture(4));
 });
 
 it('keeps the shown frame on screen when a newer frame cuts the next one off', async () => {
@@ -221,16 +222,28 @@ it('keeps the shown frame on screen when a newer frame cuts the next one off', a
   expect(
     await blanksDuring(root, async () => {
       outcomes = await Promise.all([
-        answerPreview(page, { type: 'show', id: 3, frame: 2 }),
-        answerPreview(page, { type: 'show', id: 4, frame: 3 }),
+        answerPreview(page, { type: 'show', id: 3, frame: 4 }),
+        answerPreview(page, { type: 'show', id: 4, frame: 5 }),
       ]);
     }),
   ).toBe(false);
   expect(outcomes).toMatchObject([
     { outcome: { status: 'aborted' } },
-    { outcome: { status: 'shown', frame: 3 } },
+    { outcome: { status: 'shown', frame: 5 } },
   ]);
+  expect(root.querySelector('#frame')?.textContent).toBe('5');
+});
+
+it('shows the next frame again after a frame failed to load its picture', async () => {
+  const { root, page } = await filmPage();
+  expect(await answerPreview(page, { type: 'show', id: 3, frame: 2 })).toMatchObject({
+    outcome: { status: 'failed', diagnostics: [{ code: 'asset.load-failed' }] },
+  });
+  expect(await answerPreview(page, { type: 'show', id: 4, frame: 3 })).toMatchObject({
+    outcome: { status: 'shown', frame: 3 },
+  });
   expect(root.querySelector('#frame')?.textContent).toBe('3');
+  expect(root.querySelector('img')?.getAttribute('src')).toBe(framePicture(3));
 });
 
 const Card = () => (

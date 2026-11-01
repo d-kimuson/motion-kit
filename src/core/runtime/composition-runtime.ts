@@ -258,7 +258,10 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     request: Request,
     thrown: readonly Diagnostic[],
   ): [Diagnostic, ...Diagnostic[]] | undefined =>
-    mergeFailureDiagnostics(thrown, registry.failures(locationFor(request)));
+    mergeFailureDiagnostics(
+      thrown,
+      registry.failures(locationFor(request), request.snapshot.generation),
+    );
 
   // The root commits again when resources change within a generation (an asset that loaded), and
   // the frame is ready only once that commit lands: one that committed the earlier revision may
@@ -607,8 +610,15 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
           message: 'An integration has uncontrolled time or history-dependent state.',
           hint: 'Use a qualified absolute-time integration before claiming traversal-independent output.',
         })),
-    fail: (diagnostic: Diagnostic) => {
-      if (active === undefined || active.terminal !== undefined) return;
+    // `generation` is the frame the failure happened in: a held frame commits after the next
+    // request starts, and its failure must not end that request.
+    fail: (diagnostic: Diagnostic, generation: number) => {
+      if (
+        active === undefined ||
+        active.terminal !== undefined ||
+        active.snapshot.generation !== generation
+      )
+        return;
       // Terminating here drops registrations whose loaders have not rejected yet.
       if (diagnostic.code === 'asset.load-failed' && registry.pending().length > 0) {
         active.boundaryFailures = [...(active.boundaryFailures ?? []), diagnostic];

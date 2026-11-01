@@ -93,7 +93,7 @@ export type AssetRegistry = Readonly<{
   whenReady: (request: ReadinessRequest) => Promise<AssetSettlement>;
   pending: () => readonly PendingAsset[];
   /** Failed registrations as produced diagnostics. Not a package export. */
-  failures: (location?: Location) => readonly Diagnostic[];
+  failures: (location?: Location, generation?: number) => readonly Diagnostic[];
   snapshot: () => AssetReadinessSnapshot;
   versions: () => readonly Readonly<{ id: string; version: string }>[];
   poke: () => void;
@@ -137,7 +137,22 @@ export const createAssetRegistry = (options: {
     liveEntries()
       .filter((entry) => entry.status === 'pending' || entry.status === 'idle')
       .flatMap(recordsFor);
-  const failedEntries = (): Entry[] => liveEntries().filter((entry) => entry.status === 'failed');
+  // A held frame (the preview) renders as a transition, and a render cut off before it committed
+  // keeps its registrations until the next frame renders over them. A failure only such stale
+  // owners hold belongs to that earlier frame; a committed owner still shows its asset.
+  const stale = (owner: Owner, generation: number) =>
+    !owner.committed &&
+    owner.context.generation !== undefined &&
+    owner.context.generation < generation;
+  const entriesOf = (generation?: number): Entry[] =>
+    liveEntries().filter(
+      (entry) =>
+        entry.status !== 'failed' ||
+        generation === undefined ||
+        [...entry.owners.values()].some((owner) => !stale(owner, generation)),
+    );
+  const failedEntries = (generation?: number): Entry[] =>
+    entriesOf(generation).filter((entry) => entry.status === 'failed');
 
   const contextLocation = (entry: Entry): Location => {
     const context = entry.owners.values().next().value?.context;
@@ -325,13 +340,13 @@ export const createAssetRegistry = (options: {
     try {
       let confirmedRevision: number | undefined;
       while (!request.signal.aborted) {
-        const failed = failedEntries();
+        const failed = failedEntries(request.generation);
         // A sibling still loading must land before this returns, or the first
         // rejection publishes a partial set and the boundary cannot add it later.
         if (failed.length > 0 && (pendingRegistrations().length === 0 || timedOut))
           return failureResult(request, failed);
         if (timedOut) return timeoutResult(request);
-        const required = liveEntries();
+        const required = entriesOf(request.generation);
         const pending = required.filter((entry) => entry.status !== 'ready');
         if (pending.length === 0 && request.committed()) {
           if (confirmedRevision === revision) return { ok: true, value: undefined };
@@ -339,12 +354,12 @@ export const createAssetRegistry = (options: {
           const seen = wakeVersion;
           await Promise.resolve();
           if (request.signal.aborted) return { ok: false, aborted: true };
-          const failedAfterConfirm = failedEntries();
+          const failedAfterConfirm = failedEntries(request.generation);
           if (failedAfterConfirm.length > 0) return failureResult(request, failedAfterConfirm);
           if (timedOut) return timeoutResult(request);
           if (
             revision === confirmedRevision &&
-            liveEntries().every((entry) => entry.status === 'ready')
+            entriesOf(request.generation).every((entry) => entry.status === 'ready')
           )
             return { ok: true, value: undefined };
           await waitFor(seen, []);
@@ -399,7 +414,8 @@ export const createAssetRegistry = (options: {
     },
     whenReady,
     pending: () => pendingRegistrations().map(publishRecord),
-    failures: (location) => failedEntries().map((entry) => diagnosticFor(entry, location)),
+    failures: (location, generation) =>
+      failedEntries(generation).map((entry) => diagnosticFor(entry, location)),
     snapshot: () => ({
       pending: liveEntries()
         .filter((entry) => entry.status === 'pending' || entry.status === 'idle')

@@ -401,7 +401,7 @@ describe('Composition runtime ownership', () => {
       assetContext,
     ).diagnostic;
     if (thrown === undefined) throw new Error('missing thrown diagnostic');
-    runtime.fail(thrown);
+    runtime.fail(thrown, 1);
     const settled = await pending;
     expect(settled.status).toBe('failed');
     if (settled.status !== 'failed') throw new Error('expected failure');
@@ -447,8 +447,8 @@ describe('Composition runtime ownership', () => {
       ],
       cause: new Error('boundary'),
     });
-    runtime.fail(boundary);
-    runtime.fail(boundary);
+    runtime.fail(boundary, 1);
+    runtime.fail(boundary, 1);
     const settled = await pending;
     expect(settled.status).toBe('failed');
     if (settled.status !== 'failed') throw new Error('expected failure');
@@ -476,6 +476,45 @@ describe('Composition runtime ownership', () => {
       '/boundary.png (+1 query parameter, redacted)',
     ]);
     expect(new Set(sources).size).toBe(sources.length);
+    runtime.dispose();
+  });
+
+  it('leaves a failure of a frame a newer request replaced to that frame', async () => {
+    const definition = await prepared();
+    const options = {
+      definition,
+      compositionRealm: 'page',
+      instance: 'replaced',
+      assetLoader: () => Promise.reject(new Error('missing')),
+    };
+    const runtime = createCompositionRuntime(options);
+    const first = runtime.settleFrame(0, { source: 'preview', requestId: 'first' });
+    await tick();
+    const second = runtime.settleFrame(1, { source: 'preview', requestId: 'second' });
+    expect(await first).toEqual({ status: 'aborted' });
+    await tick();
+    expect(runtime.getSnapshot()?.generation).toBe(2);
+    // A held render of the first frame, cut off before it committed, still registers its asset,
+    // which then fails.
+    assetsOf(runtime).retain({ kind: 'image', id: 'stale', source: '/stale.png' }, 'stale-owner', {
+      compositionId: 'test',
+      frame: 0,
+      timeSeconds: 0,
+      generation: 1,
+    });
+    await tick();
+    const diagnostic = assetLoadFailed({
+      assets: [{ kind: 'image', id: 'stale', source: '/stale.png', phase: 'decode' }],
+      cause: new Error('missing'),
+    });
+    runtime.fail(diagnostic, 1);
+    const settledEarly = await Promise.race([second, tick().then(() => 'pending')]);
+    expect(settledEarly).toBe('pending');
+    runtime.fail(diagnostic, 2);
+    expect(await second).toMatchObject({
+      status: 'failed',
+      diagnostics: [{ code: 'asset.load-failed' }],
+    });
     runtime.dispose();
   });
 
