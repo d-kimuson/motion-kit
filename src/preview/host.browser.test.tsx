@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 
+import { createFrameRate } from '../core/timeline/time.ts';
 import { previewFailureReporter } from '../lib/preview-protocol.ts';
 import { connectRealm } from './connection.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
@@ -62,7 +63,7 @@ parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1, load:
   (await connecting).close();
 });
 
-const fakeController = () => {
+const fakeController = (overrides: Partial<PreviewState> = {}) => {
   const calls: string[] = [];
   const state: PreviewState = {
     session: { kind: 'connecting' },
@@ -72,6 +73,7 @@ const fakeController = () => {
     spans: [],
     muted: new Set(),
     unplayable: [],
+    ...overrides,
   };
   const controller: PreviewController = {
     state: () => state,
@@ -128,4 +130,40 @@ it('maps the playback keys anywhere on the page except where a focused control u
   press(' ', { ctrlKey: true });
   expect(calls).toEqual(['play', 'step 1', 'step -10', 'step 1', 'step -1', 'play']);
   expect(root.querySelector('iframe')?.tabIndex).toBe(-1);
+});
+
+it('packs named Sequence spans that never overlap into one timeline row', () => {
+  const fps = createFrameRate({ numerator: 30, denominator: 1 });
+  if (!fps.ok) throw new Error('No frame rate');
+  const { controller } = fakeController({
+    session: {
+      kind: 'ready',
+      descriptor: {
+        id: 'clip',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 60,
+      },
+      fps: fps.value,
+    },
+    spans: [
+      { path: ['intro'], startFrame: 0, endFrame: 30 },
+      { path: ['intro', 'title'], startFrame: 10, endFrame: 20 },
+      { path: ['outro'], startFrame: 30, endFrame: 60 },
+    ],
+  });
+  const root = document.createElement('div');
+  document.body.append(root);
+  const view = createRoot(root);
+  cleanups.push(() => {
+    act(() => view.unmount());
+    root.remove();
+  });
+  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  expect(
+    [...root.querySelectorAll('.mk-row')].map((row) =>
+      [...row.querySelectorAll('.mk-bar')].map((bar) => bar.textContent),
+    ),
+  ).toEqual([['intro', 'outro'], ['intro › title']]);
 });

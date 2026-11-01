@@ -188,7 +188,7 @@ it('emits reload when a served module changes and serves the new source', async 
     ),
     () => writeFileSync(join(root, 'entry.tsx'), scene('second')),
   );
-  expect(event).toBe('event: reload\ndata: {}');
+  expect(event).toBe('event: reload\ndata: {"audio":false}');
   expect(await (await fetch(module)).text()).toContain('second');
 });
 
@@ -228,7 +228,7 @@ it('emits reload when an audio file the host fetched changes', async () => {
     ),
     () => writeFileSync(join(root, 'audio/voice.wav'), 'RIFF-replaced'),
   );
-  expect(event).toBe('event: reload\ndata: {}');
+  expect(event).toBe('event: reload\ndata: {"audio":true}');
   expect(await (await fetch(audio)).text()).toBe('RIFF-replaced');
 });
 
@@ -245,7 +245,7 @@ it('emits reload when an audio file the host asked for before it existed is crea
     ),
     () => writeFileSync(join(root, 'audio/later.wav'), 'RIFF-later'),
   );
-  expect(event).toBe('event: reload\ndata: {}');
+  expect(event).toBe('event: reload\ndata: {"audio":true}');
   expect(await (await fetch(audio)).text()).toBe('RIFF-later');
 });
 

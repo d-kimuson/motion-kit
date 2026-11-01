@@ -35,6 +35,11 @@ const fakeRealm = (compositions: readonly LoadingDescriptor[], hold = false) => 
           reject = fail;
         });
       }
+      if (compositionId === 'broken')
+        return Promise.resolve({
+          ok: false,
+          error: { code: 'render.page-error', severity: 'error', message: 'boom', hint: 'fix' },
+        });
       const descriptor = compositions.find(
         (item) => item.id === (compositionId ?? compositions[0]?.id),
       );
@@ -315,10 +320,21 @@ it('mounts the only Composition again by listing, so renaming it does not strand
 it('keeps the chosen Composition across a reload after its mount failed', async () => {
   const host = setup({ compositions: [clip('a'), clip('b')] });
   await host.controller.reload();
-  await host.controller.choose('gone');
+  await host.controller.choose('broken');
   expect(host.controller.state().session).toMatchObject({ kind: 'failed' });
   await host.controller.reload();
-  expect(host.realms[1]?.mounts).toEqual([{ compositionId: 'gone', props: { title: 'hi' } }]);
+  expect(host.realms[1]?.mounts).toEqual([{ compositionId: 'broken', props: { title: 'hi' } }]);
+});
+
+it('offers the registry again when the chosen Composition is no longer in it', async () => {
+  const host = setup({ compositions: [clip('a'), clip('b')], later: [clip('a'), clip('c')] });
+  await host.controller.reload();
+  await host.controller.choose('b');
+  await host.controller.reload();
+  expect(host.controller.state().session).toMatchObject({
+    kind: 'choosing',
+    compositions: [{ id: 'a' }, { id: 'c' }],
+  });
 });
 
 it('settles a mount the next reload interrupted without rejecting', async () => {
@@ -335,11 +351,20 @@ it('settles a mount the next reload interrupted without rejecting', async () => 
 });
 
 it('reports a failed mount as the session state', async () => {
-  const host = setup({ compositionId: 'missing' });
+  const host = setup({ compositionId: 'broken' });
   await host.controller.reload();
   expect(host.controller.state().session).toMatchObject({
     kind: 'failed',
-    diagnostic: { code: 'cli.composition-not-found' },
+    diagnostic: { code: 'render.page-error' },
+  });
+});
+
+it('mounts what the registry has when the page query names a Composition it lacks', async () => {
+  const host = setup({ compositionId: 'missing' });
+  await host.controller.reload();
+  expect(host.controller.state().session).toMatchObject({
+    kind: 'ready',
+    descriptor: { id: 'clip' },
   });
 });
 
@@ -350,10 +375,10 @@ it('reconnects on reload, keeping the Composition and playhead but not the spans
   await flush();
   host.controller.seek(40);
   await host.controller.play();
-  await host.controller.reload();
+  await host.controller.reload({ audio: true });
   expect(host.realms[0]?.closed()).toBe(true);
-  // The audio files may be what changed, so each reload decodes them again.
-  expect(host.forgotten()).toBe(2);
+  // Only a reload for a changed audio file drops the decoded sources; a source save keeps them.
+  expect(host.forgotten()).toBe(1);
   expect(host.realms[1]?.mounts).toEqual([{ compositionId: 'b', props: { title: 'hi' } }]);
   expect(host.controller.state()).toMatchObject({
     playhead: 40,

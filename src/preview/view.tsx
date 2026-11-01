@@ -68,8 +68,15 @@ const Timeline = ({
   const duration = descriptor.durationInFrames;
   const active = state.shown?.status === 'shown' ? state.shown.sequences : [];
   // A span past the Composition is clipped to it; one that is empty there is not drawn.
-  const spans = state.spans.filter(
-    (span) => Math.max(span.startFrame, 0) < Math.min(span.endFrame, duration),
+  // Spans that never overlap share a row, as audio clips do, so many Sequences stay in the dock.
+  const spanLanes = packLanes(
+    state.spans
+      .map((span) => ({
+        span,
+        start: Math.max(span.startFrame, 0),
+        end: Math.min(span.endFrame, duration),
+      }))
+      .filter((item) => item.start < item.end),
   );
   // Audio clips past the Composition are clipped the same way; ones that never overlap share a lane.
   const clips = (descriptor.audio ?? [])
@@ -87,18 +94,21 @@ const Timeline = ({
   };
   return (
     <div className="mk-timeline" onClick={seek}>
-      {spans.map((span) => (
-        <div className="mk-row" key={`${span.path.join('\0')}:${span.startFrame}:${span.endFrame}`}>
-          <div
-            className={`mk-bar${active.some((item) => same(item, span)) ? ' mk-active' : ''}`}
-            style={{
-              left: percent(span.startFrame, duration),
-              right: `calc(100% - ${percent(span.endFrame, duration)})`,
-            }}
-            title={`${span.path.join(' › ')} [${span.startFrame}, ${span.endFrame})`}
-          >
-            {span.path.join(' › ')}
-          </div>
+      {spanLanes.map((lane, laneIndex) => (
+        <div className="mk-row" key={`span:${laneIndex}`}>
+          {lane.map(({ span }) => (
+            <div
+              key={`${span.path.join('\0')}:${span.startFrame}:${span.endFrame}`}
+              className={`mk-bar${active.some((item) => same(item, span)) ? ' mk-active' : ''}`}
+              style={{
+                left: percent(span.startFrame, duration),
+                right: `calc(100% - ${percent(span.endFrame, duration)})`,
+              }}
+              title={`${span.path.join(' › ')} [${span.startFrame}, ${span.endFrame})`}
+            >
+              {span.path.join(' › ')}
+            </div>
+          ))}
         </div>
       ))}
       {audioLanes.map((lane, laneIndex) => (

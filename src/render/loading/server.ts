@@ -424,8 +424,10 @@ try {
       reloadTimer = setTimeout(() => announce(attempt + 1), 25);
       return;
     }
+    const audio = [...changedFiles].some((file) => audioFiles.has(file));
     changedFiles.clear();
-    for (const stream of reloadStreams) stream.write(`event: ${previewReloadEvent}\ndata: {}\n\n`);
+    for (const stream of reloadStreams)
+      stream.write(`event: ${previewReloadEvent}\ndata: ${JSON.stringify({ audio })}\n\n`);
   };
   const reload = (file: string) => {
     changedFiles.add(file);

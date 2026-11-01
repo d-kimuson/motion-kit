@@ -98,6 +98,8 @@ export type PreviewReply =
 
 /** The server-sent event the events route emits after a module the realm loaded changed. */
 export const previewReloadEvent = 'reload';
+/** Its data: whether an audio file the host fetched is among the changes, so its decode is stale. */
+export const previewReloadSchema = z.object({ audio: z.boolean() });
 
 /** What the server inlines into the host page; every URL is absolute-path, under Vite's base. */
 export const previewHostConfigSchema = z.object({

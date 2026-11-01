@@ -5,6 +5,7 @@ import {
   previewHostConfigSchema,
   previewLoadParameter,
   previewReloadEvent,
+  previewReloadSchema,
 } from '../lib/preview-protocol.ts';
 import { createAudioPlayer, mutedSources } from './audio.ts';
 import { connectRealm } from './connection.ts';
@@ -93,7 +94,17 @@ export const startPreviewHost = (): void => {
       ),
   });
   // The server sends `reload` after a module the realm loaded changed; the realm is rebuilt.
-  new EventSource(eventsUrl).addEventListener(previewReloadEvent, () => void controller.reload());
+  new EventSource(eventsUrl).addEventListener(previewReloadEvent, (event) => {
+    let data: unknown;
+    try {
+      data = JSON.parse(String(event.data));
+    } catch {
+      data = undefined;
+    }
+    const changed = previewReloadSchema.safeParse(data);
+    // Data it cannot read may be an audio change; decoding again is only slower.
+    void controller.reload({ audio: changed.success ? changed.data.audio : true });
+  });
   createRoot(root).render(
     <PreviewView
       controller={controller}

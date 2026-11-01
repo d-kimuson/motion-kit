@@ -22,7 +22,7 @@ A human's fast authoring loop. preview is the browser page `motion-kit preview` 
 | Muted source       | `mutedSources`                             | A `src` the user silenced; kept in `localStorage` per project root (so per origin, port included) and applied to every clip of that source.                                               |
 | Reload             | `reload` (server-sent event)               | The signal that a served module changed; the host page loads a new Composition realm and shows the Playhead again. There is no hot module replacement.                                    |
 | Preview controller | `createPreviewController`                  | The host's state machine (`Session`, `Playback`, spans, muted sources) and the Realm connection, audio and timer it drives; the view only renders it.                                     |
-| Preview timeline   | `Timeline` (`view.tsx`), `packLanes`       | Rows under the scrubber: the named Sequence Spans the Composition realm has reported and the declared audio clips, the clips packed into lanes so non-overlapping ones share a row.       |
+| Preview timeline   | `Timeline` (`view.tsx`), `packLanes`       | Rows under the scrubber: the named Sequence Spans the Composition realm has reported and the declared audio clips, both packed into lanes so non-overlapping ones share a row.            |
 
 ## Invariants
 

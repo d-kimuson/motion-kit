@@ -60,8 +60,11 @@ export type PreviewDependencies = Readonly<{
 export type PreviewController = Readonly<{
   state: () => PreviewState;
   subscribe: (listener: () => void) => () => void;
-  /** Connect on startup and again after every source change. */
-  reload: () => Promise<void>;
+  /**
+   * Connect on startup and again after every source change; `audio` says an audio file changed, so
+   * the decoded sources are dropped. A save that changed only modules keeps them.
+   */
+  reload: (changed?: Readonly<{ audio: boolean }>) => Promise<void>;
   choose: (compositionId: string) => Promise<void>;
   play: () => Promise<void>;
   pause: () => void;
@@ -194,6 +197,11 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     const mounted = await unlessClosed(current.mount(id, deps.query.props));
     if (mounted === undefined || current !== realm) return;
     if (!mounted.ok) {
+      // A remembered id a save renamed away: offer what the registry has now, not a dead end.
+      if (mounted.error.code === 'cli.composition-not-found' && id === compositionId) {
+        compositionId = undefined;
+        return offer(current);
+      }
       update({ session: { kind: 'failed', diagnostic: mounted.error } });
       return;
     }
@@ -213,15 +221,23 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     await prepared;
   };
 
-  const reload = async () => {
+  // Mount a registry of one; show a larger one as a chooser.
+  const offer = async (current: Realm): Promise<void> => {
+    const listed = await unlessClosed(current.list());
+    if (listed === undefined || current !== realm) return;
+    if (!listed.ok) update({ session: { kind: 'failed', diagnostic: listed.error } });
+    else if (listed.value.length === 1) await mount(current, listed.value[0]?.id);
+    else update({ session: { kind: 'choosing', compositions: listed.value } });
+  };
+
+  const reload = async (changed: Readonly<{ audio: boolean }> = { audio: false }) => {
     if (state.playback.kind === 'playing') pause();
     connection?.abort();
     realm?.close();
     realm = undefined;
     presenter = idlePresenter;
     prepared = Promise.resolve();
-    // A reload follows a source change, which may be an audio file the cache still holds.
-    deps.audio.forget();
+    if (changed.audio) deps.audio.forget();
     const controller = new AbortController();
     connection = controller;
     update({ session: { kind: 'connecting' }, shown: undefined, spans: [] });
@@ -239,11 +255,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     }
     realm = current;
     if (compositionId !== undefined) return mount(current, compositionId);
-    const listed = await unlessClosed(current.list());
-    if (listed === undefined || current !== realm) return;
-    if (!listed.ok) update({ session: { kind: 'failed', diagnostic: listed.error } });
-    else if (listed.value.length === 1) await mount(current, listed.value[0]?.id);
-    else update({ session: { kind: 'choosing', compositions: listed.value } });
+    return offer(current);
   };
 
   const seek = (frame: number) => {
