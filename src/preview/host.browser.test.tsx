@@ -122,5 +122,10 @@ it('maps the playback keys anywhere on the page except where a focused control u
   // The scrubber's own arrow step is cancelled, so the frame moves once.
   expect(press('ArrowLeft', {}, range)).toBe(false);
   press(' ', {}, range);
+  // History navigation and the IME switch stay with the browser.
+  expect(press('ArrowLeft', { altKey: true })).toBe(true);
+  press('ArrowRight', { metaKey: true });
+  press(' ', { ctrlKey: true });
   expect(calls).toEqual(['play', 'step 1', 'step -10', 'step 1', 'step -1', 'play']);
+  expect(root.querySelector('iframe')?.tabIndex).toBe(-1);
 });

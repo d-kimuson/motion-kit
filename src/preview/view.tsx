@@ -226,7 +226,6 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
   );
 };
 
-/** The preview host page. The realm iframe is the only element React does not own the contents of. */
 /**
  * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field
  * takes every key, and Space activates a button or toggles a checkbox. Focus stays on the scrubber
@@ -239,6 +238,7 @@ const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
   return target.type === 'checkbox' ? 'space' : 'all';
 };
 
+/** The preview host page. The realm iframe is the only element React does not own the contents of. */
 export const PreviewView = ({
   controller,
   frame,
@@ -253,9 +253,12 @@ export const PreviewView = ({
     void controller.reload();
     return () => controller.dispose();
   }, [controller]);
-  // Shortcuts work wherever focus is on the page; the realm frame takes no input (see .mk-frame).
+  // Shortcuts work wherever focus is on the page; the realm frame takes neither pointer input
+  // (see .mk-frame) nor focus (tabIndex), so its keys never go to the realm.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // A modified key belongs to the browser: Alt+Arrow navigates history, Ctrl+Space is the IME.
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
       const keys = nativeKeys(event.target);
       if (keys === 'all' || (keys === 'space' && event.key === ' ')) return;
       const delta = event.shiftKey ? 10 : 1;
@@ -282,6 +285,7 @@ export const PreviewView = ({
           ref={frame}
           className="mk-frame"
           title="Composition"
+          tabIndex={-1}
           width={descriptor?.width ?? 1280}
           height={descriptor?.height ?? 720}
           style={{ transform: `scale(${scale})`, position: 'absolute' }}

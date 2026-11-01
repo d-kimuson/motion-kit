@@ -12,6 +12,15 @@ import { createPreviewController } from './controller.ts';
 import { parsePreviewQuery, withCompositionId } from './query.ts';
 import { PreviewView } from './view.tsx';
 
+// Reading `localStorage` throws where the browser blocks site data; mutes then last for the page.
+const siteStorage = (): Pick<Storage, 'getItem' | 'setItem'> => {
+  try {
+    return window.localStorage;
+  } catch {
+    return { getItem: () => null, setItem: () => {} };
+  }
+};
+
 const fail = (root: HTMLElement, message: string) => {
   root.textContent = message;
 };
@@ -70,7 +79,7 @@ export const startPreviewHost = (): void => {
         return () => clearInterval(handle);
       },
     },
-    muted: mutedSources(window.localStorage, projectRoot),
+    muted: mutedSources(siteStorage(), projectRoot),
     choose: (compositionId) =>
       window.history.replaceState(
         null,
