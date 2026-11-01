@@ -63,7 +63,7 @@ const CompositionFacts = ({
   );
 };
 
-/** The named Sequences seen so far, in first-seen order; choosing one seeks to its start. */
+/** The named Sequences shown or scanned so far, in first-seen order; choosing one seeks to its start. */
 const Sequences = ({
   state,
   fps,

@@ -288,6 +288,28 @@ export const Timeline = ({
   );
 };
 
+/** How far the scan realm read the Composition, while it reads; nothing once it is done. */
+const ScanStatus = ({ state }: { state: PreviewState }) => {
+  const t = useMessages().timeline;
+  const { scan } = state;
+  if (scan === undefined || scan.scanned >= scan.total) return null;
+  const held = state.playback.kind === 'playing' || state.starting;
+  return (
+    <div role="status" className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+      <span>
+        {t.scanning(Math.floor((scan.scanned / scan.total) * 100))}
+        {held ? ` (${t.scanHeld})` : ''}
+      </span>
+      <span aria-hidden className="h-1 w-20 overflow-hidden rounded-full bg-muted">
+        <span
+          className="block h-full bg-primary/60"
+          style={{ width: percent(scan.scanned, scan.total) }}
+        />
+      </span>
+    </div>
+  );
+};
+
 /**
  * The timeline under the transport, with a tab for the audio clips and one for the asset groups:
  * both stacked would push the lanes of one out of view. The rows scroll under the tabs. Until a
@@ -310,14 +332,17 @@ export const TimelinePanel = ({
       onValueChange={(value: unknown) => onChooseLayer(value === 'assets' ? 'assets' : 'audio')}
       className="min-h-0 flex-1 gap-0 border-t"
     >
-      <TabsList variant="line" className="h-7 shrink-0 px-3 pt-1">
-        <TabsTrigger value="audio" className="px-2 text-xs">
-          {t.audio}
-        </TabsTrigger>
-        <TabsTrigger value="assets" className="px-2 text-xs">
-          {t.assets}
-        </TabsTrigger>
-      </TabsList>
+      <div className="flex h-7 shrink-0 items-center px-3 pt-1">
+        <TabsList variant="line" className="h-full">
+          <TabsTrigger value="audio" className="px-2 text-xs">
+            {t.audio}
+          </TabsTrigger>
+          <TabsTrigger value="assets" className="px-2 text-xs">
+            {t.assets}
+          </TabsTrigger>
+        </TabsList>
+        <ScanStatus state={props.state} />
+      </div>
       <TabsContent value={shown} className="min-h-0">
         <ScrollArea className="h-full">
           <div className="pt-2">

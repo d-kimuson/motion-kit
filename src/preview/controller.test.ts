@@ -117,9 +117,15 @@ const setup = (
     latency?: number;
     /** The browser refuses to resume the audio clock. */
     resumeFails?: boolean;
+    /** The scan realm connects; without it, its frame never starts. */
+    scanner?: boolean;
+    /** What the scan realm registers, when it differs from what the stage's realm does. */
+    scanned?: readonly LoadingDescriptor[];
   } = {},
 ) => {
   const realms: ReturnType<typeof fakeRealm>[] = [];
+  const scanners: ReturnType<typeof fakeRealm>[] = [];
+  const scannerSizes: Readonly<{ width: number; height: number }>[] = [];
   const started: { clips: readonly ScheduledClip[]; muted: ReadonlySet<string> }[] = [];
   const events: string[] = [];
   const saved: ReadonlySet<string>[] = [];
@@ -155,6 +161,17 @@ const setup = (
       realms.push(realm);
       return Promise.resolve(realm.realm);
     },
+    connectScanner: (_signal, size) => {
+      if (options.scanner !== true) return Promise.reject(new Error('Preview realm closed'));
+      scannerSizes.push({ width: size.width, height: size.height });
+      const realm = fakeRealm(
+        options.scanned ??
+          (realms.length > 1 ? options.later : undefined) ??
+          options.compositions ?? [clip('clip', [{ src: 'voice.wav' }, { src: 'bad.wav' }])],
+      );
+      scanners.push(realm);
+      return Promise.resolve(realm.realm);
+    },
     audio,
     clock: {
       now: () => now,
@@ -180,6 +197,8 @@ const setup = (
   return {
     controller,
     realms,
+    scanners,
+    scannerSizes,
     started,
     events,
     saved,
@@ -580,4 +599,148 @@ it('asks the mounted realm for its elements, and answers none without one', asyn
   });
   host.realms[0]?.realm.close();
   expect(await host.controller.describe()).toEqual({ ok: true, value: null });
+});
+
+/** Answer every show the scan realm asked for, by `outcome` if given, until it asks for no more. */
+const answerScan = async (
+  scanner: ReturnType<typeof fakeRealm> | undefined,
+  outcome: (frame: number) => ShowOutcome | undefined = () => undefined,
+) => {
+  let answered = 0;
+  for (;;) {
+    await flush();
+    const pending = scanner?.shows.slice(answered) ?? [];
+    if (pending.length === 0) return;
+    for (const show of pending) show.answer(outcome(show.frame));
+    answered += pending.length;
+  }
+};
+
+it('reads every frame in a scan realm, so the timeline knows the frames nobody played', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  const scanner = host.scanners[0];
+  expect(host.scannerSizes).toEqual([{ width: 320, height: 180 }]);
+  expect(scanner?.mounts).toEqual([{ compositionId: 'clip', props: { title: 'hi' } }]);
+  expect(host.controller.state().scan).toEqual({ scanned: 0, total: 60 });
+  // The stage shows its first frame before the scan takes any.
+  await answerScan(scanner);
+  expect(scanner?.shows).toEqual([]);
+  host.realms[0]?.shows[0]?.answer({ status: 'shown', frame: 0, sequences: [], assets: [] });
+  await answerScan(scanner);
+  expect(scanner?.shows.map((show) => show.frame)).toEqual(
+    Array.from({ length: 60 }, (_, frame) => frame),
+  );
+  // Every frame read, the scan realm is let go.
+  expect(scanner?.closed()).toBe(true);
+  expect(host.controller.state()).toMatchObject({
+    scan: { scanned: 60, total: 60 },
+    spans: [
+      { path: ['intro'], startFrame: 0, endFrame: 30 },
+      { path: ['outro'], startFrame: 30, endFrame: 60 },
+    ],
+    assets: [
+      { kind: 'font', source: '/inter.woff2', frame: 0 },
+      { kind: 'image', source: '/photo.png', frame: 30 },
+    ],
+  });
+  expect(
+    host.controller
+      .state()
+      .assetSpans.map(({ group, start, end }) => `${group.label} [${start}, ${end})`),
+  ).toEqual(['inter.woff2 [0, 60)', 'photo.png [30, 60)']);
+});
+
+it('keeps the earliest frame an asset was seen at, whichever realm saw it first', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  host.controller.seek(45);
+  host.realms[0]?.shows[0]?.answer();
+  await flush();
+  host.realms[0]?.shows[1]?.answer();
+  await flush();
+  expect(host.controller.state().assets[1]).toMatchObject({ source: '/photo.png', frame: 45 });
+  await answerScan(host.scanners[0]);
+  expect(host.controller.state().assets[1]).toMatchObject({ source: '/photo.png', frame: 30 });
+});
+
+it('holds the scan while playback runs or waits for its audio, and goes on after a pause', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  const scanner = host.scanners[0];
+  host.realms[0]?.shows[0]?.answer();
+  await flush();
+  await host.controller.play();
+  await flush();
+  expect(host.controller.state().playback.kind).toBe('playing');
+  await answerScan(scanner);
+  // The frame asked for before playback started is the only one.
+  expect(scanner?.shows.map((show) => show.frame)).toEqual([0]);
+  expect(host.controller.state().scan).toEqual({ scanned: 1, total: 60 });
+  host.controller.pause();
+  // The stage answers the frame playback last asked for, and the scan goes on.
+  for (const show of host.realms[0]?.shows ?? []) show.answer();
+  await answerScan(scanner);
+  expect(host.controller.state().scan).toEqual({ scanned: 60, total: 60 });
+});
+
+it('starts the scan again on reload and leaves it out when its realm cannot start', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  await host.controller.reload();
+  expect(host.scanners[0]?.closed()).toBe(true);
+  expect(host.scanners).toHaveLength(2);
+  host.realms[1]?.shows[0]?.answer();
+  await answerScan(host.scanners[1]);
+  expect(host.controller.state().scan).toEqual({ scanned: 60, total: 60 });
+  host.controller.dispose();
+  expect(host.scanners[1]?.closed()).toBe(true);
+
+  const without = setup();
+  await without.controller.reload();
+  await flush();
+  expect(without.controller.state().scan).toBeUndefined();
+});
+
+it('holds the scan while the stage shows a frame, so a seek is not kept waiting', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  const scanner = host.scanners[0];
+  host.realms[0]?.shows[0]?.answer();
+  await flush();
+  expect(scanner?.shows.map((show) => show.frame)).toEqual([0]);
+  host.controller.seek(45);
+  scanner?.shows[0]?.answer();
+  await flush();
+  // The stage is showing frame 45, so the scan does not ask for frame 1 yet.
+  expect(scanner?.shows.map((show) => show.frame)).toEqual([0]);
+  host.realms[0]?.shows[1]?.answer();
+  await flush();
+  expect(scanner?.shows.map((show) => show.frame)).toEqual([0, 1]);
+});
+
+it('leaves the scan out when its realm mounts nothing or another duration', async () => {
+  for (const scanned of [[], [{ ...clip('clip'), durationInFrames: 30 }]]) {
+    const host = setup({ scanner: true, scanned });
+    await host.controller.reload();
+    await flush();
+    expect(host.controller.state().scan).toBeUndefined();
+    expect(host.scanners[0]?.closed()).toBe(true);
+  }
+});
+
+it('reads past a frame the scan realm aborted, adding nothing for it', async () => {
+  const host = setup({ scanner: true });
+  await host.controller.reload();
+  const scanner = host.scanners[0];
+  host.realms[0]?.shows[0]?.answer({ status: 'shown', frame: 0, sequences: [], assets: [] });
+  await answerScan(scanner, (frame) => (frame < 30 ? { status: 'aborted' } : undefined));
+  expect(host.controller.state()).toMatchObject({
+    scan: { scanned: 60, total: 60 },
+    spans: [{ path: ['outro'], startFrame: 30, endFrame: 60 }],
+    assets: [
+      { kind: 'font', source: '/inter.woff2', frame: 30 },
+      { kind: 'image', source: '/photo.png', frame: 30 },
+    ],
+  });
 });
