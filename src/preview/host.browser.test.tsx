@@ -646,6 +646,29 @@ it('cuts a long selector so the row keeps its source and comment button', async 
   );
 });
 
+it('fits the five side panel tabs with a capped comment count', () => {
+  const { controller } = fakeController({ session: readySession(60) });
+  const review = reviewOf(controller);
+  for (let frame = 0; frame < 120; frame += 1)
+    review.book.add({
+      compositionId: 'clip',
+      props: {},
+      time: { kind: 'frame', frame: frame % 60 },
+      place: { kind: 'frame' },
+      sequences: [],
+      body: '',
+    });
+  const { root, tab } = mount(controller, review);
+  expect(tab('Comments').textContent).toBe('Comments 99+');
+  const list = root.querySelector<HTMLElement>('[data-slot=tabs-list]');
+  if (list === null) throw new Error('No tab list');
+  const edge = list.getBoundingClientRect();
+  for (const trigger of list.querySelectorAll('[role=tab]')) {
+    const box = trigger.getBoundingClientRect();
+    expect([box.left >= edge.left, box.right <= edge.right]).toEqual([true, true]);
+  }
+});
+
 it('asks for no elements while playing', async () => {
   const { controller, calls } = fakeController(
     {

@@ -105,7 +105,6 @@ const Sequences = ({
 const Count = ({ value }: { value: number }) =>
   value === 0 ? undefined : (
     <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-      {/* Five tabs share 22rem; a three-digit count would push the outer ones out. */}
       {value > 99 ? '99+' : value}
     </Badge>
   );
@@ -137,23 +136,25 @@ export const SidePanel = ({
   useEffect(() => {
     if (target !== undefined) setTab('comments');
   }, [target]);
+  // Five tabs share 22rem, so they take less padding than shadcn's.
+  const trigger = 'gap-1 px-1 text-xs';
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b p-2">
         <TabsList className="w-full">
-          <TabsTrigger value="info" className="text-xs">
+          <TabsTrigger value="info" className={trigger}>
             Info
           </TabsTrigger>
-          <TabsTrigger value="sequences" className="text-xs">
+          <TabsTrigger value="sequences" className={trigger}>
             Sequences
           </TabsTrigger>
-          <TabsTrigger value="assets" className="text-xs">
+          <TabsTrigger value="assets" className={trigger}>
             Assets
           </TabsTrigger>
-          <TabsTrigger value="elements" className="text-xs">
+          <TabsTrigger value="elements" className={trigger}>
             Elements
           </TabsTrigger>
-          <TabsTrigger value="comments" className="text-xs">
+          <TabsTrigger value="comments" className={trigger}>
             Comments <Count value={comments.length} />
           </TabsTrigger>
         </TabsList>

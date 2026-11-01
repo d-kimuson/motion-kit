@@ -75,23 +75,25 @@ const Node = ({ node, path, rows }: { node: ElementNode; path: string; rows: Row
         {leaf && node.text !== '' ? (
           <span className="min-w-0 flex-1 basis-0 truncate text-muted-foreground">{node.text}</span>
         ) : undefined}
-        {node.source === null ? undefined : (
-          <span
-            className="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground"
-            title={relativeSource(node.source, rows.review.site)}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {node.source === null ? undefined : (
+            <span
+              className="font-mono text-[11px] text-muted-foreground"
+              title={relativeSource(node.source, rows.review.site)}
+            >
+              {shortSource(node.source)}
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label={`Comment on ${node.selector}`}
+            title="Comment on this element"
+            className="grid size-5 place-items-center rounded-sm text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-comment focus-visible:opacity-100"
+            onClick={() => rows.review.controller.commentElement(element(node))}
           >
-            {shortSource(node.source)}
-          </span>
-        )}
-        <button
-          type="button"
-          aria-label={`Comment on ${node.selector}`}
-          title="Comment on this element"
-          className="ml-auto grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-comment focus-visible:opacity-100"
-          onClick={() => rows.review.controller.commentElement(element(node))}
-        >
-          <MessageSquarePlus className="size-3.5" />
-        </button>
+            <MessageSquarePlus className="size-3.5" />
+          </button>
+        </span>
       </div>
       {open && !leaf ? <Nodes nodes={node.children} path={path} rows={rows} /> : undefined}
     </li>
