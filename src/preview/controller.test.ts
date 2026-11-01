@@ -83,6 +83,8 @@ const fakeRealm = (compositions: readonly LoadingDescriptor[], hold = false) => 
 const setup = (
   options: {
     compositions?: readonly LoadingDescriptor[];
+    /** What the realms after the first register, as after a save that renamed a Composition. */
+    later?: readonly LoadingDescriptor[];
     compositionId?: string;
     /** The realm frame loads but never announces itself. */
     silent?: boolean;
@@ -124,7 +126,8 @@ const setup = (
     connect: () => {
       if (options.silent === true) return Promise.reject(new Error('Preview realm closed'));
       const realm = fakeRealm(
-        options.compositions ?? [clip('clip', [{ src: 'voice.wav' }, { src: 'bad.wav' }])],
+        (realms.length > 0 ? options.later : undefined) ??
+          options.compositions ?? [clip('clip', [{ src: 'voice.wav' }, { src: 'bad.wav' }])],
         options.holdFirstMount === true && realms.length === 0,
       );
       realms.push(realm);
@@ -253,11 +256,13 @@ it('holds the first frame until the audio it started is heard', async () => {
   expect(host.controller.state().playhead).toBe(1);
 });
 
-it('plays without sound when the browser refuses to resume the audio clock', async () => {
+it('stays paused when the browser refuses to resume the audio clock the playhead follows', async () => {
   const host = setup({ resumeFails: true });
   await host.controller.reload();
   await host.controller.play();
-  expect(host.controller.state().playback).toMatchObject({ kind: 'playing', anchorFrame: 0 });
+  expect(host.controller.state().playback).toEqual({ kind: 'paused', frame: 0 });
+  expect(host.started).toEqual([]);
+  expect(host.ticking()).toBe(false);
 });
 
 it('re-anchors audio on a seek while playing and pauses on a step', async () => {
@@ -294,6 +299,17 @@ it('offers a choice among several Compositions and records the one chosen', asyn
   await host.controller.choose('b');
   expect(host.chosen).toEqual(['b']);
   expect(host.controller.state().session).toMatchObject({ kind: 'ready', descriptor: { id: 'b' } });
+});
+
+it('mounts the only Composition again by listing, so renaming it does not strand the preview', async () => {
+  const host = setup({ later: [clip('renamed')] });
+  await host.controller.reload();
+  await host.controller.reload();
+  expect(host.realms[1]?.mounts).toEqual([{ compositionId: 'renamed', props: { title: 'hi' } }]);
+  expect(host.controller.state().session).toMatchObject({
+    kind: 'ready',
+    descriptor: { id: 'renamed' },
+  });
 });
 
 it('keeps the chosen Composition across a reload after its mount failed', async () => {

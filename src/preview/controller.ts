@@ -108,6 +108,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
   let connection: AbortController | undefined;
   let presenter: Presenter = idlePresenter;
   let stopTicking: (() => void) | undefined;
+  // Only an id the page query or the chooser named; the only Composition is found by listing on
+  // every reload, so a save that renames it does not leave the preview mounting a stale id.
   let compositionId = deps.query.compositionId;
   // Playback waits for the mounted Composition's audio, so no clip starts before it is decoded.
   let prepared: Promise<void> = Promise.resolve();
@@ -201,7 +203,6 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       update({ session: { kind: 'failed', diagnostic: fps.error } });
       return;
     }
-    compositionId = descriptor.id;
     update({ session: { kind: 'ready', descriptor, fps: fps.value } });
     want(Math.min(state.playhead, lastFrame(descriptor)));
     prepared = deps.audio
@@ -275,10 +276,16 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     play: async () => {
       const session = ready();
       if (session === undefined || state.playback.kind === 'playing') return;
-      // A clock the browser refuses to resume still plays the frames, only silently.
-      await Promise.all([deps.clock.resume().catch(() => undefined), prepared]);
+      const [resumed] = await Promise.all([
+        deps.clock.resume().then(
+          () => true,
+          () => false,
+        ),
+        prepared,
+      ]);
+      // The audio clock is the playhead, so a clock the browser refuses to resume cannot play.
       // A reload or another play may have happened while the audio was decoding.
-      if (ready() !== session || playing()) return;
+      if (!resumed || ready() !== session || playing()) return;
       run(state.playhead >= lastFrame(session.descriptor) ? 0 : state.playhead);
     },
     pause: () => {
