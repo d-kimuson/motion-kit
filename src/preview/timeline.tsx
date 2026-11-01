@@ -1,5 +1,5 @@
 import { Image, Type } from 'lucide-react';
-import { type PointerEvent } from 'react';
+import { memo, type PointerEvent, useMemo } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
@@ -34,8 +34,9 @@ const ticks = (descriptor: LoadingDescriptor) => {
 };
 
 const LANE = 'relative h-5';
-const BAR =
-  'absolute inset-y-0 overflow-hidden rounded-sm px-1.5 text-[11px] leading-5 whitespace-nowrap text-ellipsis';
+const BAR_BOX =
+  'absolute inset-y-0 overflow-hidden rounded-sm text-[11px] leading-5 whitespace-nowrap text-ellipsis';
+const BAR = `${BAR_BOX} px-1.5`;
 
 const AssetIcon = ({ kind }: { kind: string }) =>
   kind === 'font' ? (
@@ -43,6 +44,64 @@ const AssetIcon = ({ kind }: { kind: string }) =>
   ) : (
     <Image className="mr-1 inline size-3 align-[-2px]" />
   );
+
+/**
+ * One asset span. It is as wide as its frames, at least a pixel, so the one-frame spans of a video
+ * made of stills do not pile up. It is drawn again only when its span or place changes: the spans
+ * pile up while playing, and a frame changes a few of them.
+ */
+const AssetBar = memo(function AssetBar({
+  span,
+  start,
+  end,
+  duration,
+}: {
+  span: AssetSpan;
+  start: number;
+  end: number;
+  duration: number;
+}) {
+  return (
+    <div
+      data-slot="timeline-asset"
+      className={cn(
+        BAR_BOX,
+        'min-w-px text-foreground/80',
+        span.failed ? 'bg-destructive/40' : 'bg-asset/30',
+      )}
+      style={placed(start, end, duration)}
+      title={`${span.group.key} [${span.start}, ${span.end})${span.failed ? ', failed to load' : ''}`}
+    >
+      <span className="px-1.5">
+        <AssetIcon kind={span.group.kind} />
+        {span.group.label}
+      </span>
+    </div>
+  );
+});
+
+/** The asset lanes, drawn again only when the spans change, not on every move of the playhead. */
+export const AssetLanes = memo(function AssetLanes({
+  lanes,
+  duration,
+}: {
+  lanes: readonly (readonly Readonly<{ span: AssetSpan; start: number; end: number }>[])[];
+  duration: number;
+}) {
+  return lanes.map((lane, laneIndex) => (
+    <div className={LANE} data-slot="timeline-lane" key={`asset:${laneIndex}`}>
+      {lane.map(({ span, start, end }) => (
+        <AssetBar
+          key={`${span.group.kind}:${span.group.key}:${span.start}`}
+          span={span}
+          start={start}
+          end={end}
+          duration={duration}
+        />
+      ))}
+    </div>
+  ));
+});
 
 /**
  * Every review comment, named Sequence, audio clip and asset group on one time axis, with the playhead. Pressing or dragging
@@ -88,11 +147,16 @@ export const Timeline = ({
       }))
       .filter((clip) => clip.start < clip.end),
   );
-  // Asset groups are known only over the frames shown so far, like the named Sequences.
-  const assetLanes = packLanes(
-    state.assetSpans
-      .map((span: AssetSpan) => ({ span, start: span.start, end: Math.min(span.end, duration) }))
-      .filter((item) => item.start < item.end),
+  // Asset groups are known only over the frames shown so far, like the named Sequences. They are
+  // laid out again only when they change, so the asset lanes skip the frames that change nothing.
+  const assetLanes = useMemo(
+    () =>
+      packLanes(
+        state.assetSpans
+          .map((span) => ({ span, start: span.start, end: Math.min(span.end, duration) }))
+          .filter((item) => item.start < item.end),
+      ),
+    [state.assetSpans, duration],
   );
   const seekTo = (event: PointerEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -196,26 +260,7 @@ export const Timeline = ({
               ))}
             </div>
           ))}
-          {assetLanes.map((lane, laneIndex) => (
-            <div className={LANE} data-slot="timeline-lane" key={`asset:${laneIndex}`}>
-              {lane.map(({ span, start, end }) => (
-                <div
-                  key={`${span.group.kind}:${span.group.key}:${span.start}`}
-                  data-slot="timeline-asset"
-                  className={cn(
-                    BAR,
-                    span.failed ? 'bg-destructive/40' : 'bg-asset/30',
-                    'text-foreground/80',
-                  )}
-                  style={placed(start, end, duration)}
-                  title={`${span.group.key} [${span.start}, ${span.end})${span.failed ? ', failed to load' : ''}`}
-                >
-                  <AssetIcon kind={span.group.kind} />
-                  {span.group.label}
-                </div>
-              ))}
-            </div>
-          ))}
+          <AssetLanes lanes={assetLanes} duration={duration} />
         </div>
         <div
           className="pointer-events-none absolute -top-px bottom-0 w-px bg-playhead"
