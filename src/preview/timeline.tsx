@@ -1,16 +1,12 @@
-import { Image, Type } from 'lucide-react';
-import { memo, type PointerEvent, useMemo } from 'react';
+import { type PointerEvent } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
-import { type AssetSpan } from './asset-usage.ts';
 import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { useMessages } from './messages.ts';
 import { packLanes, timecode } from './schedule.ts';
-import { ScrollArea } from './ui/scroll-area.tsx';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.tsx';
 import { cn } from './ui/utils.ts';
 
 export const basename = (src: string) => src.slice(src.lastIndexOf('/') + 1);
@@ -37,83 +33,13 @@ const ticks = (descriptor: LoadingDescriptor) => {
 };
 
 const LANE = 'relative h-5';
-const BAR_BOX =
-  'absolute inset-y-0 overflow-hidden rounded-sm text-[11px] leading-5 whitespace-nowrap text-ellipsis';
-const BAR = `${BAR_BOX} px-1.5`;
-
-const AssetIcon = ({ kind }: { kind: string }) =>
-  kind === 'font' ? (
-    <Type className="mr-1 inline size-3 align-[-2px]" />
-  ) : (
-    <Image className="mr-1 inline size-3 align-[-2px]" />
-  );
+const BAR =
+  'absolute inset-y-0 overflow-hidden rounded-sm px-1.5 text-[11px] leading-5 whitespace-nowrap text-ellipsis';
 
 /**
- * One asset span. It is as wide as its frames, at least a pixel, not as wide as its label, so the
- * one-frame spans of a video made of stills stay within their frames. It is drawn again only when its span or place changes: the spans
- * pile up while playing, and a frame changes a few of them.
- */
-const AssetBar = memo(function AssetBar({
-  span,
-  start,
-  end,
-  duration,
-}: {
-  span: AssetSpan;
-  start: number;
-  end: number;
-  duration: number;
-}) {
-  const t = useMessages().timeline;
-  return (
-    <div
-      data-slot="timeline-asset"
-      className={cn(
-        BAR_BOX,
-        'min-w-px text-foreground/80',
-        span.failed ? 'bg-destructive/40' : 'bg-asset/30',
-      )}
-      style={placed(start, end, duration)}
-      title={`${span.group.key} [${span.start}, ${span.end})${span.failed ? t.failed : ''}`}
-    >
-      <span className="px-1.5">
-        <AssetIcon kind={span.group.kind} />
-        {span.group.label}
-      </span>
-    </div>
-  );
-});
-
-/** The asset lanes, drawn again only when the spans change, not on every move of the playhead. */
-export const AssetLanes = memo(function AssetLanes({
-  lanes,
-  duration,
-}: {
-  lanes: readonly (readonly Readonly<{ span: AssetSpan; start: number; end: number }>[])[];
-  duration: number;
-}) {
-  return lanes.map((lane, laneIndex) => (
-    <div className={LANE} data-slot="timeline-lane" key={`asset:${laneIndex}`}>
-      {lane.map(({ span, start, end }) => (
-        <AssetBar
-          key={`${span.group.kind}:${span.group.key}:${span.start}`}
-          span={span}
-          start={start}
-          end={end}
-          duration={duration}
-        />
-      ))}
-    </div>
-  ));
-});
-
-/** The lanes the timeline shows under the named Sequences, one kind at a time. */
-export type TimelineLayer = 'audio' | 'assets';
-
-/**
- * The review comments and named Sequences, then the audio clips or the asset groups, on one time
- * axis, with the playhead. Pressing or dragging anywhere on it seeks; spans that never overlap
- * share a lane, so many of them stay compact.
+ * Every review comment, named Sequence and audio clip on one time axis, with the playhead. Pressing
+ * or dragging anywhere on it seeks; spans that never overlap share a lane, so many of them stay
+ * compact.
  */
 export const Timeline = ({
   state,
@@ -121,14 +47,12 @@ export const Timeline = ({
   fps,
   controller,
   comments,
-  layer,
 }: {
   state: PreviewState;
   descriptor: LoadingDescriptor;
   fps: FrameRate;
   controller: PreviewController;
   comments: readonly ReviewComment[];
-  layer: TimelineLayer;
 }) => {
   const t = useMessages().timeline;
   const duration = descriptor.durationInFrames;
@@ -158,17 +82,6 @@ export const Timeline = ({
       }))
       .filter((clip) => clip.start < clip.end),
   );
-  // Asset groups are known only over the frames shown so far, like the named Sequences. They are
-  // laid out again only when they change, so the asset lanes skip the frames that change nothing.
-  const assetLanes = useMemo(
-    () =>
-      packLanes(
-        state.assetSpans
-          .map((span) => ({ span, start: span.start, end: Math.min(span.end, duration) }))
-          .filter((item) => item.start < item.end),
-      ),
-    [state.assetSpans, duration],
-  );
   const seekTo = (event: PointerEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
@@ -177,9 +90,7 @@ export const Timeline = ({
   const lanes = [
     ...(comments.length === 0 ? [] : [t.comments]),
     ...spanLanes.map((_, index) => (index === 0 ? t.sequences : '')),
-    ...(layer === 'audio'
-      ? audioLanes.map((_, index) => (index === 0 ? t.audio : ''))
-      : assetLanes.map((_, index) => (index === 0 ? t.assets : ''))),
+    ...audioLanes.map((_, index) => (index === 0 ? t.audio : '')),
   ];
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 px-3 pb-2 select-none">
@@ -252,30 +163,26 @@ export const Timeline = ({
               })}
             </div>
           ))}
-          {layer === 'assets' ? (
-            <AssetLanes lanes={assetLanes} duration={duration} />
-          ) : (
-            audioLanes.map((lane, laneIndex) => (
-              <div className={LANE} data-slot="timeline-lane" key={`audio:${laneIndex}`}>
-                {lane.map(({ track, start, end, index }) => (
-                  <div
-                    key={index}
-                    data-slot="timeline-audio"
-                    className={cn(
-                      BAR,
-                      'bg-audio/30 text-foreground/80',
-                      state.muted.has(track.src) && 'opacity-40 line-through',
-                      state.unplayable.includes(track.src) && 'bg-destructive/40',
-                    )}
-                    style={placed(start, end, duration)}
-                    title={track.src}
-                  >
-                    ♪ {basename(track.src)}
-                  </div>
-                ))}
-              </div>
-            ))
-          )}
+          {audioLanes.map((lane, laneIndex) => (
+            <div className={LANE} data-slot="timeline-lane" key={`audio:${laneIndex}`}>
+              {lane.map(({ track, start, end, index }) => (
+                <div
+                  key={index}
+                  data-slot="timeline-audio"
+                  className={cn(
+                    BAR,
+                    'bg-audio/30 text-foreground/80',
+                    state.muted.has(track.src) && 'opacity-40 line-through',
+                    state.unplayable.includes(track.src) && 'bg-destructive/40',
+                  )}
+                  style={placed(start, end, duration)}
+                  title={track.src}
+                >
+                  ♪ {basename(track.src)}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
         <div
           className="pointer-events-none absolute -top-px bottom-0 w-px bg-playhead"
@@ -285,71 +192,5 @@ export const Timeline = ({
         </div>
       </div>
     </div>
-  );
-};
-
-/** How far the scan realm read the Composition, while it reads; nothing once it is done. */
-const ScanStatus = ({ state }: { state: PreviewState }) => {
-  const t = useMessages().timeline;
-  const { scan } = state;
-  if (scan === undefined || scan.scanned >= scan.total) return null;
-  const held = state.playback.kind === 'playing' || state.starting;
-  return (
-    <div role="status" className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-      <span>
-        {t.scanning(Math.floor((scan.scanned / scan.total) * 100))}
-        {held ? ` (${t.scanHeld})` : ''}
-      </span>
-      <span aria-hidden className="h-1 w-20 overflow-hidden rounded-full bg-muted">
-        <span
-          className="block h-full bg-primary/60"
-          style={{ width: percent(scan.scanned, scan.total) }}
-        />
-      </span>
-    </div>
-  );
-};
-
-/**
- * The timeline under the transport, with a tab for the audio clips and one for the asset groups:
- * both stacked would push the lanes of one out of view. The rows scroll under the tabs. Until a
- * tab is chosen, a Composition without audio opens on its assets.
- */
-export const TimelinePanel = ({
-  layer,
-  onChooseLayer,
-  ...props
-}: Omit<Parameters<typeof Timeline>[0], 'layer'> & {
-  layer: TimelineLayer | undefined;
-  onChooseLayer: (layer: TimelineLayer) => void;
-}) => {
-  const t = useMessages().timeline;
-  const shown: TimelineLayer =
-    layer ?? ((props.descriptor.audio ?? []).length > 0 ? 'audio' : 'assets');
-  return (
-    <Tabs
-      value={shown}
-      onValueChange={(value: unknown) => onChooseLayer(value === 'assets' ? 'assets' : 'audio')}
-      className="min-h-0 flex-1 gap-0 border-t"
-    >
-      <div className="flex h-7 shrink-0 items-center px-3 pt-1">
-        <TabsList variant="line" className="h-full">
-          <TabsTrigger value="audio" className="px-2 text-xs">
-            {t.audio}
-          </TabsTrigger>
-          <TabsTrigger value="assets" className="px-2 text-xs">
-            {t.assets}
-          </TabsTrigger>
-        </TabsList>
-        <ScanStatus state={props.state} />
-      </div>
-      <TabsContent value={shown} className="min-h-0">
-        <ScrollArea className="h-full">
-          <div className="pt-2">
-            <Timeline {...props} layer={shown} />
-          </div>
-        </ScrollArea>
-      </TabsContent>
-    </Tabs>
   );
 };

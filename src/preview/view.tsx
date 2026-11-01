@@ -10,10 +10,11 @@ import { type LocaleSetting } from './locale.ts';
 import { messages, MessagesContext, useMessages } from './messages.ts';
 import { SidePanel } from './side-panel.tsx';
 import { previewCss } from './styles.generated.ts';
-import { type TimelineLayer, TimelinePanel } from './timeline.tsx';
+import { Timeline } from './timeline.tsx';
 import { Transport } from './transport.tsx';
 import { Button } from './ui/button.tsx';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable.tsx';
+import { ScrollArea } from './ui/scroll-area.tsx';
 import { TooltipProvider } from './ui/tooltip.tsx';
 
 const DiagnosticText = ({ diagnostic }: { diagnostic: Diagnostic }) => (
@@ -124,8 +125,6 @@ export const PreviewView = ({
   const comments = allComments.filter((comment) => comment.compositionId === descriptor?.id);
   // The box an element row of the side panel points at.
   const [highlight, setHighlight] = useState<ElementBox>();
-  // Kept here, not in the timeline, which a reload after a save unmounts.
-  const [timelineLayer, setTimelineLayer] = useState<TimelineLayer>();
   const layout = useDefaultLayout({
     id: 'motion-kit-preview:layout',
     panelIds: ['stage', 'side'],
@@ -287,15 +286,17 @@ export const PreviewView = ({
                         ))}
                       </div>
                     ) : undefined}
-                    <TimelinePanel
-                      state={state}
-                      descriptor={ready.descriptor}
-                      fps={ready.fps}
-                      controller={controller}
-                      comments={comments}
-                      layer={timelineLayer}
-                      onChooseLayer={setTimelineLayer}
-                    />
+                    <ScrollArea className="min-h-0 flex-1 border-t">
+                      <div className="pt-2">
+                        <Timeline
+                          state={state}
+                          descriptor={ready.descriptor}
+                          fps={ready.fps}
+                          controller={controller}
+                          comments={comments}
+                        />
+                      </div>
+                    </ScrollArea>
                   </>
                 )}
               </div>

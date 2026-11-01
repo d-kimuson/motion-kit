@@ -160,8 +160,7 @@ width: 320, height: 180, fps: { numerator: 30, denominator: 1 }, durationInFrame
   try {
     const page = await browser.newPage();
     await page.goto(result.value.url);
-    // The stage's realm, not the hidden one that scans the frames.
-    const realm = page.frameLocator('iframe:not([aria-hidden=true])');
+    const realm = page.frameLocator('iframe');
     await realm.locator('main p').waitFor();
     // Vite's module ids, and so the JSX source file names, are real paths.
     const file = join(realpathSync(root), 'entry.tsx');

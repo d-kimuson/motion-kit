@@ -24,12 +24,6 @@ export const previewProtocolVersion = 1;
  * the host only listens to the load it started.
  */
 export const previewLoadParameter = 'load';
-/**
- * The shell URL parameter, set to `1`, that makes the realm dry: it renders frames into a document
- * that does not lay out, paint or fetch, and stands in for every asset, so it tells the Sequences
- * and assets of a frame at a fraction of the cost of showing it.
- */
-export const previewDryParameter = 'dry';
 /** The realm announces itself to its parent window once the bootstrap ran. */
 export const previewReadySchema = z.object({
   type: z.literal('motion-kit-preview-ready'),

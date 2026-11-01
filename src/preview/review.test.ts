@@ -35,8 +35,6 @@ const setup = () => {
     starting: false,
     playhead: 40,
     shown: undefined,
-    assets: [],
-    assetSpans: [],
     spans: [
       { path: ['intro'], startFrame: 0, endFrame: 60 },
       { path: ['intro', 'title'], startFrame: 20, endFrame: 50 },
@@ -44,7 +42,6 @@ const setup = () => {
     ],
     muted: new Set(),
     unplayable: [],
-    scan: undefined,
   };
   const events: string[] = [];
   const inspections: { x: number; answer: (result: Result<InspectedElement | null>) => void }[] =

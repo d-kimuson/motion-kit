@@ -103,19 +103,5 @@ export const loadRegisteredAsset: AssetLoader = (descriptor, signal) => {
   return loadImage(descriptor, signal);
 };
 
-/**
- * Stands in for a font or image without loading it: a realm that only reads which Sequences and
- * assets its frames use (a dry realm) gets a value at once and fetches and decodes nothing.
- */
-export const standInAsset: AssetLoader = (descriptor) =>
-  Promise.resolve(
-    descriptor.kind === 'font'
-      ? new FontFace(descriptor.family, fontSource(descriptor.source), {
-          weight: String(descriptor.weight ?? 400),
-          style: descriptor.style ?? 'normal',
-        })
-      : new Image(),
-  );
-
 export const phaseFor = (descriptor: AssetDescriptor, error: unknown) =>
   failurePhase(error, defaultPhase(descriptor));

@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
-import { AssetsPanel } from './assets-panel.tsx';
+import { AssetsPanel, shownAssets } from './assets-panel.tsx';
 import { CommentsPanel, type Review } from './comments-panel.tsx';
 import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
@@ -63,7 +63,7 @@ const CompositionFacts = ({
   );
 };
 
-/** The named Sequences shown or scanned so far, in first-seen order; choosing one seeks to its start. */
+/** The named Sequences seen so far, in first-seen order; choosing one seeks to its start. */
 const Sequences = ({
   state,
   fps,
@@ -173,14 +173,11 @@ export const SidePanel = ({
               descriptor={descriptor}
               fps={fps}
               sequences={state.spans.length}
-              assets={state.assets.length}
+              assets={shownAssets(state).length}
             />,
           ],
           ['sequences', <Sequences state={state} fps={fps} controller={controller} />],
-          [
-            'assets',
-            <AssetsPanel state={state} descriptor={descriptor} fps={fps} controller={controller} />,
-          ],
+          ['assets', <AssetsPanel state={state} descriptor={descriptor} controller={controller} />],
           [
             'elements',
             <ElementsPanel

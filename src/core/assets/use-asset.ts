@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react';
+import { useId, useLayoutEffect } from 'react';
 
 import { useAssetRuntime, useCompositionFrame } from '../composition/composition.tsx';
 import { assetsOf } from '../runtime/composition-runtime.ts';
@@ -50,7 +50,7 @@ export function useAsset(descriptor: AssetDescriptor): FontFace | HTMLImageEleme
     timeSeconds: toSeconds(snapshot.presentationTime),
     generation: snapshot.generation,
   });
-  useEffect(() => {
+  useLayoutEffect(() => {
     registry.markCommitted(owner);
     return () => registry.release(owner);
   }, [registry, owner]);

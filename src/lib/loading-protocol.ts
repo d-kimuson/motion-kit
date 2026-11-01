@@ -89,8 +89,11 @@ export type LoadingPage = FramePage & {
   listCompositions: () => Result<readonly LoadingDescriptor[]>;
   mount: (request: unknown) => Promise<Result<MountReceipt>>;
   dispose: () => Result<undefined>;
-  /** Registered-resource snapshot for a later inspect command. Not a package export. */
-  assetReadiness: () => AssetReadinessSnapshot;
+  /**
+   * Registered-resource snapshot for a later inspect command. Given a committed frame's generation,
+   * it leaves out the registrations of renders cut off before they committed. Not a package export.
+   */
+  assetReadiness: (generation?: number) => AssetReadinessSnapshot;
   /** Same registry settlement the frame barrier awaits. Not a package export. */
   whenReady: (timeoutMs: number) => Promise<AssetSettlement>;
   /** Named Sequences mounted at the last settled frame, for a preview host. Not a package export. */
