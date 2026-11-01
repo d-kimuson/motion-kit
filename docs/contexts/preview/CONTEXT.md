@@ -33,7 +33,7 @@ A human's fast authoring loop. preview is the browser page `motion-kit preview` 
 
 ## Invariants
 
-- Preview imports `core` and `src/lib` only (plus React, Zod and the UI libraries `dist/preview.js` bundles: Base UI, class-variance-authority, clsx, tailwind-merge and lucide-react); it never imports `render`, `agent`, `cli`, `three`, `motion`, `theme`, `presets`, Vite, Playwright or Node APIs (lint, `PREVIEW_RESTRICTION`).
+- Preview imports `core` and `src/lib` only (plus React, Zod and the UI libraries `dist/preview.js` bundles: Base UI, class-variance-authority, clsx, tailwind-merge, lucide-react and react-resizable-panels); it never imports `render`, `agent`, `cli`, `three`, `motion`, `theme`, `presets`, Vite, Playwright or Node APIs (lint, `PREVIEW_RESTRICTION`).
 - The Composition realm is reached only through the preview protocol over a transferred `MessagePort`. The realm accepts one port, only from its parent window at its own origin; the host accepts the realm only from its own frame at its own origin.
 - At most one `show` is in flight, and the Playhead is never reset by a reload: after a reload the new Composition realm shows the Playhead's frame again.
 - While playing, the Playhead is `anchorFrame` plus the elapsed audio-clock time floored through the Time Module, clamped to the last frame; paused, it is the exact frame. The last frame ends playback.

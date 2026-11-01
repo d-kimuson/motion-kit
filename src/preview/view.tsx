@@ -79,13 +79,15 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 };
 
 /**
- * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field
- * and a tab take every key, and Space activates a button or toggles a checkbox. Focus stays on the scrubber
+ * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field,
+ * a tab and the resize handle take every key, and Space activates a button or toggles a checkbox. Focus stays on the scrubber
  * or a checkbox after it is used, so the other keys still reach the shortcuts.
  */
 const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'none' => {
-  // A tab moves between its siblings with the arrows and is chosen with Space.
-  if (target instanceof Element && target.getAttribute('role') === 'tab') return 'all';
+  // A tab moves between its siblings with the arrows and is chosen with Space; the side panel's
+  // resize handle moves with the arrows.
+  const role = target instanceof Element ? target.getAttribute('role') : null;
+  if (role === 'tab' || role === 'separator') return 'all';
   if (target instanceof HTMLTextAreaElement) return 'all';
   if (target instanceof HTMLButtonElement) return 'space';
   if (!(target instanceof HTMLInputElement)) return 'none';
@@ -103,7 +105,7 @@ export const PreviewView = ({
   controller: PreviewController;
   frame: (element: HTMLIFrameElement | null) => void;
   review: Review;
-  /** Where the width the side menu was dragged to is kept across reloads. */
+  /** Where the width the side panel was dragged to is kept across reloads. */
   layoutStorage: LayoutStorage;
 }) => {
   const state = useSyncExternalStore(controller.subscribe, controller.state);
@@ -161,8 +163,8 @@ export const PreviewView = ({
       <style href="motion-kit-preview" precedence="default">
         {previewCss}
       </style>
-      {/* The stage and the side menu share the top row, split by a handle that drags the side
-          menu wider or narrower; the bottom menu spans the page. */}
+      {/* The stage and the side panel share the top row, split by a handle that drags the side
+          panel wider or narrower; the bottom menu spans the page. */}
       <div className="isolate grid h-screen grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
         <ResizablePanelGroup
           orientation="horizontal"
@@ -170,7 +172,7 @@ export const PreviewView = ({
           defaultLayout={layout.defaultLayout}
           onLayoutChanged={layout.onLayoutChanged}
         >
-          <ResizablePanel id="stage" minSize="20rem">
+          <ResizablePanel id="stage" minSize="25%">
             <div
               className="relative grid h-full place-items-center overflow-hidden bg-black"
               ref={stage}

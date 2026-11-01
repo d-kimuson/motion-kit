@@ -409,19 +409,19 @@ it('hoists its stylesheet into <head>, so the page text and accessibility tree s
   expect(root.textContent).not.toContain('tailwindcss');
 });
 
-it('drags the side menu narrower and keeps the width for the next load', async () => {
+it('drags the side panel narrower and keeps the width for the next load', async () => {
   const storage = memoryStorage();
-  const { controller } = fakeController({ session: readySession(60) });
+  const { controller, calls } = fakeController({ session: readySession(60) });
   const first = mount(controller, reviewOf(controller), storage);
   const side = (root: HTMLElement) => {
     const aside = root.querySelector('aside');
-    if (aside === null) throw new Error('No side menu');
+    if (aside === null) throw new Error('No side panel');
     return aside.getBoundingClientRect().width;
   };
   const before = side(first.root);
   const handle = first.root.querySelector<HTMLElement>('[role=separator]');
   if (handle === null) throw new Error('No resize handle');
-  // The handle moves right by the keyboard the way a drag moves it, which narrows the side menu;
+  // The handle moves right by the keyboard the way a drag moves it, which narrows the side panel;
   // the test page is too narrow to widen it past the stage's minimum.
   act(() => {
     handle.focus();
@@ -429,6 +429,8 @@ it('drags the side menu narrower and keeps the width for the next load', async (
       handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   });
   await vi.waitFor(() => expect(side(first.root)).toBeLessThan(before - 1));
+  // The arrows the handle takes do not step the frame as well.
+  expect(calls).toEqual([]);
   const narrowed = side(first.root);
   const second = mount(controller, reviewOf(controller), storage);
   expect(side(second.root)).toBeCloseTo(narrowed, 0);
