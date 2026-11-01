@@ -34,8 +34,8 @@ export type PreviewState = Readonly<{
   starting: boolean;
   /** The frame the playhead is on; the realm may still be showing an earlier one. */
   playhead: number;
-  /** The realm's answer to the latest `show`. */
-  shown: ShowOutcome | undefined;
+  /** The realm's answer to the latest `show` it did not abort: the frame on the stage. */
+  shown: Exclude<ShowOutcome, Readonly<{ status: 'aborted' }>> | undefined;
   /** Every named Sequence span reported since the last reload, in first-seen order. */
   spans: readonly SequenceSpan[];
   muted: ReadonlySet<string>;
@@ -141,12 +141,14 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     current.show(frame).then(
       (outcome) => {
         if (current !== realm) return;
-        update({
-          shown: outcome,
-          ...(outcome.status === 'shown'
-            ? { spans: accumulate(state.spans, outcome.sequences) }
-            : {}),
-        });
+        // An aborted show leaves the frame before it on the stage.
+        if (outcome.status !== 'aborted')
+          update({
+            shown: outcome,
+            ...(outcome.status === 'shown'
+              ? { spans: accumulate(state.spans, outcome.sequences) }
+              : {}),
+          });
         const step = frameAnswered(presenter);
         presenter = step.state;
         present(step.send);

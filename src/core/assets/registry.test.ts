@@ -673,6 +673,20 @@ describe('asset registry', () => {
     ]);
   });
 
+  it('leaves an owner hidden or unmounted since it committed out of a later snapshot', async () => {
+    const registry = createAssetRegistry({ load: () => Promise.resolve('value') });
+    registry.retain(image('/shown.png', 'shown'), 'shown-owner', context);
+    registry.markCommitted('shown-owner');
+    registry.retain(image('/gone.png', 'gone'), 'gone-owner', context);
+    registry.markCommitted('gone-owner');
+    registry.markUncommitted('gone-owner');
+    await tick();
+    expect(registry.snapshot(2).ready.map((asset) => asset.id)).toEqual(['shown']);
+    // A fallback that hid it leaves it registered, so it shows again without loading.
+    registry.markCommitted('gone-owner');
+    expect(registry.snapshot(2).ready.map((asset) => asset.id)).toEqual(['shown', 'gone']);
+  });
+
   it('keeps the barrier waiting when a registration appears during confirmation', async () => {
     const late = Promise.withResolvers<string>();
     let confirmations = 0;

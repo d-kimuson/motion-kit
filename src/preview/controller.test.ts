@@ -219,6 +219,22 @@ it('mounts the only Composition, shows the playhead and accumulates named Sequen
   expect(host.controller.state().shown).toMatchObject({ status: 'shown', frame: 10 });
 });
 
+it('keeps the frame on the stage as shown when the next show is aborted', async () => {
+  const host = setup();
+  await host.controller.reload();
+  const realm = host.realms[0];
+  realm?.shows[0]?.answer();
+  await flush();
+  host.controller.seek(45);
+  realm?.shows[1]?.answer({ status: 'aborted' });
+  await flush();
+  expect(host.controller.state().shown).toMatchObject({
+    status: 'shown',
+    frame: 0,
+    assets: [{ source: '/inter.woff2' }],
+  });
+});
+
 it('keeps one show in flight and follows with the latest wanted frame', async () => {
   const host = setup();
   await host.controller.reload();

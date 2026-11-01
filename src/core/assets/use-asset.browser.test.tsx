@@ -4,6 +4,7 @@ import {
   defineComposition,
   defineCompositions,
   useAsset,
+  useFrame,
   type Result,
 } from '@kimuson/motion-kit';
 import { Suspense, useLayoutEffect } from 'react';
@@ -145,6 +146,84 @@ describe('useAsset suspense', () => {
         [expect.objectContaining({ source: 'http://127.0.0.1:9/fail-a.png', phase: 'decode' })],
         [expect.objectContaining({ source: '/fail-b.png', phase: 'decode' })],
       ]);
+    } finally {
+      flushSync(() => root.unmount());
+      runtime.dispose();
+      container.remove();
+    }
+  });
+
+  it('keeps the assets a fallback hides registered, so a later frame does not load them again', async () => {
+    const loads: string[] = [];
+    const gates = new Map<string, PromiseWithResolvers<HTMLImageElement>>();
+    const Picture = ({ id }: { id: string }) => {
+      useAsset({ kind: 'image', id, source: `/${id}.png` });
+      return <p>{id}</p>;
+    };
+    const Scene = () => (
+      <Suspense fallback={<p>fallback</p>}>
+        <Picture id="shown" />
+        {useFrame() >= 1 ? <Picture id="next" /> : null}
+      </Suspense>
+    );
+    const definition = unwrap(
+      await unwrap(
+        defineCompositions([
+          defineComposition({
+            id: 'assets',
+            component: Scene,
+            schema: z.object({}),
+            width: 64,
+            height: 64,
+            fps: { numerator: 30, denominator: 1 },
+            durationInFrames: 3,
+          }),
+        ]),
+      ).mount({ revision: 'r1' }),
+    );
+    const options = {
+      definition,
+      compositionRealm: 'page',
+      instance: 'browser',
+      assetLoader: (descriptor: { id: string }) => {
+        loads.push(descriptor.id);
+        // A load of an asset already loaded once settles at once, so the frame that asks for it
+        // again still settles.
+        if (gates.has(descriptor.id)) return Promise.resolve(new Image());
+        const gate = Promise.withResolvers<HTMLImageElement>();
+        gates.set(descriptor.id, gate);
+        return gate.promise;
+      },
+    };
+    const runtime = createCompositionRuntime(options);
+    const settle = async (frame: number) => {
+      const settled = await runtime.settleFrame(frame, {
+        source: 'renderer',
+        requestId: String(frame),
+      });
+      if (settled.status !== 'ready') throw new Error('expected a ready frame');
+      runtime.completeCapture(settled.lease);
+    };
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(<Composition definition={definition} compositionRuntime={runtime} />),
+      );
+      const first = settle(0);
+      await expect.poll(() => gates.has('shown'), { timeout: 2000 }).toBe(true);
+      gates.get('shown')?.resolve(new Image());
+      await first;
+      await expect.poll(() => container.textContent, { timeout: 2000 }).toBe('shown');
+      // The picture of the next frame suspends, and the fallback hides the one already shown.
+      const second = settle(1);
+      await expect.poll(() => container.textContent, { timeout: 2000 }).toBe('shownfallback');
+      gates.get('next')?.resolve(new Image());
+      await second;
+      await expect.poll(() => container.textContent, { timeout: 2000 }).toBe('shownnext');
+      await settle(2);
+      expect(loads).toEqual(['shown', 'next']);
     } finally {
       flushSync(() => root.unmount());
       runtime.dispose();

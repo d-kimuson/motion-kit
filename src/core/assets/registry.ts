@@ -88,6 +88,8 @@ export type AssetRegistry = Readonly<{
   release: (owner: string) => void;
   retry: (key: string) => void;
   markCommitted: (owner: string) => void;
+  /** The owner left the screen: unmounted, or hidden by a Suspense fallback that may reveal it again. */
+  markUncommitted: (owner: string) => void;
   beginPass: () => void;
   endPass: () => void;
   whenReady: (request: ReadinessRequest) => Promise<AssetSettlement>;
@@ -234,6 +236,10 @@ export const createAssetRegistry = (options: {
     source: redactAssetSource(asset.source),
   });
 
+  const ownerOf = (owner: string): Owner | undefined => {
+    const key = ownerKey.get(owner);
+    return key === undefined ? undefined : entries.get(key)?.owners.get(owner);
+  };
   const releaseOwner = (owner: string, key: string) => {
     const entry = entries.get(key);
     ownerKey.delete(owner);
@@ -404,9 +410,12 @@ export const createAssetRegistry = (options: {
       beginRetryAttempt(entry);
     },
     markCommitted: (owner) => {
-      const key = ownerKey.get(owner);
-      const ownerState = key === undefined ? undefined : entries.get(key)?.owners.get(owner);
+      const ownerState = ownerOf(owner);
       if (ownerState !== undefined) ownerState.committed = true;
+    },
+    markUncommitted: (owner) => {
+      const ownerState = ownerOf(owner);
+      if (ownerState !== undefined) ownerState.committed = false;
     },
     beginPass: () => {
       passOpen = true;
