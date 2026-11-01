@@ -114,6 +114,7 @@ describe('createReviewController', () => {
         place: { kind: 'element', x: 5.4, y: 6.6, element: element(5) },
       },
     });
+    host.review.write('Bigger');
     host.review.togglePicking();
     const missed = host.review.pick(300, 100);
     host.inspections[1]?.answer({
@@ -121,7 +122,11 @@ describe('createReviewController', () => {
       error: { code: 'render.page-error', severity: 'error', message: 'x', hint: 'y' },
     });
     await missed;
-    expect(host.review.state().draft?.place).toEqual({ kind: 'point', x: 300, y: 100 });
+    // Picking again moves the draft and keeps what was written.
+    expect(host.review.state().draft).toMatchObject({
+      place: { kind: 'point', x: 300, y: 100 },
+      body: 'Bigger',
+    });
   });
 
   it('saves a range with the named Sequences at its first frame and the props, earliest end first', () => {
@@ -131,7 +136,8 @@ describe('createReviewController', () => {
     host.moveTo(10);
     host.review.endAtPlayhead();
     expect(host.review.state().draft).toMatchObject({ anchor: 40, end: 10 });
-    expect(host.review.save('  Slow this down  ')).toBe(true);
+    host.review.write('  Slow this down  ');
+    expect(host.review.save()).toBe(true);
     expect(host.added).toEqual([
       {
         compositionId: 'intro',
@@ -148,7 +154,8 @@ describe('createReviewController', () => {
   it('saves one frame with every Sequence showing there, and drops a cancelled draft', () => {
     const host = setup();
     host.review.commentFrame();
-    host.review.save('Title');
+    host.review.write('Title');
+    host.review.save();
     expect(host.added[0]).toMatchObject({
       time: { kind: 'frame', frame: 40 },
       sequences: [['intro'], ['intro', 'title']],
@@ -156,7 +163,8 @@ describe('createReviewController', () => {
     host.review.commentFrame();
     host.review.cancel();
     expect(host.review.state().draft).toBeUndefined();
-    expect(host.review.save('ignored')).toBe(false);
+    host.review.write('ignored');
+    expect(host.review.save()).toBe(false);
     expect(host.added).toHaveLength(1);
   });
 

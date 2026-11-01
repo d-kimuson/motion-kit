@@ -4,8 +4,16 @@ import { type CommentBook } from './comment-book.ts';
 import { commentTime, firstFrame, type CommentPlace } from './comments.ts';
 import { type PreviewController } from './controller.ts';
 
-/** A comment being written: from the frame it started on to `end`, which may come before it. */
-export type CommentDraftState = Readonly<{ anchor: number; end: number; place: CommentPlace }>;
+/**
+ * A comment being written: from the frame it started on to `end`, which may come before it, and the
+ * text so far, kept here so it outlives the field showing it.
+ */
+export type CommentDraftState = Readonly<{
+  anchor: number;
+  end: number;
+  place: CommentPlace;
+  body: string;
+}>;
 
 export type ReviewState = Readonly<{
   /** Comment mode: playback is paused and a click on the stage picks what to comment on. */
@@ -35,8 +43,9 @@ export type ReviewController = Readonly<{
   commentFrame: () => void;
   /** Make the draft a range that ends at the playhead. */
   endAtPlayhead: () => void;
+  write: (body: string) => void;
   /** Add the draft to the book; false when there was no draft or nothing is mounted. */
-  save: (body: string) => boolean;
+  save: () => boolean;
   cancel: () => void;
 }>;
 
@@ -61,7 +70,13 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
     hovering += 1;
     deps.preview.pause();
     const { playhead } = deps.preview.state();
-    update({ picking: false, hovered: null, draft: { anchor: playhead, end: playhead, place } });
+    // A new target moves the draft; what was written stays.
+    const body = state.draft?.body ?? '';
+    update({
+      picking: false,
+      hovered: null,
+      draft: { anchor: playhead, end: playhead, place, body },
+    });
   };
   return {
     state: () => state,
@@ -100,7 +115,10 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
       if (state.draft !== undefined)
         update({ draft: { ...state.draft, end: deps.preview.state().playhead } });
     },
-    save: (body) => {
+    write: (body) => {
+      if (state.draft !== undefined) update({ draft: { ...state.draft, body } });
+    },
+    save: () => {
       const { session, spans } = deps.preview.state();
       if (state.draft === undefined || session.kind !== 'ready') return false;
       const time = commentTime(state.draft.anchor, state.draft.end);
@@ -110,7 +128,7 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
         time,
         place: state.draft.place,
         sequences: activeSequences(spans, firstFrame(time)).map(({ path }) => [...path]),
-        body: body.trim(),
+        body: state.draft.body.trim(),
       });
       update({ draft: undefined });
       return true;

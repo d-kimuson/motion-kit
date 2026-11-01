@@ -99,7 +99,7 @@ describe('reviewMarkdown', () => {
         '',
         '- Entry: `src/entry.tsx` in `/work/app`',
         '- Composition: `intro`, 1920×1080 at 30 fps. Positions are design pixels from the top-left corner.',
-        '- Each command renders the frames a comment is about.',
+        '- Each command renders the frame a comment is about, or both ends of its range.',
         '',
         '## 1. 00:01.50 (frame 45)',
         '',

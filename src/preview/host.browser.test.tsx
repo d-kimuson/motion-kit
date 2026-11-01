@@ -444,12 +444,15 @@ it('comments on the element clicked in comment mode and copies the review as Mar
     );
     field.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  // Picking again moves the draft to the new target and keeps what was typed.
+  // Another tab drops the field, not the text; picking again moves the draft to the new target,
+  // brings the Comments tab back and keeps what was typed.
+  act(() => tab('Sequences').click());
   act(() => void press('c'));
   await act(async () => {
     layer.dispatchEvent(new MouseEvent('click', { ...at, clientX: box.left + box.width / 2 }));
     await Promise.resolve();
   });
+  expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
   const kept = root.querySelector<HTMLTextAreaElement>('textarea[aria-label=Comment]');
   expect(kept?.value).toBe('Bigger title');
   expect(document.activeElement).toBe(kept);

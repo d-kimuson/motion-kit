@@ -152,7 +152,7 @@ const Count = ({ value }: { value: number }) =>
     </Badge>
   );
 
-/** The side menu next to the stage: a tab per concern, each scrolling on its own. A new draft opens the comments. */
+/** The side menu next to the stage: a tab per concern, each scrolling on its own. A new or moved draft opens the comments. */
 export const SidePanel = ({
   state,
   descriptor,
@@ -171,10 +171,11 @@ export const SidePanel = ({
   comments: readonly ReviewComment[];
 }) => {
   const [tab, setTab] = useState<unknown>('composition');
-  const drafting = draft !== undefined;
+  // A new draft, or a draft moved to another target, opens the comments.
+  const target = draft?.place;
   useEffect(() => {
-    if (drafting) setTab('comments');
-  }, [drafting]);
+    if (target !== undefined) setTab('comments');
+  }, [target]);
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b p-2">

@@ -54,10 +54,9 @@ const Composer = ({
   fps: FrameRate;
   review: Review;
 }) => {
-  const [body, setBody] = useState('');
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => field.current?.focus(), [draft.anchor, draft.place]);
-  const save = () => review.controller.save(body);
+  const save = () => review.controller.save();
   return (
     <div data-slot="comment-draft" className="grid grid-cols-1 gap-2 rounded-lg border bg-card p-2">
       <div className="flex items-center gap-2 text-xs">
@@ -70,8 +69,8 @@ const Composer = ({
         ref={field}
         aria-label="Comment"
         placeholder="What should change here?"
-        value={body}
-        onChange={(event) => setBody(event.currentTarget.value)}
+        value={draft.body}
+        onChange={(event) => review.controller.write(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();

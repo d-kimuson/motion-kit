@@ -142,14 +142,14 @@ it('serves the host page, the preview shell and audio under the Vite fs policy',
   expect((await fetch(audio)).status).toBe(400);
 });
 
-it('marks the host elements of the project with the source location of their JSX', async () => {
+it('marks the DOM elements of the project with the source location of their JSX, not other hosts', async () => {
   const root = fixture();
   writeFileSync(
     join(root, 'entry.tsx'),
     `import { defineComposition, defineCompositions } from '@kimuson/motion-kit';
 import { z } from 'zod';
 const Title = () => <h1 data-source="kept">title</h1>;
-const Scene = () => <main><Title /><p>body</p></main>;
+const Scene = () => <main><Title /><p>body</p><svg><circle r={1} /><path d="M0 0" /></svg><mesh /></main>;
 export const compositions = defineCompositions([defineComposition({
 id: 'clip', component: Scene, schema: z.object({}),
 width: 320, height: 180, fps: { numerator: 30, denominator: 1 }, durationInFrames: 10 })]);`,
@@ -167,6 +167,11 @@ width: 320, height: 180, fps: { numerator: 30, denominator: 1 }, durationInFrame
     expect(await realm.locator('main').getAttribute('data-source')).toBe(`${file}:4:21`);
     expect(await realm.locator('main p').getAttribute('data-source')).toBe(`${file}:4:36`);
     expect(await realm.locator('h1').getAttribute('data-source')).toBe('kept');
+    expect(await realm.locator('svg circle').getAttribute('data-source')).toBe(`${file}:4:52`);
+    // React Three Fiber elements are not DOM elements: a mark would land on the Three object.
+    // `path` and `line` name three.js classes too, so they are left alone even in an SVG.
+    expect(await realm.locator('mesh').getAttribute('data-source')).toBeNull();
+    expect(await realm.locator('svg path').getAttribute('data-source')).toBeNull();
   } finally {
     await browser.close();
   }

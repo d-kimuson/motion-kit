@@ -98,7 +98,7 @@ const position = (x: number, y: number) => `(${Math.round(x)}, ${Math.round(y)})
 const frames = (time: CommentTime) =>
   time.kind === 'frame' ? [time.frame] : [time.start, time.end];
 
-/** A `motion-kit frame` command that renders the frames a comment is about. */
+/** A `motion-kit frame` command that renders the frame a comment is about, or both ends of its range. */
 export const reproduceCommand = (context: ReviewContext, comment: ReviewComment): string => {
   const { time } = comment;
   const props = JSON.stringify(comment.props);
@@ -161,7 +161,7 @@ const quote = (body: string) =>
 
 /**
  * The comments on one Composition as Markdown for a coding agent: each with its time, the named
- * Sequences and the element it is about, and a command that renders its frames, earliest first.
+ * Sequences and the element it is about, and a command that renders its frame (both ends of a range), earliest first.
  * Props shared by every comment are stated once; otherwise each comment states its own.
  */
 export const reviewMarkdown = (
@@ -177,7 +177,7 @@ export const reviewMarkdown = (
       ...(context.viteConfig === undefined ? [] : [`- Vite config: ${code(context.viteConfig)}`]),
       `- Composition: ${code(context.compositionId)}, ${context.width}×${context.height} at ${frameRate(context.fps)} fps. Positions are design pixels from the top-left corner.`,
       ...(shared === undefined || shared === '{}' ? [] : [`- Props: ${code(shared)}`]),
-      '- Each command renders the frames a comment is about.',
+      '- Each command renders the frame a comment is about, or both ends of its range.',
     ].join('\n'),
   ];
   const sorted = comments.toSorted(
