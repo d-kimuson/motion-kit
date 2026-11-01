@@ -39,7 +39,7 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
   const { session } = state;
   if (session.kind === 'ready') return undefined;
   return (
-    <div className="absolute inset-0 grid place-items-center bg-background/90 p-6">
+    <div className="absolute inset-0 grid place-items-center bg-background p-6">
       <div className="grid w-full max-w-xl gap-3 rounded-xl border bg-card p-5 text-card-foreground shadow-sm">
         {session.kind === 'connecting' ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -168,7 +168,7 @@ export const PreviewView = ({
                 controller={controller}
               />
               {state.shown?.status === 'failed' ? (
-                <div className="grid gap-1 border-t px-3 py-2">
+                <div className="grid max-h-24 shrink-0 gap-1 overflow-y-auto border-t px-3 py-2">
                   {state.shown.diagnostics.map((diagnostic, index) => (
                     <DiagnosticText key={index} diagnostic={diagnostic} />
                   ))}

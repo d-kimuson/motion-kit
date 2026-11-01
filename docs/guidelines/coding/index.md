@@ -31,3 +31,4 @@ Each purpose has one library. Do not write a function that duplicates one.
 | 3D                                          | three, @react-three/fiber, @react-three/drei | `src/three` only (add when first needed)                                                             |
 | Browser capture                             | playwright                                   | `src/render/browser` (add when first needed)                                                         |
 | Encoding                                    | FFmpeg through a Node wrapper                | `src/render/encoding` (add when first needed; Mediabunny later)                                      |
+| Preview UI components and styling           | shadcn/ui on Base UI, Tailwind, lucide-react | `src/preview` only, bundled into `dist/preview.js` as devDependencies                                |
