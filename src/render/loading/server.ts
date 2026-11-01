@@ -26,7 +26,7 @@ import {
 } from './diagnostics.ts';
 import { htmlShell, previewShell } from './html-shell.ts';
 import { namedPlugins } from './plugins.ts';
-import { loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
+import { jsxSourcePlugin, loadingPlugin, reactResolution, reservedAliases } from './resolution.ts';
 
 const input = z
   .object({
@@ -153,6 +153,7 @@ try {
       mode: 'development',
       plugins: [
         loadingPlugin(entry),
+        ...(input.mode === 'preview' ? [jsxSourcePlugin(input.projectRoot)] : []),
         {
           name: 'motion-kit-preview-routes',
           // A middleware added here runs right after Vite's own Host check (server.allowedHosts),
