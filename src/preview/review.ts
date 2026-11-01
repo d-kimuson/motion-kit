@@ -39,6 +39,8 @@ export type ReviewController = Readonly<{
   leave: () => void;
   /** Draft a comment on the element at a design-pixel point, or on the point without one. */
   pick: (x: number, y: number) => Promise<void>;
+  /** Draft a comment on an element of the shown frame picked without a click. */
+  commentElement: (element: InspectedElement) => void;
   /** Draft a comment on the whole frame at the playhead. */
   commentFrame: () => void;
   /** Make the draft a range that ends at the playhead. */
@@ -108,8 +110,13 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
       const started = picking;
       const found = await element(x, y);
       if (started !== picking || !state.picking) return;
-      draft(found === null ? { kind: 'point', x, y } : { kind: 'element', x, y, element: found });
+      draft(
+        found === null
+          ? { kind: 'point', x, y }
+          : { kind: 'element', element: found, point: { x, y } },
+      );
     },
+    commentElement: (element) => draft({ kind: 'element', element }),
     commentFrame: () => draft({ kind: 'frame' }),
     endAtPlayhead: () => {
       if (state.draft !== undefined)

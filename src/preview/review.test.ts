@@ -35,6 +35,7 @@ const setup = () => {
     starting: false,
     playhead: 40,
     shown: undefined,
+    assets: [],
     spans: [
       { path: ['intro'], startFrame: 0, endFrame: 60 },
       { path: ['intro', 'title'], startFrame: 20, endFrame: 50 },
@@ -111,7 +112,7 @@ describe('createReviewController', () => {
       draft: {
         anchor: 40,
         end: 40,
-        place: { kind: 'element', x: 5.4, y: 6.6, element: element(5) },
+        place: { kind: 'element', point: { x: 5.4, y: 6.6 }, element: element(5) },
       },
     });
     host.review.write('Bigger');
@@ -166,6 +167,18 @@ describe('createReviewController', () => {
     host.review.write('ignored');
     expect(host.review.save()).toBe(false);
     expect(host.added).toHaveLength(1);
+  });
+
+  it('drafts a comment on an element picked from the tree, with no click point', () => {
+    const host = setup();
+    host.review.togglePicking();
+    host.review.commentElement(element(7));
+    expect(host.events).toContain('pause');
+    expect(host.review.state()).toMatchObject({
+      picking: false,
+      draft: { anchor: 40, place: { kind: 'element', element: element(7) } },
+    });
+    expect(host.review.state().draft?.place).not.toHaveProperty('point');
   });
 
   it('stops picking when a frame comment starts, and forgets a pick that finished after it', async () => {

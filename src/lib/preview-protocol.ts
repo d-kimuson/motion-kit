@@ -63,24 +63,48 @@ export const previewRequestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('show'), id: requestId, frame: z.int().nonnegative() }),
   /** The element at a point of the shown frame, in the Composition's design pixels. */
   z.object({ type: z.literal('inspect'), id: requestId, x: z.number(), y: z.number() }),
+  /** Every element of the shown frame, as a tree. */
+  z.object({ type: z.literal('describe'), id: requestId }),
 ]);
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
+
+/**
+ * A font or image the Composition registered with `useAsset` while the frame settled. The source
+ * is redacted as in asset diagnostics: no query, fragment or userinfo.
+ */
+export const registeredAssetSchema = z.object({
+  kind: z.string(),
+  source: z.string(),
+  status: z.enum(['pending', 'ready', 'failed']),
+});
+export type RegisteredAsset = z.infer<typeof registeredAssetSchema>;
 
 export const showOutcomeSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('shown'),
     frame: z.int().nonnegative(),
     sequences: z.array(sequenceSpanSchema),
+    assets: z.array(registeredAssetSchema),
   }),
   z.object({
     status: z.literal('failed'),
     diagnostics: z.tuple([DiagnosticSchema], DiagnosticSchema),
+    assets: z.array(registeredAssetSchema),
   }),
   z.object({ status: z.literal('aborted') }),
 ]);
 export type ShowOutcome =
-  | Readonly<{ status: 'shown'; frame: number; sequences: readonly SequenceSpan[] }>
-  | Readonly<{ status: 'failed'; diagnostics: readonly [Diagnostic, ...Diagnostic[]] }>
+  | Readonly<{
+      status: 'shown';
+      frame: number;
+      sequences: readonly SequenceSpan[];
+      assets: readonly RegisteredAsset[];
+    }>
+  | Readonly<{
+      status: 'failed';
+      diagnostics: readonly [Diagnostic, ...Diagnostic[]];
+      assets: readonly RegisteredAsset[];
+    }>
   | Readonly<{ status: 'aborted' }>;
 
 /** The element a review comment points at, as the realm describes it. */
@@ -99,6 +123,23 @@ export const inspectedElementSchema = z.object({
 });
 export type InspectedElement = z.infer<typeof inspectedElementSchema>;
 
+/** An element of the shown frame and the elements inside it, in document order. */
+export type ElementNode = InspectedElement &
+  Readonly<{
+    /** False when it or an ancestor is fully transparent, or it is hidden. */
+    visible: boolean;
+    children: readonly ElementNode[];
+  }>;
+export const elementNodeSchema: z.ZodType<ElementNode> = z.lazy(() =>
+  inspectedElementSchema.extend({ visible: z.boolean(), children: z.array(elementNodeSchema) }),
+);
+/** The elements the Composition renders; past a size limit the rest are left out. */
+export const elementTreeSchema = z.object({
+  nodes: z.array(elementNodeSchema),
+  truncated: z.boolean(),
+});
+export type ElementTree = Readonly<{ nodes: readonly ElementNode[]; truncated: boolean }>;
+
 export const previewReplySchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('listed'),
@@ -112,13 +153,19 @@ export const previewReplySchema = z.discriminatedUnion('type', [
     id: requestId,
     result: resultSchema(inspectedElementSchema.nullable()),
   }),
+  z.object({
+    type: z.literal('described'),
+    id: requestId,
+    result: resultSchema(elementTreeSchema.nullable()),
+  }),
 ]);
 // Readonly on both sides of the wire, like the Loading Page values the replies carry.
 export type PreviewReply =
   | Readonly<{ type: 'listed'; id: number; result: Result<readonly LoadingDescriptor[]> }>
   | Readonly<{ type: 'mounted'; id: number; result: Result<MountReceipt> }>
   | Readonly<{ type: 'shown'; id: number; outcome: ShowOutcome }>
-  | Readonly<{ type: 'inspected'; id: number; result: Result<InspectedElement | null> }>;
+  | Readonly<{ type: 'inspected'; id: number; result: Result<InspectedElement | null> }>
+  | Readonly<{ type: 'described'; id: number; result: Result<ElementTree | null> }>;
 
 /** The server-sent event the events route emits after a module the realm loaded changed. */
 export const previewReloadEvent = 'reload';

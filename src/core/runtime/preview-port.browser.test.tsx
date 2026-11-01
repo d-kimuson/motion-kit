@@ -1,7 +1,12 @@
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { previewReplySchema, type PreviewReply } from '../../lib/preview-protocol.ts';
+import {
+  previewReplySchema,
+  type ElementNode,
+  type PreviewReply,
+} from '../../lib/preview-protocol.ts';
+import { useAsset } from '../assets/use-asset.ts';
 import { defineComposition, defineCompositions } from '../composition/registry.ts';
 import { Sequence } from '../sequence/sequence.tsx';
 import { useFrame } from '../timeline/hooks.ts';
@@ -73,6 +78,7 @@ it('lists, mounts and shows committed frames with the named Sequences they rende
       status: 'shown',
       frame: 12,
       sequences: [{ path: ['intro'], startFrame: 0, endFrame: 30 }],
+      assets: [],
     },
   });
   // The committed frame stays on screen after its lease completes.
@@ -110,6 +116,44 @@ it('refuses renderer requests and leases in a preview realm', async () => {
     status: 'aborted',
   });
   expect(page.completeCapture(outcome.lease)).toEqual({ status: 'accepted' });
+});
+
+const pixel = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/>")}`;
+const Picture = ({ source }: { source: string }) => {
+  const image = useAsset({ kind: 'image', id: 'picture', source });
+  return <img alt="" src={image.src} />;
+};
+const Pictures = () =>
+  useFrame() < 30 ? <Picture source={pixel} /> : <Picture source="/missing.png" />;
+
+it('reports the assets a frame registered, a failed one with the failure', async () => {
+  container();
+  const page = createLoadingPage(
+    defineCompositions([
+      defineComposition({
+        id: 'pictures',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 60,
+        component: Pictures,
+        schema: z.object({}),
+      }),
+    ]),
+    'preview',
+  );
+  pages.push(page);
+  await answerPreview(page, { type: 'mount', id: 1, props: {} });
+  expect(await answerPreview(page, { type: 'show', id: 2, frame: 0 })).toMatchObject({
+    outcome: { status: 'shown', assets: [{ kind: 'image', source: pixel, status: 'ready' }] },
+  });
+  expect(await answerPreview(page, { type: 'show', id: 3, frame: 40 })).toMatchObject({
+    outcome: {
+      status: 'failed',
+      diagnostics: [{ code: 'asset.load-failed' }],
+      assets: [{ kind: 'image', source: '/missing.png', status: 'failed' }],
+    },
+  });
 });
 
 const Card = () => (
@@ -176,6 +220,95 @@ it('describes the visible element at a design-pixel point of the shown frame, an
     id: 5,
     result: { ok: true, value: null },
   });
+});
+
+/** A tree as selector, visibility and source, which is what tells its elements apart here. */
+const outline = (nodes: readonly ElementNode[]): unknown[] =>
+  nodes.map((node) => [node.selector, node.visible, node.source, outline(node.children)]);
+
+it('describes every element of the shown frame as a tree, the invisible ones marked', async () => {
+  container();
+  const page = createLoadingPage(
+    defineCompositions([
+      defineComposition({
+        id: 'card',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 30,
+        component: Card,
+        schema: z.object({}),
+      }),
+    ]),
+    'preview',
+  );
+  pages.push(page);
+  expect(await answerPreview(page, { type: 'describe', id: 1 })).toEqual({
+    type: 'described',
+    id: 1,
+    result: { ok: true, value: { nodes: [], truncated: false } },
+  });
+  await answerPreview(page, { type: 'mount', id: 2, props: {} });
+  await answerPreview(page, { type: 'show', id: 3, frame: 0 });
+  const reply = await answerPreview(page, { type: 'describe', id: 4 });
+  if (reply.type !== 'described' || !reply.result.ok || reply.result.value === null)
+    throw new Error('Expected a tree');
+  const tree = reply.result.value;
+  expect(tree.truncated).toBe(false);
+  expect(outline(tree.nodes)).toEqual([
+    [
+      'div',
+      true,
+      null,
+      [
+        [
+          'section',
+          true,
+          '/project/scenes/Card.tsx:4:5',
+          [['h1#title.lead.big', true, '/project/scenes/Card.tsx:4:5', []]],
+        ],
+        ['div', false, null, [['p', false, null, []]]],
+        ['div', true, null, [['span', false, null, []]]],
+      ],
+    ],
+  ]);
+  expect(tree.nodes[0]?.children[0]?.children[0]).toMatchObject({
+    text: 'Hello world',
+    box: { x: 40, y: 20, width: 100, height: 30 },
+  });
+});
+
+it('leaves out the elements past the size limit', async () => {
+  container();
+  const Many = () => (
+    <div>
+      {Array.from({ length: 3000 }, (_, index) => (
+        <span key={index} />
+      ))}
+    </div>
+  );
+  const page = createLoadingPage(
+    defineCompositions([
+      defineComposition({
+        id: 'many',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 30,
+        component: Many,
+        schema: z.object({}),
+      }),
+    ]),
+    'preview',
+  );
+  pages.push(page);
+  await answerPreview(page, { type: 'mount', id: 1, props: {} });
+  await answerPreview(page, { type: 'show', id: 2, frame: 0 });
+  const reply = await answerPreview(page, { type: 'describe', id: 3 });
+  if (reply.type !== 'described' || !reply.result.ok || reply.result.value === null)
+    throw new Error('Expected a tree');
+  expect(reply.result.value.truncated).toBe(true);
+  expect(reply.result.value.nodes[0]?.children).toHaveLength(1999);
 });
 
 const nextReply = (port: MessagePort) =>

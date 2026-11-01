@@ -79,8 +79,7 @@ describe('reviewMarkdown', () => {
         time: { kind: 'frame', frame: 75 },
         place: {
           kind: 'element',
-          x: 410.6,
-          y: 130.2,
+          point: { x: 410.6, y: 130.2 },
           element: {
             selector: 'h1#title.lead',
             text: 'Hello',
@@ -140,8 +139,6 @@ describe('reviewMarkdown', () => {
           time: { kind: 'range', start: 30, end: 90 },
           place: {
             kind: 'element',
-            x: 5,
-            y: 5,
             element: {
               selector: 'p',
               text: '',
@@ -156,7 +153,8 @@ describe('reviewMarkdown', () => {
     expect(markdown).toContain('- Composition: `intro`, 1920×1080 at 30000/1001 fps.');
     expect(markdown).toContain('- Props: `{"title":"it\'s"}`');
     expect(markdown).toContain('## 1. 00:01.00 – 00:03.00 (frames 30–90)');
-    expect(markdown).toContain('- Element: `p`, box (0, 0) 10×10, clicked at (5, 5)');
+    // An element picked from the tree was not clicked.
+    expect(markdown).toContain('- Element: `p`, box (0, 0) 10×10\n');
     expect(markdown).toContain('> (no text)');
     expect(markdown).toContain(
       `motion-kit frame src/entry.tsx --project-root /work/app --vite-config vite.preview.ts --composition intro --frame 30,90 --out review/frames-30-90 --props '{"title":"it'\\''s"}'`,

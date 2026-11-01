@@ -1,7 +1,12 @@
 import { createFrameRate, type FrameRate } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
-import { type InspectedElement, type ShowOutcome } from '../lib/preview-protocol.ts';
+import {
+  type ElementTree,
+  type InspectedElement,
+  type RegisteredAsset,
+  type ShowOutcome,
+} from '../lib/preview-protocol.ts';
 import { type Result } from '../lib/result.ts';
 import { type AudioPlayer } from './audio.ts';
 import { type Realm } from './connection.ts';
@@ -23,6 +28,10 @@ export type Session =
   | Readonly<{ kind: 'failed'; diagnostic: Diagnostic }>
   | Readonly<{ kind: 'ready'; descriptor: LoadingDescriptor; fps: FrameRate }>;
 
+/** A registered asset as the frames shown so far report it. */
+export type SeenAsset = RegisteredAsset &
+  Readonly<{ /** The first frame it was seen at. */ frame: number }>;
+
 export type PreviewState = Readonly<{
   session: Session;
   playback: Playback;
@@ -34,6 +43,8 @@ export type PreviewState = Readonly<{
   shown: ShowOutcome | undefined;
   /** Every named Sequence span reported since the last reload, in first-seen order. */
   spans: readonly SequenceSpan[];
+  /** Every font and image a shown or failed frame reported since the last reload, in first-seen order, with its latest status. */
+  assets: readonly SeenAsset[];
   muted: ReadonlySet<string>;
   /** Declared audio sources that could not be fetched or decoded. */
   unplayable: readonly string[];
@@ -76,6 +87,8 @@ export type PreviewController = Readonly<{
   toggleMute: (src: string) => void;
   /** The element at a design-pixel point of the mounted Composition; none while nothing is mounted. */
   inspect: (x: number, y: number) => Promise<Result<InspectedElement | null>>;
+  /** Every element of the shown frame; none while nothing is mounted. */
+  describe: () => Promise<Result<ElementTree | null>>;
   dispose: () => void;
 }>;
 
@@ -87,6 +100,17 @@ const sameSpan = (a: SequenceSpan, b: SequenceSpan) =>
 const accumulate = (spans: readonly SequenceSpan[], seen: readonly SequenceSpan[]) => [
   ...spans,
   ...seen.filter((span) => !spans.some((known) => sameSpan(known, span))),
+];
+const sameAsset = (a: RegisteredAsset, b: RegisteredAsset) =>
+  a.kind === b.kind && a.source === b.source;
+const see = (assets: readonly SeenAsset[], seen: readonly RegisteredAsset[], frame: number) => [
+  ...assets.map((known) => {
+    const latest = seen.find((asset) => sameAsset(asset, known));
+    return latest === undefined ? known : { ...known, status: latest.status };
+  }),
+  ...seen
+    .filter((asset) => !assets.some((known) => sameAsset(known, asset)))
+    .map((asset) => ({ ...asset, frame })),
 ];
 const lastFrame = (descriptor: LoadingDescriptor) => Math.max(descriptor.durationInFrames - 1, 0);
 const realmDidNotStart: Diagnostic = {
@@ -105,6 +129,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     playhead: 0,
     shown: undefined,
     spans: [],
+    assets: [],
     muted: deps.muted.load(),
     unplayable: [],
   };
@@ -140,6 +165,9 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
           ...(outcome.status === 'shown'
             ? { spans: accumulate(state.spans, outcome.sequences) }
             : {}),
+          ...(outcome.status === 'aborted'
+            ? {}
+            : { assets: see(state.assets, outcome.assets, frame) }),
         });
         const step = frameAnswered(presenter);
         presenter = step.state;
@@ -253,7 +281,7 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     if (changed.audio) deps.audio.forget();
     const controller = new AbortController();
     connection = controller;
-    update({ session: { kind: 'connecting' }, shown: undefined, spans: [] });
+    update({ session: { kind: 'connecting' }, shown: undefined, spans: [], assets: [] });
     let current: Realm;
     try {
       current = await deps.connect(controller.signal);
@@ -340,6 +368,11 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
       const current = realm;
       if (current === undefined || ready() === undefined) return { ok: true, value: null };
       return (await unlessClosed(current.inspect(x, y))) ?? { ok: true, value: null };
+    },
+    describe: async () => {
+      const current = realm;
+      if (current === undefined || ready() === undefined) return { ok: true, value: null };
+      return (await unlessClosed(current.describe())) ?? { ok: true, value: null };
     },
     dispose: () => {
       halt();

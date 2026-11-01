@@ -1,19 +1,19 @@
-import { TriangleAlert, Volume2, VolumeX } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { activeSequences } from '../core/sequence/directory.ts';
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
+import { AssetsPanel } from './assets-panel.tsx';
 import { CommentsPanel, type Review } from './comments-panel.tsx';
 import { type ReviewComment } from './comments.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { type ElementBox, ElementsPanel } from './elements-panel.tsx';
 import { type CommentDraftState } from './review.ts';
 import { timecode } from './schedule.ts';
-import { basename, sameSpan } from './timeline.tsx';
+import { sameSpan } from './timeline.tsx';
 import { Badge } from './ui/badge.tsx';
 import { ScrollArea } from './ui/scroll-area.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.tsx';
-import { Toggle } from './ui/toggle.tsx';
 import { cn } from './ui/utils.ts';
 
 const Empty = ({ children }: { children: ReactNode }) => (
@@ -35,9 +35,12 @@ const rate = ({ numerator, denominator }: LoadingDescriptor['fps']) =>
 const CompositionFacts = ({
   descriptor,
   fps,
+  assets,
 }: {
   descriptor: LoadingDescriptor;
   fps: FrameRate;
+  /** How many the frames shown so far registered. */
+  assets: number;
 }) => (
   <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 px-1 text-xs">
     <Fact label="Composition">{descriptor.id}</Fact>
@@ -49,6 +52,7 @@ const CompositionFacts = ({
       {timecode(descriptor.durationInFrames, fps)} ({descriptor.durationInFrames} frames)
     </Fact>
     <Fact label="Audio clips">{(descriptor.audio ?? []).length}</Fact>
+    <Fact label="Fonts and images">{assets}</Fact>
   </dl>
 );
 
@@ -95,56 +99,6 @@ const Sequences = ({
   );
 };
 
-/** One row per declared audio source; the toggle mutes every clip of that source. */
-const AudioSources = ({
-  state,
-  descriptor,
-  controller,
-}: {
-  state: PreviewState;
-  descriptor: LoadingDescriptor;
-  controller: PreviewController;
-}) => {
-  const tracks = descriptor.audio ?? [];
-  const sources = [...new Set(tracks.map((track) => track.src))];
-  if (sources.length === 0) return <Empty>This Composition declares no audio.</Empty>;
-  return (
-    <ul className="grid grid-cols-1 gap-1">
-      {sources.map((src) => {
-        const muted = state.muted.has(src);
-        const unplayable = state.unplayable.includes(src);
-        const clips = tracks.filter((track) => track.src === src).length;
-        return (
-          <li key={src} className="flex items-center gap-2 rounded-md px-1 py-0.5">
-            <Toggle
-              size="sm"
-              variant="outline"
-              aria-label={muted ? `Unmute ${src}` : `Mute ${src}`}
-              pressed={!muted}
-              onPressedChange={() => controller.toggleMute(src)}
-            >
-              {muted ? <VolumeX /> : <Volume2 />}
-            </Toggle>
-            <div className={cn('min-w-0 flex-1', muted && 'opacity-50')} title={src}>
-              <div className="truncate text-xs">{basename(src)}</div>
-              <div className="truncate text-[11px] text-muted-foreground">
-                {src}
-                {clips > 1 ? ` · ${clips} clips` : ''}
-              </div>
-            </div>
-            {unplayable ? (
-              <Badge variant="destructive" title="Could not be fetched or decoded">
-                <TriangleAlert />
-                unplayable
-              </Badge>
-            ) : undefined}
-          </li>
-        );
-      })}
-    </ul>
-  );
-};
-
 const Count = ({ value }: { value: number }) =>
   value === 0 ? undefined : (
     <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
@@ -161,6 +115,7 @@ export const SidePanel = ({
   review,
   draft,
   comments,
+  onHighlight,
 }: {
   state: PreviewState;
   descriptor: LoadingDescriptor;
@@ -169,8 +124,10 @@ export const SidePanel = ({
   review: Review;
   draft: CommentDraftState | undefined;
   comments: readonly ReviewComment[];
+  /** Outline a box of the stage, or none. */
+  onHighlight: (box: ElementBox | undefined) => void;
 }) => {
-  const [tab, setTab] = useState<unknown>('composition');
+  const [tab, setTab] = useState<unknown>('info');
   // A new draft, or a draft moved to another target, opens the comments.
   const target = draft?.place;
   useEffect(() => {
@@ -180,14 +137,17 @@ export const SidePanel = ({
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col gap-0">
       <div className="border-b p-2">
         <TabsList className="w-full">
-          <TabsTrigger value="composition" className="text-xs">
-            Composition
+          <TabsTrigger value="info" className="text-xs">
+            Info
           </TabsTrigger>
           <TabsTrigger value="sequences" className="text-xs">
             Sequences <Count value={state.spans.length} />
           </TabsTrigger>
-          <TabsTrigger value="audio" className="text-xs">
-            Audio <Count value={new Set((descriptor.audio ?? []).map((track) => track.src)).size} />
+          <TabsTrigger value="assets" className="text-xs">
+            Assets
+          </TabsTrigger>
+          <TabsTrigger value="elements" className="text-xs">
+            Elements
           </TabsTrigger>
           <TabsTrigger value="comments" className="text-xs">
             Comments <Count value={comments.length} />
@@ -196,9 +156,24 @@ export const SidePanel = ({
       </div>
       {(
         [
-          ['composition', <CompositionFacts descriptor={descriptor} fps={fps} />],
+          [
+            'info',
+            <CompositionFacts descriptor={descriptor} fps={fps} assets={state.assets.length} />,
+          ],
           ['sequences', <Sequences state={state} fps={fps} controller={controller} />],
-          ['audio', <AudioSources state={state} descriptor={descriptor} controller={controller} />],
+          [
+            'assets',
+            <AssetsPanel state={state} descriptor={descriptor} fps={fps} controller={controller} />,
+          ],
+          [
+            'elements',
+            <ElementsPanel
+              state={state}
+              controller={controller}
+              review={review}
+              onHighlight={onHighlight}
+            />,
+          ],
           [
             'comments',
             <CommentsPanel

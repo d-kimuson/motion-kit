@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { createFrameRate } from '../core/timeline/time.ts';
-import { type InspectedElement, previewFailureReporter } from '../lib/preview-protocol.ts';
+import {
+  type ElementTree,
+  type InspectedElement,
+  previewFailureReporter,
+} from '../lib/preview-protocol.ts';
 import { createCommentBook } from './comment-book.ts';
 import { type Review } from './comments-panel.tsx';
 import { connectRealm } from './connection.ts';
@@ -69,6 +73,7 @@ parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1, load:
 const fakeController = (
   overrides: Partial<PreviewState> = {},
   inspected: InspectedElement | null = null,
+  tree: ElementTree | null = null,
 ) => {
   const calls: string[] = [];
   const state: PreviewState = {
@@ -78,6 +83,7 @@ const fakeController = (
     playhead: 0,
     shown: undefined,
     spans: [],
+    assets: [],
     muted: new Set(),
     unplayable: [],
     ...overrides,
@@ -98,6 +104,10 @@ const fakeController = (
     inspect: (x, y) => {
       calls.push(`inspect ${Math.round(x)},${Math.round(y)}`);
       return Promise.resolve({ ok: true, value: inspected });
+    },
+    describe: () => {
+      calls.push('describe');
+      return Promise.resolve({ ok: true, value: tree });
     },
     dispose: () => {},
   };
@@ -254,7 +264,12 @@ it('keeps the controls row the same width while the shown frame lags, and hides 
     const lag = root.querySelector<HTMLElement>('[data-slot=lag]');
     return lag === null ? 'absent' : getComputedStyle(lag).visibility;
   };
-  const shown = (frame: number) => ({ status: 'shown' as const, frame, sequences: [] });
+  const shown = (frame: number) => ({
+    status: 'shown' as const,
+    frame,
+    sequences: [],
+    assets: [],
+  });
   const playing = { kind: 'playing' as const, anchorFrame: 0, anchorTime: 0 };
   // The slot is always laid out, so the scrubber never resizes as the lag comes and goes.
   expect(lagOf({ playhead: 205, shown: shown(205) })).toBe('hidden');
@@ -285,7 +300,7 @@ it('highlights only the spans the shown frame is inside, not every mounted one',
     },
     spans,
     // A named Sequence reports itself while its parent is mounted, active or not.
-    shown: { status: 'shown', frame: 45, sequences: spans },
+    shown: { status: 'shown', frame: 45, sequences: spans, assets: [] },
   });
   const root = document.createElement('div');
   document.body.append(root);
@@ -361,7 +376,7 @@ it('lists each audio source once in the side panel, and its toggle mutes that so
     muted: new Set(['bgm.mp3']),
   });
   const { tab, panelButtons } = mount(controller);
-  act(() => tab('Audio').click());
+  act(() => tab('Assets').click());
   expect(panelButtons().map((toggle) => toggle.getAttribute('aria-label'))).toEqual([
     'Mute voice/a.mp3',
     'Unmute bgm.mp3',
@@ -391,7 +406,7 @@ it('seeks to the start of a named Sequence chosen in the side panel', () => {
 it('leaves the arrow keys to a focused side panel tab', () => {
   const { controller, calls } = fakeController({ session: readySession(60) });
   const { tab } = mount(controller);
-  const composition = tab('Composition');
+  const composition = tab('Info');
   act(() => composition.focus());
   act(() => {
     composition.dispatchEvent(
@@ -489,4 +504,129 @@ it('comments on the element clicked in comment mode and copies the review as Mar
     ].join('\n'),
   );
   expect(root.textContent).toContain('Copied');
+});
+
+it('lists the fonts and images seen so far, marks those of the shown frame and seeks to where one was first seen', () => {
+  const { controller, calls } = fakeController({
+    session: readySession(60),
+    assets: [
+      { kind: 'font', source: '/inter.woff2', status: 'ready', frame: 0 },
+      { kind: 'image', source: '/photo.png', status: 'failed', frame: 40 },
+    ],
+    shown: {
+      status: 'shown',
+      frame: 45,
+      sequences: [],
+      assets: [{ kind: 'image', source: '/photo.png', status: 'failed' }],
+    },
+  });
+  const { root, tab } = mount(controller);
+  act(() => tab('Assets').click());
+  const rows = [...root.querySelectorAll<HTMLElement>('[data-slot=asset]')];
+  expect(rows.map((row) => [row.textContent, row.hasAttribute('data-current')])).toEqual([
+    [expect.stringContaining('inter.woff2'), false],
+    [expect.stringMatching(/photo\.png.*failed/), true],
+  ]);
+  act(() => rows[1]?.querySelector('button')?.click());
+  expect(calls).toEqual(['seek 40']);
+});
+
+const tree: ElementTree = {
+  nodes: [
+    {
+      selector: 'div.scene',
+      text: 'Hello world',
+      source: '/work/app/src/scene.tsx:4:5',
+      box: { x: 0, y: 0, width: 320, height: 180 },
+      visible: true,
+      children: [
+        {
+          selector: 'h1',
+          text: 'Hello',
+          source: '/work/app/src/title.tsx:3:7',
+          box: { x: 20, y: 30, width: 100, height: 40 },
+          visible: true,
+          children: [],
+        },
+        {
+          selector: 'p.hidden',
+          text: 'world',
+          source: null,
+          box: { x: 0, y: 0, width: 0, height: 0 },
+          visible: false,
+          children: [],
+        },
+      ],
+    },
+  ],
+  truncated: false,
+};
+
+it('shows the elements of the paused frame, highlights one on hover and drafts a comment on it', async () => {
+  const { controller, calls } = fakeController(
+    {
+      session: readySession(60),
+      playhead: 12,
+      shown: { status: 'shown', frame: 12, sequences: [], assets: [] },
+    },
+    null,
+    tree,
+  );
+  const { root, tab, review } = mount(controller);
+  expect(calls).toEqual([]);
+  await act(async () => {
+    tab('Elements').click();
+    await Promise.resolve();
+  });
+  expect(calls).toEqual(['describe']);
+  const rows = () => [...root.querySelectorAll<HTMLElement>('[data-slot=element]')];
+  expect(rows().map((row) => [row.textContent, row.hasAttribute('data-hidden')])).toEqual([
+    [expect.stringMatching(/^div\.scene.*scene\.tsx:4$/), false],
+    // Only an element without children shows its text.
+    [expect.stringMatching(/^h1.*Hello.*title\.tsx:3$/), false],
+    [expect.stringMatching(/^p\.hidden.*world/), true],
+  ]);
+  act(() => void rows()[1]?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })));
+  const target = root.querySelector<HTMLElement>('[data-slot=comment-target]');
+  expect([target?.style.left, target?.style.top, target?.style.width]).toEqual([
+    '20px',
+    '30px',
+    '100px',
+  ]);
+  act(() => void rows()[1]?.dispatchEvent(new PointerEvent('pointerout', { bubbles: true })));
+  expect(root.querySelector('[data-slot=comment-target]')).toBeNull();
+  // Collapsing a node hides its children.
+  act(() => rows()[0]?.querySelector<HTMLElement>('button[aria-label=Collapse]')?.click());
+  expect(rows()).toHaveLength(1);
+  act(() => rows()[0]?.querySelector<HTMLElement>('button[aria-label=Expand]')?.click());
+  act(() => rows()[1]?.querySelector<HTMLElement>('button[aria-label="Comment on h1"]')?.click());
+  expect(review.controller.state().draft?.place).toEqual({
+    kind: 'element',
+    element: {
+      selector: 'h1',
+      text: 'Hello',
+      source: '/work/app/src/title.tsx:3:7',
+      box: { x: 20, y: 30, width: 100, height: 40 },
+    },
+  });
+  expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
+});
+
+it('asks for no elements while playing', async () => {
+  const { controller, calls } = fakeController(
+    {
+      session: readySession(60),
+      playback: { kind: 'playing', anchorFrame: 0, anchorTime: 0 },
+      shown: { status: 'shown', frame: 12, sequences: [], assets: [] },
+    },
+    null,
+    tree,
+  );
+  const { root, tab } = mount(controller);
+  await act(async () => {
+    tab('Elements').click();
+    await Promise.resolve();
+  });
+  expect(calls).toEqual([]);
+  expect(root.querySelector('[role=tabpanel]')?.textContent).toContain('Pause');
 });

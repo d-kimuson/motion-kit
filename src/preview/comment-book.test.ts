@@ -71,6 +71,24 @@ describe('createCommentBook', () => {
     expect(createCommentBook(storage, '/work/app', 'src/entry.tsx').comments()).toEqual([]);
   });
 
+  it('reads an element comment stored with its click point at the top level, without the point', () => {
+    const storage = memoryStorage();
+    const element = {
+      selector: 'h1',
+      text: '',
+      source: null,
+      box: { x: 0, y: 0, width: 1, height: 1 },
+    };
+    storage.items.set(
+      'motion-kit-preview:comments:/work/app:src/entry.tsx',
+      JSON.stringify([{ ...draft(), id: 3, place: { kind: 'element', x: 5, y: 6, element } }]),
+    );
+    expect(createCommentBook(storage, '/work/app', 'src/entry.tsx').comments()[0]?.place).toEqual({
+      kind: 'element',
+      element,
+    });
+  });
+
   it('keeps comments for the page when storage refuses them', () => {
     const book = createCommentBook(
       {

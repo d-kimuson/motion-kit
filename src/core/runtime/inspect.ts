@@ -1,6 +1,12 @@
-import { type InspectedElement } from '../../lib/preview-protocol.ts';
+import {
+  type ElementNode,
+  type ElementTree,
+  type InspectedElement,
+} from '../../lib/preview-protocol.ts';
 
 const textLimit = 80;
+/** The most elements a tree describes; a frame drawing more is rare and the rest is left out. */
+const treeLimit = 2000;
 
 const selectorOf = (element: Element) =>
   [
@@ -67,12 +73,15 @@ export const inspectPoint = (root: HTMLElement, x: number, y: number): Inspected
     .elementsFromPoint(origin.left + x, origin.top + y)
     .filter((element) => element !== root && root.contains(element) && !invisible(element, root));
   const hit = visible.find((element) => paints(element, root)) ?? visible[0];
-  if (hit === undefined) return null;
-  const box = hit.getBoundingClientRect();
-  const text = (hit.textContent ?? '').replaceAll(/\s+/g, ' ').trim();
-  const located = hit.closest('[data-source]');
+  return hit === undefined ? null : describe(hit, root, origin);
+};
+
+const describe = (element: Element, root: HTMLElement, origin: DOMRect): InspectedElement => {
+  const box = element.getBoundingClientRect();
+  const text = (element.textContent ?? '').replaceAll(/\s+/g, ' ').trim();
+  const located = element.closest('[data-source]');
   return {
-    selector: selectorOf(hit),
+    selector: selectorOf(element),
     text: text.length > textLimit ? `${text.slice(0, textLimit - 1)}…` : text,
     source: located !== null && root.contains(located) ? located.getAttribute('data-source') : null,
     box: {
@@ -82,4 +91,27 @@ export const inspectPoint = (root: HTMLElement, x: number, y: number): Inspected
       height: Math.round(box.height),
     },
   };
+};
+
+/**
+ * Every element inside `root`, in document order, each described as `inspectPoint` describes the
+ * one it finds. Past `treeLimit` elements the rest are left out and the tree says so.
+ */
+export const describeTree = (root: HTMLElement): ElementTree => {
+  const origin = root.getBoundingClientRect();
+  let left = treeLimit;
+  const nodes = (parent: Element): ElementNode[] => {
+    const described: ElementNode[] = [];
+    for (const element of parent.children) {
+      if (left === 0) break;
+      left -= 1;
+      described.push({
+        ...describe(element, root, origin),
+        visible: !invisible(element, root),
+        children: nodes(element),
+      });
+    }
+    return described;
+  };
+  return { nodes: nodes(root), truncated: root.getElementsByTagName('*').length > treeLimit };
 };

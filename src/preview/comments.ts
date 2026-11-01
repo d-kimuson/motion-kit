@@ -19,9 +19,9 @@ export const commentPlaceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('point'), x: z.number(), y: z.number() }),
   z.object({
     kind: z.literal('element'),
-    x: z.number(),
-    y: z.number(),
     element: inspectedElementSchema,
+    /** Where it was clicked; none when it was picked from the element tree. */
+    point: z.object({ x: z.number(), y: z.number() }).optional(),
   }),
 ]);
 export type CommentPlace = z.infer<typeof commentPlaceSchema>;
@@ -146,7 +146,7 @@ const facts = (context: ReviewContext, comment: ReviewComment, ownProps: boolean
         text === '' ? '' : ` ${JSON.stringify(text)}`,
         source === null ? '' : ` from ${code(relativeSource(source, context))}`,
         `, box ${position(box.x, box.y)} ${Math.round(box.width)}×${Math.round(box.height)}`,
-        `, clicked at ${position(place.x, place.y)}`,
+        place.point === undefined ? '' : `, clicked at ${position(place.point.x, place.point.y)}`,
       ].join(''),
     );
   }

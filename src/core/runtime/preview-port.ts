@@ -1,5 +1,7 @@
+import { z } from 'zod';
+
 import { type Diagnostic } from '../../lib/diagnostic.ts';
-import { type FramePage } from '../../lib/frame-protocol.ts';
+import { pendingAssetSchema, type FramePage } from '../../lib/frame-protocol.ts';
 import { type LoadingPage } from '../../lib/loading-protocol.ts';
 import {
   previewConnectSchema,
@@ -7,9 +9,10 @@ import {
   previewRequestSchema,
   type PreviewReply,
   type PreviewRequest,
+  type RegisteredAsset,
   type ShowOutcome,
 } from '../../lib/preview-protocol.ts';
-import { inspectPoint } from './inspect.ts';
+import { describeTree, inspectPoint } from './inspect.ts';
 
 /** The window a preview realm talks through; injected so the handshake is testable. */
 export type PreviewHostWindow = Readonly<{
@@ -24,22 +27,63 @@ export type PreviewHostWindow = Readonly<{
 // loading and frames (core's frame timeout, not an external deadline).
 const loadingTimeoutMs = 30_000;
 
+/** Each asset once, though several registrations use it; the first status listed wins. */
+const unique = (assets: readonly RegisteredAsset[]): RegisteredAsset[] => [
+  ...new Map(assets.map((asset) => [`${asset.kind}\0${asset.source}`, asset])).values(),
+];
+
+/** The fonts and images registered for the frame that settled. */
+const registered = (page: LoadingPage): RegisteredAsset[] => {
+  const { pending, failed, ready } = page.assetReadiness();
+  return unique(
+    [
+      ...failed.map((asset) => ({ ...asset, status: 'failed' as const })),
+      ...pending.map((asset) => ({ ...asset, status: 'pending' as const })),
+      ...ready.map((asset) => ({ ...asset, status: 'ready' as const })),
+    ].map(({ kind, source, status }) => ({ kind, source, status })),
+  );
+};
+
+const listedAssets = z.object({ assets: z.array(pendingAssetSchema) });
+/**
+ * The assets a failed frame names in its asset diagnostics. The registry is no guide then: the
+ * failed subtree never committed, so it still holds the last frame's registrations.
+ */
+const failedAssets = (diagnostics: readonly Diagnostic[]): RegisteredAsset[] =>
+  unique(
+    diagnostics.flatMap((diagnostic) => {
+      const status =
+        diagnostic.code === 'asset.load-failed'
+          ? 'failed'
+          : diagnostic.code === 'asset.not-ready'
+            ? 'pending'
+            : undefined;
+      const listed = listedAssets.safeParse(diagnostic.details);
+      if (status === undefined || !listed.success) return [];
+      return listed.data.assets.map(({ kind, source }) => ({ kind, source, status }));
+    }),
+  );
+
 // Completing the lease is the preview's presentation: the committed frame stays on screen and
 // ownership is released without a screenshot.
 const present = async (
   page: LoadingPage,
   outcome: Awaited<ReturnType<FramePage['settleFrame']>>,
 ): Promise<ShowOutcome> => {
-  if (outcome.status !== 'ready') return outcome;
+  if (outcome.status === 'aborted') return outcome;
+  if (outcome.status === 'failed') return { ...outcome, assets: failedAssets(outcome.diagnostics) };
   const completion = page.completeCapture(outcome.lease);
   if (completion.status === 'accepted')
     return {
       status: 'shown',
       frame: outcome.lease.globalFrame,
       sequences: page.sequences(),
+      assets: registered(page),
     };
-  if (completion.status !== 'resettle') return completion;
-  return present(page, await page.resettle(outcome.lease));
+  if (completion.status === 'resettle') return present(page, await page.resettle(outcome.lease));
+  return completion.status === 'failed'
+    ? { ...completion, assets: failedAssets(completion.diagnostics) }
+    : completion;
 };
 
 const unanswered = (error: unknown): Diagnostic => ({
@@ -57,10 +101,12 @@ const failedReply = (request: PreviewRequest, error: unknown): PreviewReply => {
     return { type: 'mounted', id: request.id, result: { ok: false, error: diagnostic } };
   if (request.type === 'inspect')
     return { type: 'inspected', id: request.id, result: { ok: false, error: diagnostic } };
+  if (request.type === 'describe')
+    return { type: 'described', id: request.id, result: { ok: false, error: diagnostic } };
   return {
     type: 'shown',
     id: request.id,
-    outcome: { status: 'failed', diagnostics: [diagnostic] },
+    outcome: { status: 'failed', diagnostics: [diagnostic], assets: [] },
   };
 };
 
@@ -83,13 +129,25 @@ export const answerPreview = async (
         loadingTimeoutMs,
       }),
     };
+  // The element the Loading Page mounts into; the Composition draws nothing outside it.
+  const root = () => document.getElementById('motion-kit-root');
   if (request.type === 'inspect') {
-    // The element the Loading Page mounts into; the Composition draws nothing outside it.
-    const root = document.getElementById('motion-kit-root');
+    const element = root();
     return {
       type: 'inspected',
       id: request.id,
-      result: { ok: true, value: root === null ? null : inspectPoint(root, request.x, request.y) },
+      result: {
+        ok: true,
+        value: element === null ? null : inspectPoint(element, request.x, request.y),
+      },
+    };
+  }
+  if (request.type === 'describe') {
+    const element = root();
+    return {
+      type: 'described',
+      id: request.id,
+      result: { ok: true, value: element === null ? null : describeTree(element) },
     };
   }
   const outcome = await page.settleFrame(request.frame, {
