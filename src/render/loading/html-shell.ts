@@ -12,6 +12,7 @@ import { previewEntryId } from './entry-source.ts';
 export const htmlShell = (preview = false): string =>
   `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0}#motion-kit-root{overflow:hidden}</style>${preview ? previewFailureReporter : ''}</head><body><div id="motion-kit-root"></div><script type="module" src="/@id/virtual:motion-kit-entry"></script></body></html>`;
 
-/** The preview host page; its configuration is inline JSON, `<` escaped so it cannot end the tag. */
+/** The preview host page; its configuration is inline JSON, `<` escaped so it cannot end the tag.
+ * `dark` turns on the dark variants of its components (src/preview/styles.css). */
 export const previewShell = (config: PreviewHostConfig): string =>
-  `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>motion-kit preview</title></head><body><div id="motion-kit-preview"></div><script type="application/json" id="${previewConfigElementId}">${JSON.stringify(config).replaceAll('<', '\\u003c')}</script><script type="module" src="/@id/${previewEntryId}"></script></body></html>`;
+  `<!doctype html><html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>motion-kit preview</title></head><body><div id="motion-kit-preview"></div><script type="application/json" id="${previewConfigElementId}">${JSON.stringify(config).replaceAll('<', '\\u003c')}</script><script type="module" src="/@id/${previewEntryId}"></script></body></html>`;

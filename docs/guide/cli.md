@@ -317,9 +317,11 @@ motion-kit preview entry.tsx --composition teaser --preview-fps 15
 ```
 
 The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
-click on the timeline seek. The keys work wherever the focus is on the page, including the scrubber; a focused button or checkbox keeps Space for itself, and a key with Alt, Ctrl or Cmd stays with the browser. The timecode shows `mm:ss.cc` and the frame number; when the picture is behind
-the playhead (while paused, or by more than half a second while playing), `showing <n>` names the frame actually on screen. Each declared audio source has a
-checkbox, ticked while it is audible; clearing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
+click on the timeline seek. The keys work wherever the focus is on the page, including the scrubber; a focused button keeps Space for itself, a focused side panel tab keeps the arrow keys too, and a key with Alt, Ctrl or Cmd stays with the browser. The timecode shows `mm:ss.cc` and the frame number; when the picture is behind
+the playhead (while paused, or by more than half a second while playing), `showing <n>` names the frame actually on screen. The playback controls stay in view
+under the picture however long the timeline grows. The side panel next to the picture has three tabs: the Composition's size, frame rate and
+duration; the named Sequences seen so far, where choosing one jumps to its start; and the audio sources. Each declared audio source there has a
+speaker toggle, pressed while it is audible; releasing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
 fetched or decoded is marked in the page and skipped.
 
 Saving a source file, or replacing an audio file the page plays, reloads the Composition in the page and keeps the playhead; there is no HMR, so
