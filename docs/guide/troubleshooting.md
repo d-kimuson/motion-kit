@@ -243,8 +243,8 @@ Anything else: keep the envelope and the stack, and report it.
   The entry failed to import or run in the browser, for example a syntax error or a module that throws
   at import. The browser console and the terminal running `preview` name the error; save a fix and the
   page reloads.
-- **The timeline lacks a named Sequence.** It appears once the playhead has been inside it; scrub through
-  the Composition once.
+- **The timeline lacks a named Sequence.** A nested one appears once the playhead has been inside its
+  parent; scrub through the Composition once.
 - **Ctrl-C printed nothing, or `preview aborted; nothing is being served`.** After the preview was
   ready, a stop is its normal end and exits `0`. The aborted line means the stop came before it was
   ready, and the exit code is `128` plus the signal number.

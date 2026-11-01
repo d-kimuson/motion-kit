@@ -182,3 +182,39 @@ it('packs named Sequence spans that never overlap into one timeline row', () => 
     ),
   ).toEqual([['intro', 'outro'], ['intro › title']]);
 });
+
+it('highlights only the spans the shown frame is inside, not every mounted one', () => {
+  const fps = createFrameRate({ numerator: 30, denominator: 1 });
+  if (!fps.ok) throw new Error('No frame rate');
+  const spans = [
+    { path: ['intro'], startFrame: 0, endFrame: 30 },
+    { path: ['outro'], startFrame: 30, endFrame: 60 },
+  ];
+  const { controller } = fakeController({
+    session: {
+      kind: 'ready',
+      descriptor: {
+        id: 'clip',
+        width: 320,
+        height: 180,
+        fps: { numerator: 30, denominator: 1 },
+        durationInFrames: 60,
+      },
+      fps: fps.value,
+    },
+    spans,
+    // A named Sequence reports itself while its parent is mounted, active or not.
+    shown: { status: 'shown', frame: 45, sequences: spans },
+  });
+  const root = document.createElement('div');
+  document.body.append(root);
+  const view = createRoot(root);
+  cleanups.push(() => {
+    act(() => view.unmount());
+    root.remove();
+  });
+  act(() => view.render(<PreviewView controller={controller} frame={() => {}} />));
+  expect([...root.querySelectorAll('.mk-bar.mk-active')].map((bar) => bar.textContent)).toEqual([
+    'outro',
+  ]);
+});

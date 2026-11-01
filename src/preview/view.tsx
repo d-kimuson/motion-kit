@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { activeSequences } from '../core/sequence/directory.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type LoadingDescriptor, type SequenceSpan } from '../lib/loading-protocol.ts';
 import { type PreviewController, type PreviewState } from './controller.ts';
@@ -66,7 +67,11 @@ const Timeline = ({
   controller: PreviewController;
 }) => {
   const duration = descriptor.durationInFrames;
-  const active = state.shown?.status === 'shown' ? state.shown.sequences : [];
+  // A named Sequence is reported while its parent is mounted, so the shown frame picks the active.
+  const active =
+    state.shown?.status === 'shown'
+      ? activeSequences(state.shown.sequences, state.shown.frame)
+      : [];
   // A span past the Composition is clipped to it; one that is empty there is not drawn.
   // Spans that never overlap share a row, as audio clips do, so many Sequences stay in the dock.
   const spanLanes = packLanes(

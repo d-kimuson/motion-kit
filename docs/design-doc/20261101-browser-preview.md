@@ -116,7 +116,7 @@ Web Audio decodes each distinct `src` once (`fetch` of the audio route, `decodeA
 
 ### Timeline overlay
 
-Rows under the scrubber show the named Sequences the realm has reported and the declared audio clips, each packed into lanes (`packLanes`) so spans or clips that do not overlap share a row. A named Sequence is reported while it is mounted (core `CONTEXT.md`), so the host keeps every span it has seen since the last reload and highlights the spans of the latest `shown` reply, the ones showing at the shown frame. Zero-length spans are not drawn; spans and clips are clipped to the Composition for drawing only.
+Rows under the scrubber show the named Sequences the realm has reported and the declared audio clips, each packed into lanes (`packLanes`) so spans or clips that do not overlap share a row. A named Sequence is reported while it is mounted, which is whenever its ancestors show the frame, active or not (core `CONTEXT.md`). So the top-level ones are listed from the first frame shown, and the host keeps every span it has seen since the last reload; it highlights the spans of the latest `shown` reply that are showing at the shown frame (`activeSequences`), not every reported one. Zero-length spans are not drawn; spans and clips are clipped to the Composition for drawing only.
 
 ### CLI
 
@@ -125,7 +125,7 @@ Rows under the scrubber show the named Sequences the realm has reported and the 
 ### Open items
 
 - The comment-to-Markdown UI (TASK-245) is not built.
-- The timeline fills as spans are seen: a named Sequence appears once the playhead has been inside its ancestors, because the runtime reports a Sequence only while it is mounted. Scrub through the Composition once to see every shot.
+- The timeline fills as spans are seen: a top-level named Sequence is listed from the first frame shown, and a nested one once the playhead has been inside its ancestors, because the runtime reports a Sequence only while it is mounted. Scrub through the Composition once to see every shot.
 - Nothing bounds a `show` beyond core's frame timeout; a page that hangs the main thread hangs the host page's iframe, not the CLI.
 
 ## Alternatives

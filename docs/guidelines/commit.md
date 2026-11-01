@@ -2,7 +2,7 @@
 
 ## Message
 
-- Conventional Commits: `<type>(<scope>)?: <summary>`, with `<type>` one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`, `build`. The scope, when used, is a context name from `docs/CONTEXT-MAP.md` (`core`, `motion`, `theme`, `three`, `presets`, `render`, `agent`).
+- Conventional Commits: `<type>(<scope>)?: <summary>`, with `<type>` one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`, `build`. The scope, when used, is a context name from `docs/CONTEXT-MAP.md` (`core`, `motion`, `theme`, `three`, `presets`, `render`, `preview`, `agent`).
 - The summary is English, imperative, lower-case, without a trailing period. The body, when needed, says why.
 - Good: `chore: pin node 26 devshell and install gitleaks`
 - Bad: `Fixed the timeline bug.`
