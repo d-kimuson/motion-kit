@@ -620,7 +620,7 @@ describe('asset registry', () => {
       signal: new AbortController().signal,
       timeoutMs: 1000,
       location: { compositionId: 'demo', frame: 4, timeSeconds: 0.2 },
-      generation: 2,
+      generation: 1,
       committed: () => true,
     });
     expect(result.ok).toBe(false);
@@ -636,6 +636,26 @@ describe('asset registry', () => {
     expect(leaked(result)).toBe(false);
     expect(result.error[0]?.message).toBe('The required image failed to decode.');
     expect(result.error[1]?.message).toBe('The required font failed to load.');
+  });
+
+  it('fails a later frame only for an earlier owner that committed', async () => {
+    const registry = createAssetRegistry({ load: () => Promise.reject(new Error('missing')) });
+    // A memoized part of an earlier frame still shows its picture; a render cut off before it
+    // committed does not.
+    registry.retain(image('/shown.png', 'shown'), 'shown-owner', context);
+    registry.markCommitted('shown-owner');
+    registry.retain(image('/cut-off.png', 'cut-off'), 'cut-off-owner', context);
+    const result = await registry.whenReady({
+      signal: new AbortController().signal,
+      timeoutMs: 1000,
+      location: { compositionId: 'demo', frame: 4, timeSeconds: 0.2 },
+      generation: 2,
+      committed: () => true,
+    });
+    if (result.ok || 'aborted' in result) throw new Error('expected diagnostics');
+    expect(result.error.map((diagnostic) => diagnostic.details)).toEqual([
+      { assets: [expect.objectContaining({ id: 'shown' })] },
+    ]);
   });
 
   it('keeps the barrier waiting when a registration appears during confirmation', async () => {
@@ -721,6 +741,10 @@ describe('asset registry', () => {
       }),
     ]);
     gate.resolve('ready');
+    await tick();
+    // The loaded asset is drawn only by the root's next commit, so the frame waits for it.
+    expect(settled).toBe(false);
+    runtime.acknowledgeContent('composition-root', 1, '1');
     await expect(pending).resolves.toMatchObject({ status: 'ready' });
     runtime.dispose();
   });
