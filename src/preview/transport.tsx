@@ -1,5 +1,5 @@
 import { MessageSquarePlus, Pause, Play, Settings, StepBack, StepForward } from 'lucide-react';
-import { type ReactElement, useId } from 'react';
+import { type ReactElement, useId, useRef } from 'react';
 
 import { type FrameRate } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
@@ -33,7 +33,10 @@ const Fixed = ({ text, widest }: { text: string; widest: string }) => (
   </span>
 );
 
-/** The page's settings, behind an icon: for now only its language, each named in its own language. */
+/**
+ * The page's settings, behind an icon: for now only its language, each named in its own language.
+ * The select takes the focus when they open, so the keys go to it and not to playback.
+ */
 const SettingsMenu = ({
   locale,
   onChooseLocale,
@@ -43,22 +46,26 @@ const SettingsMenu = ({
 }) => {
   const t = useMessages();
   const languageId = useId();
+  const language = useRef<HTMLSelectElement>(null);
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <Button variant="ghost" size="icon-sm" aria-label={t.transport.settings}>
-            <Settings />
-          </Button>
-        }
-      />
-      <PopoverContent side="top" align="end" className="w-56">
+      <Hint label={t.transport.settings}>
+        <PopoverTrigger
+          render={
+            <Button variant="ghost" size="icon-sm" aria-label={t.transport.settings}>
+              <Settings />
+            </Button>
+          }
+        />
+      </Hint>
+      <PopoverContent side="top" align="end" className="w-56" initialFocus={language}>
         <PopoverTitle className="text-sm">{t.transport.settings}</PopoverTitle>
         <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3">
           <label htmlFor={languageId} className="text-xs text-muted-foreground">
             {t.page.language}
           </label>
           <NativeSelect
+            ref={language}
             id={languageId}
             size="sm"
             className="w-full"

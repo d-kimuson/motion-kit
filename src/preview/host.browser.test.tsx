@@ -849,6 +849,26 @@ it('keeps the scrubber the same width from the first frame to the last in either
   }
 });
 
+it('focuses the language select when the settings open and closes them on Escape', async () => {
+  const { controller, calls } = fakeController({ session: readySession(60) });
+  const { root } = mount(controller);
+  const settings = root.querySelector<HTMLElement>('[aria-label=Settings]');
+  if (settings === null) throw new Error('No settings button');
+  act(() => settings.click());
+  const language = await vi.waitFor(() => {
+    const select = document.querySelector<HTMLSelectElement>('select[id]');
+    if (select === null || document.activeElement !== select) throw new Error('Select not focused');
+    return select;
+  });
+  act(() => {
+    language.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await vi.waitFor(() => {
+    if (document.querySelector('select[id]') !== null) throw new Error('Settings still open');
+  });
+  expect(calls).toEqual([]);
+});
+
 it('switches the page to Japanese in the settings and keeps the choice for the next load', async () => {
   const storage = memoryStorage();
   const { controller } = fakeController({ session: readySession(60) });
