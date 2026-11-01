@@ -56,7 +56,7 @@ it('connects on the frame announcement and correlates replies by id', async () =
       return {
         type: 'shown',
         id: parsed.id,
-        outcome: { status: 'shown', frame: parsed.frame, sequences: [] },
+        outcome: { status: 'shown', frame: parsed.frame, sequences: [], assets: [] },
       };
     return parsed.type === 'list' ? listed(parsed.id) : undefined;
   });
@@ -67,7 +67,7 @@ it('connects on the frame announcement and correlates replies by id', async () =
     { message: { type: 'motion-kit-preview-connect', protocolVersion: 1 }, targetOrigin: origin },
   ]);
   const [shown, list] = await Promise.all([realm.show(7), realm.list()]);
-  expect(shown).toEqual({ status: 'shown', frame: 7, sequences: [] });
+  expect(shown).toEqual({ status: 'shown', frame: 7, sequences: [], assets: [] });
   expect(list).toEqual({ ok: true, value: [] });
   expect(seen).toEqual([
     { type: 'show', id: 1, frame: 7 },
@@ -98,6 +98,33 @@ it('asks the realm what element is at a design-pixel point', async () => {
   const realm = await connecting;
   expect(await realm.inspect(10, 20)).toEqual({ ok: true, value: element });
   expect(await realm.inspect(500, 20)).toEqual({ ok: true, value: null });
+  realm.close();
+});
+
+it('asks the realm for the elements of the shown frame', async () => {
+  const tree = {
+    nodes: [
+      {
+        selector: 'h1',
+        text: 'Hello',
+        source: null,
+        box: { x: 0, y: 0, width: 100, height: 40 },
+        visible: true,
+        children: [],
+      },
+    ],
+    truncated: false,
+  };
+  const fake = harness((request) => {
+    const parsed = previewRequestSchema.parse(request);
+    return parsed.type === 'describe'
+      ? { type: 'described', id: parsed.id, result: { ok: true, value: tree } }
+      : undefined;
+  });
+  const connecting = connectRealm(fake.window, '2');
+  fake.announce(ready);
+  const realm = await connecting;
+  expect(await realm.describe()).toEqual({ ok: true, value: tree });
   realm.close();
 });
 

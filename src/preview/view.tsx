@@ -4,6 +4,7 @@ import { type Diagnostic } from '../lib/diagnostic.ts';
 import { CommentLayer } from './comment-layer.tsx';
 import { type Review } from './comments-panel.tsx';
 import { type PreviewController, type PreviewState } from './controller.ts';
+import { type ElementBox } from './elements-panel.tsx';
 import { SidePanel } from './side-panel.tsx';
 import { previewCss } from './styles.generated.ts';
 import { Timeline } from './timeline.tsx';
@@ -106,6 +107,8 @@ export const PreviewView = ({
   const ready = state.session.kind === 'ready' ? state.session : undefined;
   const descriptor = ready?.descriptor;
   const comments = allComments.filter((comment) => comment.compositionId === descriptor?.id);
+  // The box an element row of the side panel points at.
+  const [highlight, setHighlight] = useState<ElementBox>();
   const { stage, scale } = useFit(descriptor?.width ?? 1280, descriptor?.height ?? 720);
   useEffect(() => {
     void controller.reload();
@@ -166,6 +169,7 @@ export const PreviewView = ({
               scale={scale}
               state={reviewState}
               controller={review.controller}
+              highlight={highlight}
             />
           )}
           {reviewState.picking ? (
@@ -185,6 +189,7 @@ export const PreviewView = ({
               review={review}
               draft={reviewState.draft}
               comments={comments}
+              onHighlight={setHighlight}
             />
           )}
         </aside>

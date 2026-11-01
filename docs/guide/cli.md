@@ -319,8 +319,8 @@ motion-kit preview entry.tsx --composition teaser --preview-fps 15
 The page controls: Space plays and pauses, the arrow keys step one frame (Shift: ten), the scrubber and a
 click on the timeline seek. The keys work wherever the focus is on the page, including the scrubber; a focused button keeps Space for itself, a focused side panel tab keeps the arrow keys too, and a key with Alt, Ctrl or Cmd stays with the browser. The timecode shows `mm:ss.cc` and the frame number; when the picture is behind
 the playhead (while paused, or by more than half a second while playing), `showing <n>` names the frame actually on screen. The playback controls stay in view
-under the picture however long the timeline grows. The side panel next to the picture has four tabs: the Composition's size, frame rate and
-duration; the named Sequences seen so far, where choosing one jumps to its start; the audio sources; and the review comments. Each declared audio source there has a
+under the picture however long the timeline grows. The side panel next to the picture has five tabs: Info, with the Composition's size, frame rate and
+duration; the named Sequences seen so far, where choosing one jumps to its start; Assets, with the fonts and images loaded with `useAsset` so far and the audio sources (a failed one is marked, and its time jumps to the frame it was first seen at); Elements, the DOM tree of the paused frame, where hovering an element outlines it on the picture and its button comments on it; and the review comments. Each declared audio source in Assets has a
 speaker toggle, pressed while it is audible; releasing it mutes the source. The choice is remembered per project root in the browser's `localStorage`. Storage belongs to the page's origin, which includes the port, so the choice survives reloads but a restart on another port starts unmuted; pass the same `--port` to keep it. A source that cannot be
 fetched or decoded is marked in the page and skipped.
 

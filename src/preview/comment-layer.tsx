@@ -1,5 +1,6 @@
 import { type MouseEvent } from 'react';
 
+import { type ElementBox } from './elements-panel.tsx';
 import { type ReviewController, type ReviewState } from './review.ts';
 import { cn } from './ui/utils.ts';
 
@@ -15,7 +16,8 @@ const designPoint = (event: MouseEvent<HTMLDivElement>, width: number, height: n
 /**
  * Comment mode over the stage. The realm frame takes no pointer input, so this layer, laid over it
  * at the same size and scale, turns the pointer into design pixels: it highlights the element under
- * the pointer and picks it on a click. Outside comment mode it only marks what the draft is about.
+ * the pointer and picks it on a click. Outside comment mode it only marks the highlighted box, or
+ * what the draft is about.
  */
 export const CommentLayer = ({
   width,
@@ -23,20 +25,22 @@ export const CommentLayer = ({
   scale,
   state,
   controller,
+  highlight,
 }: {
   width: number;
   height: number;
   scale: number;
+  /** A box to outline outside comment mode, before the draft's element. */
+  highlight: ElementBox | undefined;
   state: ReviewState;
   controller: ReviewController;
 }) => {
   const { picking, hovered, draft } = state;
   const box = picking
     ? hovered?.box
-    : draft?.place.kind === 'element'
-      ? draft.place.element.box
-      : undefined;
-  const point = !picking && draft?.place.kind === 'point' ? draft.place : undefined;
+    : (highlight ?? (draft?.place.kind === 'element' ? draft.place.element.box : undefined));
+  const point =
+    !picking && highlight === undefined && draft?.place.kind === 'point' ? draft.place : undefined;
   // Outlines and labels keep their on-screen size whatever the scale.
   const px = (value: number) => `${value / scale}px`;
   return (

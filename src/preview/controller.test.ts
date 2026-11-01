@@ -73,10 +73,20 @@ const fakeRealm = (compositions: readonly LoadingDescriptor[], hold = false) => 
                     endFrame: frame < 30 ? 30 : 60,
                   },
                 ],
+                assets: [
+                  { kind: 'font', source: '/inter.woff2', status: 'ready' },
+                  ...(frame < 30
+                    ? []
+                    : [{ kind: 'image', source: '/photo.png', status: 'ready' } as const]),
+                ],
               },
             ),
         });
       }),
+    describe: () =>
+      closed
+        ? Promise.reject(new Error('Preview realm closed'))
+        : Promise.resolve({ ok: true, value: { nodes: [], truncated: true } }),
     inspect: (x, y) =>
       closed
         ? Promise.reject(new Error('Preview realm closed'))
@@ -207,6 +217,30 @@ it('mounts the only Composition, shows the playhead and accumulates named Sequen
     { path: ['outro'], startFrame: 30, endFrame: 60 },
   ]);
   expect(host.controller.state().shown).toMatchObject({ status: 'shown', frame: 10 });
+});
+
+it('accumulates the registered assets with the frame each was first seen at and its latest status', async () => {
+  const host = setup();
+  await host.controller.reload();
+  const realm = host.realms[0];
+  realm?.shows[0]?.answer();
+  await flush();
+  host.controller.seek(40);
+  realm?.shows[1]?.answer();
+  await flush();
+  host.controller.seek(50);
+  realm?.shows[2]?.answer({
+    status: 'failed',
+    diagnostics: [{ code: 'asset.load-failed', severity: 'error', message: 'm', hint: 'h' }],
+    assets: [{ kind: 'image', source: '/photo.png', status: 'failed' }],
+  });
+  await flush();
+  expect(host.controller.state().assets).toEqual([
+    { kind: 'font', source: '/inter.woff2', status: 'ready', frame: 0 },
+    { kind: 'image', source: '/photo.png', status: 'failed', frame: 40 },
+  ]);
+  await host.controller.reload();
+  expect(host.controller.state().assets).toEqual([]);
 });
 
 it('keeps one show in flight and follows with the latest wanted frame', async () => {
@@ -493,4 +527,16 @@ it('asks the mounted realm what element is at a point, and answers none without 
   });
   host.realms[0]?.realm.close();
   expect(await host.controller.inspect(5, 6)).toEqual({ ok: true, value: null });
+});
+
+it('asks the mounted realm for its elements, and answers none without one', async () => {
+  const host = setup();
+  expect(await host.controller.describe()).toEqual({ ok: true, value: null });
+  await host.controller.reload();
+  expect(await host.controller.describe()).toEqual({
+    ok: true,
+    value: { nodes: [], truncated: true },
+  });
+  host.realms[0]?.realm.close();
+  expect(await host.controller.describe()).toEqual({ ok: true, value: null });
 });
