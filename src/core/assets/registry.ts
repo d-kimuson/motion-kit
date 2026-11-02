@@ -8,7 +8,7 @@ import {
   assetLoadFailed,
   assetNotReadyDiagnostic,
   defaultPhase,
-  redactAssetSource,
+  reportedAssetSource,
 } from './diagnostics.ts';
 import { phaseFor, type AssetLoader } from './loaders.ts';
 import {
@@ -71,6 +71,8 @@ const freshDone = (): Pick<Entry, 'done' | 'resolve'> => {
 /** Exact source identity. Redaction is not applied; credentials stay out of serialized output. */
 export const assetCacheKey = (descriptor: AssetDescriptor): string => {
   if (descriptor.kind === 'image') return `image\u0000${descriptor.source}`;
+  if (descriptor.kind === 'font-family')
+    return `font-family\u0000${descriptor.family}\u0000${String(descriptor.weight ?? 400)}\u0000${descriptor.style ?? 'normal'}\u0000${descriptor.text}`;
   return `font\u0000${descriptor.family}\u0000${String(descriptor.weight ?? 400)}\u0000${descriptor.style ?? 'normal'}\u0000${descriptor.source}`;
 };
 
@@ -143,7 +145,10 @@ export const createAssetRegistry = (options: {
       .map((owner) => ({
         id: owner.assetId,
         kind: entry.descriptor.kind,
-        source: entry.descriptor.source,
+        source:
+          entry.descriptor.kind === 'font-family'
+            ? entry.descriptor.family
+            : entry.descriptor.source,
         phase: entry.phase,
         ...(owner.sceneId === undefined ? {} : { sceneId: owner.sceneId }),
       }));
@@ -188,7 +193,6 @@ export const createAssetRegistry = (options: {
   const settleAttempt = (
     entry: Entry,
     attempt: number,
-    controller: AbortController,
     outcome: 'ready' | 'failed',
     value: unknown,
     error: unknown,
@@ -222,8 +226,8 @@ export const createAssetRegistry = (options: {
     void Promise.resolve()
       .then(() => options.load(entry.descriptor, controller.signal, attempt))
       .then(
-        (value) => settleAttempt(entry, attempt, controller, 'ready', value, undefined),
-        (error: unknown) => settleAttempt(entry, attempt, controller, 'failed', undefined, error),
+        (value) => settleAttempt(entry, attempt, 'ready', value, undefined),
+        (error: unknown) => settleAttempt(entry, attempt, 'failed', undefined, error),
       );
     poke();
   };
@@ -233,7 +237,7 @@ export const createAssetRegistry = (options: {
   };
   const publishRecord = (asset: PendingAsset): PendingAsset => ({
     ...asset,
-    source: redactAssetSource(asset.source),
+    source: reportedAssetSource(asset),
   });
 
   const ownerOf = (owner: string): Owner | undefined => {

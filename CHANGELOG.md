@@ -4,6 +4,17 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## Unreleased
+
+### Added
+
+- **Fonts that CSS declares.** `useAsset({ kind: 'font-family', family, weight?, style?, text })`
+  waits for the faces a stylesheet's `@font-face` rules provide for the text a frame renders, so a
+  fontsource family split by `unicode-range` into dozens of subsets is captured only after the
+  subsets that text needs are loaded, instead of drawing the system fallback. It returns the loaded
+  `FontFace` objects and reports a family that no stylesheet declares for the text as
+  `asset.load-failed`, naming the family. The subset URLs stay in the stylesheet.
+
 ## 0.2.1 — 2026-11-02
 
 ### Added

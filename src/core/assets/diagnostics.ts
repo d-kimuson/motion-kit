@@ -86,14 +86,27 @@ const redactSource = (source: string): string => {
 /** Schema validation does not redact. Every asset Diagnostic must pass through here. */
 export const redactAssetSource = (source: string): string => redactSource(source);
 
+/**
+ * Kinds whose source is a URL that can carry credentials. A CSS-declared font family reports its
+ * family instead, which is authored CSS and has nothing to redact.
+ */
+const urlSourceKinds: ReadonlySet<string> = new Set(['image', 'font']);
+
+/** The identity a Diagnostic or readiness snapshot reports for a required asset. */
+export const reportedAssetSource = (asset: Readonly<{ kind: string; source: string }>): string =>
+  urlSourceKinds.has(asset.kind) ? redactAssetSource(asset.source) : asset.source;
+
 const loadFailedMessage = (kind: string): string => {
   if (kind === 'font') return 'The required font failed to load.';
+  if (kind === 'font-family') return 'The required font family failed to load.';
   if (kind === 'image') return 'The required image failed to decode.';
   return 'The required asset failed to load.';
 };
 
 const loadFailedHint = (kind: string): string => {
   if (kind === 'font') return 'Check the font source, family, weight and style.';
+  if (kind === 'font-family')
+    return 'Check the family, weight and style, and that the imported CSS declares faces for the rendered text.';
   if (kind === 'image') return 'Check the image source and file format.';
   return 'Check the asset source and retry the frame.';
 };
@@ -108,7 +121,7 @@ export type AssetDiagnosticInput = Readonly<{
 }>;
 
 const assetRecord = (asset: AssetDiagnosticInput): PendingAsset => {
-  const source = redactAssetSource(asset.source);
+  const source = reportedAssetSource(asset);
   return {
     ...(asset.id === undefined ? {} : { id: asset.id }),
     kind: asset.kind,
@@ -205,7 +218,7 @@ const recordedAssets = (diagnostic: Diagnostic): AssetDiagnosticInput[] => {
 };
 
 const assetIdentity = (asset: AssetDiagnosticInput): string =>
-  `${asset.phase}\u0000${redactAssetSource(asset.source)}`;
+  `${asset.phase}\u0000${reportedAssetSource(asset)}`;
 
 /**
  * Union of registry failures and diagnostics thrown through the error boundary.

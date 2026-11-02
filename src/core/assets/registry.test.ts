@@ -28,6 +28,19 @@ const font = (source: string, weight: number | string = 400): AssetDescriptor =>
   weight,
   sceneId: 'intro',
 });
+const cssFont = (
+  text: string,
+  weight: number | string = 400,
+  family = 'Noto Sans JP',
+): AssetDescriptor => ({
+  kind: 'font-family',
+  id: `family-${text}`,
+  family,
+  weight,
+  style: 'normal',
+  text,
+  sceneId: 'intro',
+});
 const tick = async () => {
   for (let count = 0; count < 20; count += 1) await Promise.resolve();
 };
@@ -85,7 +98,7 @@ describe('asset registry', () => {
     const registry = createAssetRegistry({
       load: (descriptor) => {
         calls.push(
-          `${descriptor.kind}:${descriptor.source}:${'weight' in descriptor ? descriptor.weight : ''}`,
+          `${descriptor.kind}:${descriptor.kind === 'font-family' ? descriptor.family : descriptor.source}:${'weight' in descriptor ? descriptor.weight : ''}`,
         );
         return Promise.resolve('ready');
       },
@@ -102,6 +115,92 @@ describe('asset registry', () => {
       'font:/face.ttf:700',
       'image:/other.png:',
     ]);
+  });
+
+  it('keys a CSS-declared family by family, weight, style and text', async () => {
+    const calls: string[] = [];
+    const registry = createAssetRegistry({
+      load: (descriptor) => {
+        calls.push(
+          descriptor.kind === 'font-family'
+            ? `${descriptor.family}:${String(descriptor.weight)}:${descriptor.style}:${descriptor.text}`
+            : descriptor.kind,
+        );
+        return Promise.resolve('faces');
+      },
+    });
+    registry.retain(cssFont('あ'), 'a', context);
+    registry.retain(cssFont('あ'), 'b', context);
+    registry.retain(cssFont('い'), 'c', context);
+    registry.retain(cssFont('い', 700), 'd', context);
+    await tick();
+    expect(calls).toEqual([
+      'Noto Sans JP:400:normal:あ',
+      'Noto Sans JP:400:normal:い',
+      'Noto Sans JP:700:normal:い',
+    ]);
+  });
+
+  it('reports a CSS-declared family by its family name, never as a redacted URL', async () => {
+    const pending = Promise.withResolvers<string>();
+    const registry = createAssetRegistry({ load: () => pending.promise });
+    registry.retain(cssFont('あ'), 'owner', context);
+    await tick();
+    expect(registry.pending()).toEqual([
+      {
+        id: 'family-あ',
+        kind: 'font-family',
+        phase: 'load',
+        sceneId: 'intro',
+        source: 'Noto Sans JP',
+      },
+    ]);
+    expect(registry.snapshot().pending).toEqual(registry.pending());
+    pending.reject(new Error('no @font-face covers the text'));
+    const result = await registry.whenReady({
+      signal: new AbortController().signal,
+      timeoutMs: 1000,
+      location: { compositionId: 'demo', frame: 3, timeSeconds: 0.1 },
+      generation: 1,
+      committed: () => true,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: [
+        {
+          code: 'asset.load-failed',
+          message: 'The required font family failed to load.',
+          hint: 'Check the family, weight and style, and that the imported CSS declares faces for the rendered text.',
+          location: {
+            compositionId: 'demo',
+            sceneId: 'intro',
+            frame: 3,
+            timeSeconds: 0.1,
+            elementId: 'family-あ',
+          },
+          details: {
+            assets: [
+              { id: 'family-あ', kind: 'font-family', phase: 'load', source: 'Noto Sans JP' },
+            ],
+          },
+        },
+      ],
+    });
+    if (result.ok || 'aborted' in result) throw new Error('expected diagnostics');
+    for (const diagnostic of result.error)
+      expect(DiagnosticSchema.parse(diagnostic)).toEqual(diagnostic);
+    // A reported family is a fixed point: the producer's second pass leaves it unchanged.
+    expect(
+      assetLoadFailed({
+        assets: [{ kind: 'font-family', phase: 'font-set', source: 'Noto Sans JP' }],
+        cause: undefined,
+      }),
+    ).toMatchObject({
+      details: {
+        assets: [{ kind: 'font-family', phase: 'font-set', source: 'Noto Sans JP' }],
+      },
+    });
+    expect(registry.snapshot().failed.map((asset) => asset.source)).toEqual(['Noto Sans JP']);
   });
 
   it('retries a failed load as a new attempt', async () => {

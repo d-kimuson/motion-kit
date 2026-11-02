@@ -90,7 +90,7 @@ const RegisteredAssets = ({ state }: { state: PreviewState }) => {
   return (
     <ul className="grid grid-cols-1 gap-0.5">
       {assets.map((asset) => {
-        const Icon = asset.kind === 'font' ? Type : Image;
+        const Icon = asset.kind === 'font' || asset.kind === 'font-family' ? Type : Image;
         return (
           <li
             key={`${asset.kind}:${asset.source}`}

@@ -151,6 +151,16 @@ const mutants: Mutant[] = [
     files: ['src/core/runtime/composition-runtime.test.ts'],
     test: 'publishes every failed registration when the boundary fails',
   },
+  {
+    name: 'font-family-ready-without-waiting',
+    file: 'src/core/assets/loaders.ts',
+    before: '  let faces: FontFace[];',
+    after:
+      '  void document.fonts.load(fontShorthand(descriptor), descriptor.text).catch(() => {});\n  return [];\n  let faces: FontFace[];',
+    project: 'frame-transport',
+    files: ['src/render/capture/asset-readiness.test.ts'],
+    test: 'reports a CSS-declared family whose subset cannot be loaded',
+  },
 ];
 /** Removed because it is equivalent to the attempt counter. Not a survivor. */
 const equivalent = [

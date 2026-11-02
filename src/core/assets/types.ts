@@ -21,7 +21,26 @@ export type ImageAssetDescriptor = Readonly<{
   sceneId?: string;
 }>;
 
-export type AssetDescriptor = FontAssetDescriptor | ImageAssetDescriptor;
+/**
+ * A font family the page's own `@font-face` rules declare, split by `unicode-range` as fontsource
+ * ships one family. The faces that cover `text` must be loaded before the frame is captured.
+ */
+export type FontFamilyAssetDescriptor = Readonly<{
+  kind: 'font-family';
+  id: string;
+  /** The CSS family the loaded stylesheets declare. */
+  family: string;
+  weight?: number | string;
+  style?: string;
+  /** The text the frame renders: the faces covering its characters are required. */
+  text: string;
+  sceneId?: string;
+}>;
+
+export type AssetDescriptor =
+  | FontAssetDescriptor
+  | FontFamilyAssetDescriptor
+  | ImageAssetDescriptor;
 
 export type AssetContext = Readonly<{
   compositionId?: string;
@@ -31,7 +50,14 @@ export type AssetContext = Readonly<{
 }>;
 
 export const assertAssetDescriptor = (descriptor: AssetDescriptor): void => {
-  if (descriptor.id.length === 0 || descriptor.source.length === 0)
+  if (descriptor.id.length === 0) throw new Error('useAsset requires a non-empty id.');
+  if (descriptor.kind === 'font-family') {
+    if (descriptor.family.length === 0) throw new Error('useAsset requires a font family.');
+    if (descriptor.text.length === 0)
+      throw new Error('useAsset requires the text a CSS-declared font family must cover.');
+    return;
+  }
+  if (descriptor.source.length === 0)
     throw new Error('useAsset requires a non-empty id and source.');
   if (descriptor.kind === 'font' && descriptor.family.length === 0)
     throw new Error('useAsset requires a font family.');

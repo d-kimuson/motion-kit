@@ -1,5 +1,13 @@
 import { createRenderer, type Renderer, type RenderedFrame } from '@kimuson/motion-kit/render';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -10,6 +18,9 @@ import * as loading from '../loading/session.ts';
 const require = createRequire(import.meta.url);
 const fontBytes = readFileSync(
   new URL('../../../spikes/d-assets/assets/Abel-Regular.ttf', import.meta.url),
+);
+const japaneseFontBytes = readFileSync(
+  new URL('../../../examples/explainer/assets/fonts/NotoSansJP[wght].woff2', import.meta.url),
 );
 const imageBytes = readFileSync(
   new URL('../../../spikes/d-assets/assets/checker.svg', import.meta.url),
@@ -28,6 +39,15 @@ afterEach(async () => {
 const open = async (compositionId = 'assets') => {
   directory = mkdtempSync(join(tmpdir(), 'motion-kit-assets-'));
   mkdirSync(join(directory, 'node_modules'));
+  mkdirSync(join(directory, 'public'));
+  copyFileSync(
+    new URL('../../../spikes/d-assets/assets/Abel-Regular.ttf', import.meta.url),
+    join(directory, 'public', 'latin-subset.ttf'),
+  );
+  copyFileSync(
+    new URL('../../../examples/explainer/assets/fonts/NotoSansJP[wght].woff2', import.meta.url),
+    join(directory, 'public', 'jp-subset.woff2'),
+  );
   for (const name of ['react', 'react-dom', 'zod'])
     symlinkSync(
       dirname(require.resolve(`${name}/package.json`)),
@@ -88,7 +108,8 @@ const routeMissing = async (page: ReturnType<loading.LoadingSession['page']>) =>
       url.includes('fail-a.png') ||
       url.includes('fail-b.png') ||
       url.includes('loader-rejected.png') ||
-      url.includes('boundary.png')
+      url.includes('boundary.png') ||
+      url.includes('missing-subset.woff2')
     ) {
       await route.fulfill({ status: 404, body: 'missing' });
       return;
@@ -232,6 +253,110 @@ describe('asset readiness barrier', () => {
       ],
       textInk: true,
     });
+  }, 60_000);
+
+  it('waits for the unicode-range subset the text needs, and for no other', async () => {
+    const renderer = await open('split-font');
+    const owned = sessions.at(-1);
+    if (owned === undefined) throw new Error('Session missing');
+    const page = owned.page();
+    const release = Promise.withResolvers<void>();
+    let jpFulfilled: bigint | undefined;
+    let capturedAt: bigint | undefined;
+    let capturedWhilePending = false;
+    let capturedWithFallback = false;
+    const latinRequests: string[] = [];
+    await page.route('**/jp-subset.woff2*', async (route) => {
+      await release.promise;
+      jpFulfilled = process.hrtime.bigint();
+      await route.fulfill({
+        status: 200,
+        contentType: 'font/woff2',
+        headers: { 'cache-control': 'no-store' },
+        body: japaneseFontBytes,
+      });
+    });
+    await page.route('**/latin-subset.ttf*', async (route) => {
+      latinRequests.push(route.request().url());
+      await route.continue();
+    });
+    const screenshot = page.screenshot.bind(page);
+    vi.spyOn(page, 'screenshot').mockImplementation(async (options) => {
+      const state = await page.evaluate(() => ({
+        pending: window.__motionKit?.assetReadiness().pending ?? [],
+        ready: document.documentElement.dataset['splitFontReady'] === 'true',
+        covered: document.fonts.check("normal 400 28px 'SplitGated'", 'あい'),
+        faces: [...document.fonts]
+          .filter((face) => face.family === 'SplitGated')
+          .map((face) => `${face.unicodeRange}:${face.status}`),
+      }));
+      capturedAt = process.hrtime.bigint();
+      if (state.pending.length > 0 || !state.ready || !state.covered) capturedWhilePending = true;
+      if (state.faces.some((face) => face.startsWith('U+3040') && face.endsWith(':unloaded')))
+        capturedWithFallback = true;
+      return screenshot(options);
+    });
+    const started = process.hrtime.bigint();
+    const rendering = renderer.renderFrame({ frame: 0 });
+    await page.waitForFunction(
+      () => (window.__motionKit?.assetReadiness().pending.length ?? 0) >= 1,
+      undefined,
+      { timeout: 10_000 },
+    );
+    const observed = process.hrtime.bigint();
+    // The requirement is the CSS-declared family, reported by name rather than by a file URL. A
+    // suspended tree keeps the registration of the render React discarded, so the owners are
+    // listed more than once; the cache entry, and so the load, is one.
+    const pending = await page.evaluate(() => window.__motionKit?.assetReadiness().pending ?? []);
+    expect([
+      ...new Set(pending.map((asset) => [asset.kind, asset.source, asset.sceneId].join(':'))),
+    ]).toEqual(['font-family:SplitGated:title']);
+    await delay(200);
+    expect(capturedAt).toBeUndefined();
+    let resolved = false;
+    void rendering.then(() => {
+      resolved = true;
+    });
+    await delay(30);
+    expect(resolved).toBe(false);
+    // Only the subset that covers the rendered characters is fetched; the Latin one is not.
+    expect(latinRequests).toEqual([]);
+    const releasedAt = process.hrtime.bigint();
+    release.resolve();
+    const result = await rendering;
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Capture failed');
+    const output: RenderedFrame = result.value;
+    expect(capturedWhilePending).toBe(false);
+    expect(capturedWithFallback).toBe(false);
+    expect(jpFulfilled).toBeDefined();
+    expect(capturedAt).toBeDefined();
+    if (jpFulfilled === undefined || capturedAt === undefined) throw new Error('missing timing');
+    expect(observed > started).toBe(true);
+    expect(releasedAt > observed).toBe(true);
+    expect(jpFulfilled > releasedAt).toBe(true);
+    expect(capturedAt > jpFulfilled).toBe(true);
+    expect(latinRequests).toEqual([]);
+    // The face the first frame loaded lazily is the one the next capture of that frame draws.
+    const again = await renderer.renderFrame({ frame: 0 });
+    expect(again.ok).toBe(true);
+    if (!again.ok) throw new Error('Capture failed');
+    expect(again.value.image.equals(output.image)).toBe(true);
+  }, 60_000);
+
+  it('reports a CSS-declared family whose subset cannot be loaded', async () => {
+    const renderer = await open('missing-split-font');
+    const owned = sessions.at(-1);
+    if (owned === undefined) throw new Error('Session missing');
+    await routeMissing(owned.page());
+    const result = await renderer.renderFrame({ frame: 0 });
+    expect(result.ok).toBe(false);
+    if (result.ok || !('error' in result)) throw new Error('expected diagnostics');
+    expect(result.error.map((diagnostic) => diagnostic.code)).toEqual(['asset.load-failed']);
+    expect(result.error[0]?.details?.['assets']).toEqual([
+      expect.objectContaining({ kind: 'font-family', phase: 'load', source: 'MissingSplit' }),
+    ]);
+    expect(result.error[0]?.message).toBe('The required font family failed to load.');
   }, 60_000);
 
   it('publishes both failed assets when the error boundary throws', async () => {

@@ -6,6 +6,65 @@ import { useCompositionRuntime } from '../../composition/composition.tsx';
 import { defineComposition, defineCompositions } from '../../composition/registry.ts';
 import { assetsOf } from '../composition-runtime.ts';
 
+/**
+ * The `@font-face` rules the fixtures use, injected once at module evaluation like a stylesheet the
+ * entry imports (fontsource's `@fontsource/*` CSS arrives this way, before any render).
+ */
+const faceRules = () => {
+  const style = document.createElement('style');
+  style.textContent = [
+    "@font-face { font-family: 'SplitGated'; font-style: normal; font-weight: 400; font-display: swap; src: url('/jp-subset.woff2') format('woff2'); unicode-range: U+3040-30FF; }",
+    "@font-face { font-family: 'SplitGated'; font-style: normal; font-weight: 400; font-display: swap; src: url('/latin-subset.ttf') format('truetype'); unicode-range: U+0041-005A; }",
+    "@font-face { font-family: 'MissingSplit'; font-style: normal; font-weight: 400; font-display: swap; src: url('/missing-subset.woff2') format('woff2'); unicode-range: U+0041-005A; }",
+  ].join('\n');
+  document.head.append(style);
+};
+faceRules();
+
+const SplitFontScene = () => {
+  useAsset({
+    kind: 'font-family',
+    id: 'split-family',
+    family: 'SplitGated',
+    weight: 400,
+    style: 'normal',
+    text: 'あい',
+    sceneId: 'title',
+  });
+  useLayoutEffect(() => {
+    document.documentElement.dataset['splitFontReady'] = 'true';
+    return () => {
+      delete document.documentElement.dataset['splitFontReady'];
+    };
+  }, []);
+  return (
+    <div
+      style={{
+        width: 64,
+        height: 64,
+        background: '#fff',
+        color: '#111',
+        fontFamily: 'SplitGated',
+        fontSize: 28,
+        lineHeight: '32px',
+      }}
+    >
+      あい
+    </div>
+  );
+};
+
+const MissingSplitScene = () => {
+  useAsset({
+    kind: 'font-family',
+    id: 'missing-family',
+    family: 'MissingSplit',
+    weight: 400,
+    text: 'Ag',
+  });
+  return <div style={{ width: 64, height: 64, fontFamily: 'MissingSplit' }}>Ag</div>;
+};
+
 const Scene = () => {
   const font = useAsset({
     kind: 'font',
@@ -81,6 +140,16 @@ export const compositions = defineCompositions([
   defineComposition({
     id: 'assets',
     component: Scene,
+    ...metadata,
+  }),
+  defineComposition({
+    id: 'split-font',
+    component: SplitFontScene,
+    ...metadata,
+  }),
+  defineComposition({
+    id: 'missing-split-font',
+    component: MissingSplitScene,
     ...metadata,
   }),
   defineComposition({
