@@ -142,7 +142,7 @@ export const answerPreview = async (
       id: request.id,
       result: {
         ok: true,
-        value: element === null ? null : inspectPoint(element, request.x, request.y),
+        value: element === null ? [] : inspectPoint(element, request.x, request.y),
       },
     };
   }

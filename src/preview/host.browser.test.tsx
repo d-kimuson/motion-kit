@@ -65,7 +65,7 @@ it('reports an entry that throws while it runs', async () => {
 it('waits for an entry that awaits past its frame load before announcing', async () => {
   const connecting = connectTo(
     `<script type="module">await new Promise((done) => addEventListener('load', () => setTimeout(done, 1500)));
-parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1, load: '' }, location.origin);</script>`,
+parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 2, load: '' }, location.origin);</script>`,
   );
   await expect(connecting).resolves.toHaveProperty('close');
   (await connecting).close();
@@ -73,7 +73,7 @@ parent.postMessage({ type: 'motion-kit-preview-ready', protocolVersion: 1, load:
 
 const fakeController = (
   overrides: Partial<PreviewState> = {},
-  inspected: InspectedElement | null = null,
+  inspected: readonly InspectedElement[] = [],
   tree: ElementTree | null = null,
 ) => {
   const calls: string[] = [];
@@ -549,7 +549,9 @@ it('comments on the element clicked in comment mode and copies the review as Mar
     source: '/work/app/src/title.tsx:3:7',
     box: { x: 20, y: 30, width: 100, height: 40 },
   };
-  const { controller, calls } = fakeController({ session: readySession(60), playhead: 12 }, title);
+  const { controller, calls } = fakeController({ session: readySession(60), playhead: 12 }, [
+    title,
+  ]);
   const { root, tab, review } = mount(controller);
   const press = (key: string, target: EventTarget = document.body) =>
     target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
@@ -642,6 +644,53 @@ it('comments on the element clicked in comment mode and copies the review as Mar
   expect(root.textContent).toContain('Copied');
 });
 
+it('moves the highlight to the element beneath with the wheel in comment mode and comments on it', async () => {
+  const title: InspectedElement = {
+    selector: 'h1.title',
+    text: 'Hello',
+    source: null,
+    box: { x: 20, y: 30, width: 100, height: 40 },
+  };
+  const photo: InspectedElement = {
+    selector: 'img.photo',
+    text: '',
+    source: null,
+    box: { x: 0, y: 0, width: 320, height: 180 },
+  };
+  const { controller } = fakeController({ session: readySession(60) }, [title, photo]);
+  const { root, review } = mount(controller);
+  act(() => review.controller.togglePicking());
+  const layer = root.querySelector<HTMLElement>('[data-slot=comment-layer]');
+  if (layer === null) throw new Error('No comment layer');
+  const at = {
+    clientX: layer.getBoundingClientRect().left + 10,
+    clientY: layer.getBoundingClientRect().top + 10,
+    bubbles: true,
+  };
+  await act(async () => {
+    layer.dispatchEvent(new PointerEvent('pointermove', at));
+    await Promise.resolve();
+  });
+  const label = () => root.querySelector('[data-slot=comment-target]')?.textContent;
+  expect(label()).toBe('h1.title1/2');
+  const turn = (deltaY: number) =>
+    act(
+      () => void layer.dispatchEvent(new WheelEvent('wheel', { ...at, deltaY, cancelable: true })),
+    );
+  turn(100);
+  expect(label()).toBe('img.photo2/2');
+  // A wheel turn picks among the elements here; the page beneath does not scroll.
+  const wheel = new WheelEvent('wheel', { ...at, deltaY: 100, cancelable: true });
+  act(() => void layer.dispatchEvent(wheel));
+  expect(wheel.defaultPrevented).toBe(true);
+  expect(label()).toBe('img.photo2/2');
+  await act(async () => {
+    layer.dispatchEvent(new MouseEvent('click', at));
+    await Promise.resolve();
+  });
+  expect(review.controller.state().draft?.place).toMatchObject({ kind: 'element', element: photo });
+});
+
 it('lists the fonts and images of the shown frame only, with their status', () => {
   const { controller } = fakeController({
     session: readySession(60),
@@ -715,7 +764,7 @@ it('shows the elements of the paused frame, highlights one on hover and drafts a
       playhead: 12,
       shown: { status: 'shown', frame: 12, sequences: [], assets: [] },
     },
-    null,
+    [],
     tree,
   );
   const { root, tab, review } = mount(controller);
@@ -762,7 +811,7 @@ it('cuts a long selector so the row keeps its source and comment button', async 
   const selector = `div#hero-title${'.text-balance'.repeat(20)}`;
   const { controller } = fakeController(
     { session: readySession(60), shown: { status: 'shown', frame: 0, sequences: [], assets: [] } },
-    null,
+    [],
     {
       nodes: [
         {
@@ -825,7 +874,7 @@ it('asks for no elements while playing', async () => {
       playback: { kind: 'playing', anchorFrame: 0, anchorTime: 0 },
       shown: { status: 'shown', frame: 12, sequences: [], assets: [] },
     },
-    null,
+    [],
     tree,
   );
   const { root, tab } = mount(controller);

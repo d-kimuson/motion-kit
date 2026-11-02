@@ -78,8 +78,11 @@ export type PreviewController = Readonly<{
   seek: (frame: number) => void;
   step: (delta: number) => void;
   toggleMute: (src: string) => void;
-  /** The element at a design-pixel point of the mounted Composition; none while nothing is mounted. */
-  inspect: (x: number, y: number) => Promise<Result<InspectedElement | null>>;
+  /**
+   * The elements at a design-pixel point of the mounted Composition, the likeliest meant first;
+   * none while nothing is mounted.
+   */
+  inspect: (x: number, y: number) => Promise<Result<readonly InspectedElement[]>>;
   /** Every element of the shown frame; none while nothing is mounted. */
   describe: () => Promise<Result<ElementTree | null>>;
   dispose: () => void;
@@ -350,8 +353,8 @@ export const createPreviewController = (deps: PreviewDependencies): PreviewContr
     },
     inspect: async (x, y) => {
       const current = realm;
-      if (current === undefined || ready() === undefined) return { ok: true, value: null };
-      return (await unlessClosed(current.inspect(x, y))) ?? { ok: true, value: null };
+      if (current === undefined || ready() === undefined) return { ok: true, value: [] };
+      return (await unlessClosed(current.inspect(x, y))) ?? { ok: true, value: [] };
     },
     describe: async () => {
       const current = realm;

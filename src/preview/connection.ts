@@ -24,8 +24,8 @@ export type Realm = Readonly<{
   list: () => Promise<Result<readonly LoadingDescriptor[]>>;
   mount: (compositionId: string | undefined, props: unknown) => Promise<Result<MountReceipt>>;
   show: (frame: number) => Promise<ShowOutcome>;
-  /** The element at a design-pixel point of the mounted Composition; null when there is none. */
-  inspect: (x: number, y: number) => Promise<Result<InspectedElement | null>>;
+  /** The elements at a design-pixel point of the mounted Composition, the likeliest meant first. */
+  inspect: (x: number, y: number) => Promise<Result<readonly InspectedElement[]>>;
   /** Every element of the shown frame; null when the realm has nothing to render into. */
   describe: () => Promise<Result<ElementTree | null>>;
   /** Rejects every pending request; the realm's page goes with its frame. */
