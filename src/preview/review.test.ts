@@ -117,8 +117,14 @@ describe('createReviewController', () => {
     host.inspections[1]?.answer({ ok: true, value: stack });
     await flush();
     expect(host.review.state().hovered?.index).toBe(1);
+    // A pointer moved off a glyph reorders the same elements; the highlight stays on its one.
+    const reordered = [element(2), element(1), element(3)];
+    host.review.hover(1, 0);
+    host.inspections[2]?.answer({ ok: true, value: reordered });
+    await flush();
+    expect(host.review.state().hovered).toEqual({ elements: reordered, index: 0 });
     const picking = host.review.pick(1, 0);
-    host.inspections[2]?.answer({ ok: true, value: stack });
+    host.inspections[3]?.answer({ ok: true, value: stack });
     await picking;
     expect(host.review.state().draft?.place).toEqual({
       kind: 'element',
@@ -127,13 +133,13 @@ describe('createReviewController', () => {
     });
     host.review.togglePicking();
     host.review.hover(1, 0);
-    host.inspections[3]?.answer({ ok: true, value: stack });
+    host.inspections[4]?.answer({ ok: true, value: stack });
     await flush();
     host.review.cycle(-1);
     expect(host.review.state().hovered?.index).toBe(0);
     host.review.cycle(1);
     host.review.hover(5, 0);
-    host.inspections[4]?.answer({ ok: true, value: [element(5), element(6)] });
+    host.inspections[5]?.answer({ ok: true, value: [element(5), element(6)] });
     await flush();
     expect(host.review.state().hovered).toEqual({ elements: [element(5), element(6)], index: 0 });
   });

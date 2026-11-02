@@ -13,8 +13,21 @@ const designPoint = (event: MouseEvent<HTMLDivElement>, width: number, height: n
   };
 };
 
-/** How far a wheel scrolls, in pixels, to move the highlight by one element. */
+/**
+ * How far a wheel scrolls, in pixels, to move the highlight by one element: a mouse notch scrolls
+ * about 100, a trackpad a few pixels an event.
+ */
 const wheelStep = 40;
+/** A wheel's scroll in pixels, whether it counts in pixels, lines (Firefox) or pages. */
+const wheelPixels = (event: WheelEvent) =>
+  event.deltaY *
+  (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? wheelStep
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? 10 * wheelStep
+      : 1);
+/** A pause after which a wheel starts a new turn, forgetting what the last one scrolled. */
+const wheelPauseMs = 200;
 
 /**
  * Comment mode over the stage. The realm frame takes no pointer input, so this layer, laid over it
@@ -54,14 +67,19 @@ export const CommentLayer = ({
     const element = layer.current;
     if (element === null || !picking) return;
     let scrolled = 0;
+    let last = -Infinity;
     const turn = (event: WheelEvent) => {
       event.preventDefault();
-      scrolled += event.deltaY;
-      // A mouse wheel turns in large notches, a trackpad in many small ones.
-      while (Math.abs(scrolled) >= wheelStep) {
-        controller.cycle(scrolled > 0 ? 1 : -1);
-        scrolled -= Math.sign(scrolled) * wheelStep;
-      }
+      const pixels = wheelPixels(event);
+      // A new turn, or one the other way, starts from nothing.
+      if (event.timeStamp - last > wheelPauseMs || Math.sign(pixels) !== Math.sign(scrolled))
+        scrolled = 0;
+      last = event.timeStamp;
+      scrolled += pixels;
+      // One step at most per event, so a mouse notch moves by one element.
+      if (Math.abs(scrolled) < wheelStep) return;
+      controller.cycle(scrolled > 0 ? 1 : -1);
+      scrolled = 0;
     };
     element.addEventListener('wheel', turn, { passive: false });
     return () => element.removeEventListener('wheel', turn);

@@ -657,7 +657,8 @@ it('moves the highlight to the element beneath with the wheel in comment mode an
     source: null,
     box: { x: 0, y: 0, width: 320, height: 180 },
   };
-  const { controller } = fakeController({ session: readySession(60) }, [title, photo]);
+  const shot: InspectedElement = { ...photo, selector: 'div.shot' };
+  const { controller } = fakeController({ session: readySession(60) }, [title, photo, shot]);
   const { root, review } = mount(controller);
   act(() => review.controller.togglePicking());
   const layer = root.querySelector<HTMLElement>('[data-slot=comment-layer]');
@@ -672,18 +673,27 @@ it('moves the highlight to the element beneath with the wheel in comment mode an
     await Promise.resolve();
   });
   const label = () => root.querySelector('[data-slot=comment-target]')?.textContent;
-  expect(label()).toBe('h1.title1/2');
-  const turn = (deltaY: number) =>
-    act(
-      () => void layer.dispatchEvent(new WheelEvent('wheel', { ...at, deltaY, cancelable: true })),
-    );
+  expect(label()).toBe('h1.title1/3');
+  const turn = (deltaY: number, deltaMode: number = WheelEvent.DOM_DELTA_PIXEL) => {
+    const wheel = new WheelEvent('wheel', { ...at, deltaY, deltaMode, cancelable: true });
+    act(() => void layer.dispatchEvent(wheel));
+    return wheel;
+  };
+  // A mouse notch moves the highlight by one element.
   turn(100);
-  expect(label()).toBe('img.photo2/2');
+  expect(label()).toBe('img.photo2/3');
+  // A trackpad scrolls in small steps; they add up to one.
+  turn(15);
+  turn(15);
+  expect(label()).toBe('img.photo2/3');
+  turn(15);
+  expect(label()).toBe('div.shot3/3');
   // A wheel turn picks among the elements here; the page beneath does not scroll.
-  const wheel = new WheelEvent('wheel', { ...at, deltaY: 100, cancelable: true });
-  act(() => void layer.dispatchEvent(wheel));
-  expect(wheel.defaultPrevented).toBe(true);
-  expect(label()).toBe('img.photo2/2');
+  expect(turn(100).defaultPrevented).toBe(true);
+  expect(label()).toBe('div.shot3/3');
+  // A wheel that counts in lines, as in Firefox, turns as far.
+  turn(-3, WheelEvent.DOM_DELTA_LINE);
+  expect(label()).toBe('img.photo2/3');
   await act(async () => {
     layer.dispatchEvent(new MouseEvent('click', at));
     await Promise.resolve();

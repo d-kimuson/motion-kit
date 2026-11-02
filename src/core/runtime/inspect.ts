@@ -94,33 +94,65 @@ const decorates = (element: Element, root: HTMLElement, view: Window) => {
   );
 };
 
-/** How likely an element is the one meant at a point, lowest first. */
-const rank = (element: Element, root: HTMLElement, x: number, y: number) => {
-  if (glyphAt(element, x, y)) return 0;
-  const view = root.ownerDocument.defaultView;
-  if (view === null || !paints(element, view.getComputedStyle(element))) return 3;
-  return decorates(element, root, view) ? 2 : 1;
+/**
+ * Whether an element hides what lies beneath it: it draws an opaque picture or background, and
+ * neither it nor an ancestor below `root` is translucent or blends.
+ */
+const opaque = (element: Element, root: HTMLElement, view: Window) => {
+  for (let at: Element | null = element; at !== null && at !== root; at = at.parentElement) {
+    const style = view.getComputedStyle(at);
+    if (style.opacity !== '1' || style.mixBlendMode !== 'normal') return false;
+  }
+  return (
+    ['img', 'video', 'canvas', 'picture'].includes(element.localName) ||
+    view.getComputedStyle(element).backgroundColor.startsWith('rgb(')
+  );
+};
+
+/** What an element is to the viewer at a point, the one most likely meant first. */
+const kinds = ['glyph', 'paint', 'overlay', 'layout'] as const;
+type Kind = (typeof kinds)[number];
+
+/** `covered`: an element above it hides what lies beneath at the point, so its glyphs are not seen. */
+const kindAt = (
+  element: Element,
+  root: HTMLElement,
+  view: Window,
+  point: Readonly<{ x: number; y: number }>,
+  covered: boolean,
+): Kind => {
+  if (!covered && glyphAt(element, point.x, point.y)) return 'glyph';
+  if (!paints(element, view.getComputedStyle(element))) return 'layout';
+  return decorates(element, root, view) ? 'overlay' : 'paint';
 };
 
 /**
  * The visible elements at a point of the Composition, in design pixels from the top-left corner of
  * `root` (the element the Composition renders into), the one most likely meant first: the text
- * whose glyphs are under the point, then the elements that draw something there, then film-look
- * overlays (`decorates`), then layout boxes that draw nothing; each group topmost first. Empty
- * when the point hits nothing visible inside `root`. An element with `pointer-events: none` is
- * not hit, as for a click.
+ * whose glyphs are seen under the point, then the elements that draw something there, then
+ * film-look overlays (`decorates`), then layout boxes that draw nothing; each group topmost first.
+ * Text under an element that hides it (`opaque`) ranks by what it draws instead. Empty when the
+ * point hits nothing visible inside `root`. An element with `pointer-events: none` is not hit,
+ * as for a click.
  */
 export const inspectPoint = (
   root: HTMLElement,
   x: number,
   y: number,
 ): readonly InspectedElement[] => {
+  const view = root.ownerDocument.defaultView;
+  if (view === null) return [];
   const origin = root.getBoundingClientRect();
-  const at = { x: origin.left + x, y: origin.top + y };
+  const point = { x: origin.left + x, y: origin.top + y };
+  let covered = false;
   return root.ownerDocument
-    .elementsFromPoint(at.x, at.y)
+    .elementsFromPoint(point.x, point.y)
     .filter((element) => element !== root && root.contains(element) && !invisible(element, root))
-    .map((element, order) => ({ element, order, rank: rank(element, root, at.x, at.y) }))
+    .map((element, order) => {
+      const kind = kindAt(element, root, view, point, covered);
+      covered ||= opaque(element, root, view);
+      return { element, order, rank: kinds.indexOf(kind) };
+    })
     .toSorted((a, b) => a.rank - b.rank || a.order - b.order)
     .map(({ element }) => describe(element, root, origin));
 };

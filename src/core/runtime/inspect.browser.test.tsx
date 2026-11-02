@@ -85,6 +85,15 @@ it('ranks text under a box that paints over it first when the pointer is on its 
   expect(selectors(root, 50, 30).slice(0, 3)).toEqual(['div.title', 'div.veil', 'img.photo']);
 });
 
+it('ranks text hidden under a box that paints opaquely over it by its paint, below that box', () => {
+  const root = shot();
+  root.insertAdjacentHTML(
+    'beforeend',
+    '<div class="cover" style="position: absolute; left: 40px; top: 20px; width: 60px; height: 30px; background: white"></div>',
+  );
+  expect(selectors(root, 50, 30).slice(0, 3)).toEqual(['div.cover', 'div.title', 'img.photo']);
+});
+
 it('finds nothing outside the root', () => {
   expect(inspectPoint(shot(), 400, 30)).toEqual([]);
 });

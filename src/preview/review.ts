@@ -68,9 +68,8 @@ export type ReviewController = Readonly<{
 const nonEmpty = <T>([first, ...rest]: readonly T[]): readonly [T, ...T[]] | undefined =>
   first === undefined ? undefined : [first, ...rest];
 
-/** Whether two answers of the realm list the same elements, so the highlight can stay on its one. */
-const sameElements = (a: readonly InspectedElement[], b: readonly InspectedElement[]) =>
-  JSON.stringify(a) === JSON.stringify(b);
+/** An element as the realm describes it, to find it again in a later answer. */
+const keyOf = (element: InspectedElement) => JSON.stringify(element);
 
 /** Comment mode and the draft it produces; the comments themselves live in the book. */
 export const createReviewController = (deps: ReviewDependencies): ReviewController => {
@@ -88,14 +87,19 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
     const result = await deps.preview.inspect(x, y);
     return result.ok ? nonEmpty(result.value) : undefined;
   };
-  /** The highlight over `found`: where it was when the same elements are under the pointer. */
-  const hoveredOver = (found: readonly [InspectedElement, ...InspectedElement[]]) => ({
-    elements: found,
-    index:
-      state.hovered !== null && sameElements(state.hovered.elements, found)
-        ? state.hovered.index
-        : 0,
-  });
+  /**
+   * The highlight over `found`: on the element it was on when the same elements are under the
+   * pointer, in any order (moving off a glyph reorders them), else on the first.
+   */
+  const hoveredOver = (found: readonly [InspectedElement, ...InspectedElement[]]) => {
+    const { hovered } = state;
+    const highlighted = hovered?.elements[hovered.index];
+    if (hovered === null || highlighted === undefined) return { elements: found, index: 0 };
+    const keys = new Set(hovered.elements.map(keyOf));
+    const same = keys.size === found.length && found.every((element) => keys.has(keyOf(element)));
+    const index = same ? found.findIndex((element) => keyOf(element) === keyOf(highlighted)) : 0;
+    return { elements: found, index: Math.max(index, 0) };
+  };
   const draft = (place: CommentPlace) => {
     picking += 1;
     hovering += 1;
