@@ -39,7 +39,7 @@ const harness = (answer: (request: unknown) => PreviewReply | undefined) => {
   };
   return { window: { events, frame, origin } satisfies RealmWindow, connects, announce };
 };
-const ready = { type: 'motion-kit-preview-ready', protocolVersion: 1, load: '2' };
+const ready = { type: 'motion-kit-preview-ready', protocolVersion: 2, load: '2' };
 const failed = { type: 'motion-kit-preview-failed', load: '2' };
 const listed = (id: number): PreviewReply => ({
   type: 'listed',
@@ -64,7 +64,7 @@ it('connects on the frame announcement and correlates replies by id', async () =
   fake.announce(ready);
   const realm = await connecting;
   expect(fake.connects).toEqual([
-    { message: { type: 'motion-kit-preview-connect', protocolVersion: 1 }, targetOrigin: origin },
+    { message: { type: 'motion-kit-preview-connect', protocolVersion: 2 }, targetOrigin: origin },
   ]);
   const [shown, list] = await Promise.all([realm.show(7), realm.list()]);
   expect(shown).toEqual({ status: 'shown', frame: 7, sequences: [], assets: [] });
@@ -89,15 +89,15 @@ it('asks the realm what element is at a design-pixel point', async () => {
       ? {
           type: 'inspected',
           id: parsed.id,
-          result: { ok: true, value: parsed.x < 100 ? element : null },
+          result: { ok: true, value: parsed.x < 100 ? [element] : [] },
         }
       : undefined;
   });
   const connecting = connectRealm(fake.window, '2');
   fake.announce(ready);
   const realm = await connecting;
-  expect(await realm.inspect(10, 20)).toEqual({ ok: true, value: element });
-  expect(await realm.inspect(500, 20)).toEqual({ ok: true, value: null });
+  expect(await realm.inspect(10, 20)).toEqual({ ok: true, value: [element] });
+  expect(await realm.inspect(500, 20)).toEqual({ ok: true, value: [] });
   realm.close();
 });
 
@@ -133,7 +133,7 @@ it('ignores announcements from other windows, origins or protocol versions', asy
   const connecting = connectRealm(fake.window, '2');
   fake.announce(ready, { source: {} });
   fake.announce(ready, { origin: 'http://evil.test' });
-  fake.announce({ ...ready, protocolVersion: 2 });
+  fake.announce({ ...ready, protocolVersion: 3 });
   // The document an earlier load left in the frame.
   fake.announce({ ...ready, load: '1' });
   fake.announce({ ...failed, load: '1' });

@@ -16,7 +16,7 @@ import { type Result } from './result.ts';
  * Messages between a preview host page and the composition realm in its iframe
  * (docs/design-doc/20261101-browser-preview.md). Plain data, validated on both sides.
  */
-export const previewProtocolVersion = 1;
+export const previewProtocolVersion = 2;
 
 /**
  * The shell URL parameter naming one load of the realm frame. The frame's window outlives a
@@ -151,7 +151,7 @@ export const previewReplySchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('inspected'),
     id: requestId,
-    result: resultSchema(inspectedElementSchema.nullable()),
+    result: resultSchema(z.array(inspectedElementSchema)),
   }),
   z.object({
     type: z.literal('described'),
@@ -164,7 +164,7 @@ export type PreviewReply =
   | Readonly<{ type: 'listed'; id: number; result: Result<readonly LoadingDescriptor[]> }>
   | Readonly<{ type: 'mounted'; id: number; result: Result<MountReceipt> }>
   | Readonly<{ type: 'shown'; id: number; outcome: ShowOutcome }>
-  | Readonly<{ type: 'inspected'; id: number; result: Result<InspectedElement | null> }>
+  | Readonly<{ type: 'inspected'; id: number; result: Result<readonly InspectedElement[]> }>
   | Readonly<{ type: 'described'; id: number; result: Result<ElementTree | null> }>;
 
 /** The server-sent event the events route emits after a module the realm loaded changed. */

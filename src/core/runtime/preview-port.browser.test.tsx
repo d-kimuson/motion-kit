@@ -318,7 +318,7 @@ const Card = () => (
   </div>
 );
 
-it('describes the visible element at a design-pixel point of the shown frame, and nothing outside it', async () => {
+it('describes the visible elements at a design-pixel point of the shown frame, and nothing outside it', async () => {
   container();
   const page = createLoadingPage(
     defineCompositions([
@@ -337,26 +337,30 @@ it('describes the visible element at a design-pixel point of the shown frame, an
   pages.push(page);
   await answerPreview(page, { type: 'mount', id: 1, props: {} });
   await answerPreview(page, { type: 'show', id: 2, frame: 0 });
-  expect(await answerPreview(page, { type: 'inspect', id: 3, x: 50, y: 30 })).toEqual({
+  expect(await answerPreview(page, { type: 'inspect', id: 3, x: 50, y: 30 })).toMatchObject({
     type: 'inspected',
     id: 3,
     result: {
       ok: true,
-      value: {
-        selector: 'h1#title.lead.big',
-        text: 'Hello world',
-        source: '/project/scenes/Card.tsx:4:5',
-        box: { x: 40, y: 20, width: 100, height: 30 },
-      },
+      value: [
+        {
+          selector: 'h1#title.lead.big',
+          text: 'Hello world',
+          source: '/project/scenes/Card.tsx:4:5',
+          box: { x: 40, y: 20, width: 100, height: 30 },
+        },
+        { selector: 'div', source: null, box: { x: 20, y: 10, width: 200, height: 60 } },
+        { selector: 'div', source: null, box: { x: 0, y: 0, width: 320, height: 180 } },
+      ],
     },
   });
   expect(await answerPreview(page, { type: 'inspect', id: 4, x: 300, y: 170 })).toMatchObject({
-    result: { ok: true, value: { selector: 'div', source: null } },
+    result: { ok: true, value: [{ selector: 'div', source: null }] },
   });
   expect(await answerPreview(page, { type: 'inspect', id: 5, x: 400, y: 10 })).toEqual({
     type: 'inspected',
     id: 5,
-    result: { ok: true, value: null },
+    result: { ok: true, value: [] },
   });
 });
 
@@ -460,7 +464,7 @@ const connect = (events: EventTarget, init: MessageEventInit) => {
   const channel = new MessageChannel();
   events.dispatchEvent(
     new MessageEvent('message', {
-      data: { type: 'motion-kit-preview-connect', protocolVersion: 1 },
+      data: { type: 'motion-kit-preview-connect', protocolVersion: 2 },
       origin: window.location.origin,
       source: window,
       ports: [channel.port2],
@@ -484,7 +488,7 @@ it('announces itself and serves only the first port its parent transfers at its 
   });
   expect(await announced).toEqual({
     type: 'motion-kit-preview-ready',
-    protocolVersion: 1,
+    protocolVersion: 2,
     load: '3',
   });
 
@@ -496,7 +500,7 @@ it('announces itself and serves only the first port its parent transfers at its 
   };
   watch(connect(events, { origin: 'http://example.com' }));
   watch(connect(events, { source: new MessageChannel().port1 }));
-  watch(connect(events, { data: { type: 'motion-kit-preview-connect', protocolVersion: 2 } }));
+  watch(connect(events, { data: { type: 'motion-kit-preview-connect', protocolVersion: 3 } }));
   const accepted = connect(events, {});
   watch(connect(events, {}));
   const reply = nextReply(accepted);

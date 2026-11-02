@@ -14,7 +14,7 @@ const en = {
     summary: (width: number, height: number, frames: number) =>
       `${width}×${height}, ${frames} frames`,
     stage: 'Composition',
-    picking: 'Click an element to comment on it · Esc to stop',
+    picking: 'Click an element to comment on it · Scroll for the one beneath · Esc to stop',
     language: 'Language',
   },
   transport: {
@@ -116,7 +116,7 @@ const ja: Messages = {
     choose: 'Composition を選択',
     summary: (width, height, frames) => `${width}×${height}、${frames} フレーム`,
     stage: 'Composition',
-    picking: '要素をクリックしてコメント · Esc で終了',
+    picking: '要素をクリックしてコメント · ホイールで下の要素へ · Esc で終了',
     language: '言語',
   },
   transport: {

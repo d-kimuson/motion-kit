@@ -44,8 +44,10 @@ const setup = () => {
     unplayable: [],
   };
   const events: string[] = [];
-  const inspections: { x: number; answer: (result: Result<InspectedElement | null>) => void }[] =
-    [];
+  const inspections: {
+    x: number;
+    answer: (result: Result<readonly InspectedElement[]>) => void;
+  }[] = [];
   const added: CommentDraft[] = [];
   const book: Pick<CommentBook, 'add'> = {
     add: (draft) => {
@@ -88,14 +90,58 @@ describe('createReviewController', () => {
     expect(host.review.state().picking).toBe(true);
     host.review.hover(1, 0);
     host.review.hover(2, 0);
-    host.inspections[1]?.answer({ ok: true, value: element(2) });
-    host.inspections[0]?.answer({ ok: true, value: element(1) });
+    host.inspections[1]?.answer({ ok: true, value: [element(2)] });
+    host.inspections[0]?.answer({ ok: true, value: [element(1)] });
     await flush();
-    expect(host.review.state().hovered).toEqual(element(2));
+    expect(host.review.state().hovered).toEqual({ elements: [element(2)], index: 0 });
     host.review.leave();
     expect(host.review.state().hovered).toBeNull();
     host.review.togglePicking();
     expect(host.review.state()).toMatchObject({ picking: false, hovered: null });
+  });
+
+  it('moves the highlight through the elements under the pointer, and keeps it while they stay', async () => {
+    const host = setup();
+    host.review.togglePicking();
+    const stack = [element(1), element(2), element(3)];
+    host.review.hover(1, 0);
+    host.inspections[0]?.answer({ ok: true, value: stack });
+    await flush();
+    host.review.cycle(1);
+    host.review.cycle(1);
+    host.review.cycle(1);
+    expect(host.review.state().hovered).toEqual({ elements: stack, index: 2 });
+    host.review.cycle(-1);
+    expect(host.review.state().hovered?.index).toBe(1);
+    host.review.hover(1, 0);
+    host.inspections[1]?.answer({ ok: true, value: stack });
+    await flush();
+    expect(host.review.state().hovered?.index).toBe(1);
+    // A pointer moved off a glyph reorders the same elements; the highlight stays on its one.
+    const reordered = [element(2), element(1), element(3)];
+    host.review.hover(1, 0);
+    host.inspections[2]?.answer({ ok: true, value: reordered });
+    await flush();
+    expect(host.review.state().hovered).toEqual({ elements: reordered, index: 0 });
+    const picking = host.review.pick(1, 0);
+    host.inspections[3]?.answer({ ok: true, value: stack });
+    await picking;
+    expect(host.review.state().draft?.place).toEqual({
+      kind: 'element',
+      element: element(2),
+      point: { x: 1, y: 0 },
+    });
+    host.review.togglePicking();
+    host.review.hover(1, 0);
+    host.inspections[4]?.answer({ ok: true, value: stack });
+    await flush();
+    host.review.cycle(-1);
+    expect(host.review.state().hovered?.index).toBe(0);
+    host.review.cycle(1);
+    host.review.hover(5, 0);
+    host.inspections[5]?.answer({ ok: true, value: [element(5), element(6)] });
+    await flush();
+    expect(host.review.state().hovered).toEqual({ elements: [element(5), element(6)], index: 0 });
   });
 
   it('drafts a comment on the clicked element, or on the point when there is none', async () => {
@@ -104,7 +150,7 @@ describe('createReviewController', () => {
     const picking = host.review.pick(5.4, 6.6);
     // The pointer may leave the stage before the realm answers.
     host.review.leave();
-    host.inspections[0]?.answer({ ok: true, value: element(5) });
+    host.inspections[0]?.answer({ ok: true, value: [element(5), element(6)] });
     await picking;
     expect(host.review.state()).toMatchObject({
       picking: false,
@@ -185,7 +231,7 @@ describe('createReviewController', () => {
     host.review.togglePicking();
     const picking = host.review.pick(1, 1);
     host.review.commentFrame();
-    host.inspections[0]?.answer({ ok: true, value: element(1) });
+    host.inspections[0]?.answer({ ok: true, value: [element(1)] });
     await picking;
     expect(host.review.state()).toMatchObject({
       picking: false,
