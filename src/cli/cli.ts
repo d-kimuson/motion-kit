@@ -1,5 +1,5 @@
 import { CommanderError } from 'commander';
-import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 
 import {
@@ -16,6 +16,7 @@ import {
 import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
+import { type Result } from '../lib/result.ts';
 import { defaultPreviewFps, previewQueryString } from '../preview/query.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { checkComposition, checkReportPassed } from '../render/check/check.ts';
@@ -36,6 +37,7 @@ import { commands } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
+import { createOutputDirectory, writeOutputFile } from './output.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
 // `internal.unexpected` (exit 3); `cli.*` diagnostics are invocation errors
@@ -382,6 +384,50 @@ const isFile = (path: string): boolean => {
   }
 };
 
+const isDirectory = (path: string): boolean => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Where `frame` writes: a `.png` target is one file, every other target is a directory holding
+ * `frame-<n>.png` files. The path decides, never the number of frames, so one still and several
+ * stills mean the same thing by `--out` (agent ADR: `frame` output). Every refusal is an invocation
+ * error, and all of them are taken before a browser is opened, so none depends on a capture.
+ */
+type FrameTarget =
+  | { readonly kind: 'file'; readonly path: string }
+  | { readonly kind: 'directory'; readonly path: string };
+
+const frameTarget = (outAbsolute: string, frameCount: number): Result<FrameTarget> => {
+  if (extname(outAbsolute).toLowerCase() === '.png') {
+    if (frameCount > 1)
+      return {
+        ok: false,
+        error: invalidArguments('Pass a directory to --out when capturing multiple frames.'),
+      };
+    if (isDirectory(outAbsolute))
+      return {
+        ok: false,
+        error: invalidArguments(
+          `The --out path ${outAbsolute} is a directory; choose a .png file name, or a directory path to write frame-<n>.png files into.`,
+        ),
+      };
+    return { ok: true, value: { kind: 'file', path: outAbsolute } };
+  }
+  if (isFile(outAbsolute))
+    return {
+      ok: false,
+      error: invalidArguments(
+        `The --out path ${outAbsolute} is a file; pass a .png path to write one PNG file, or remove it to write a directory of frame-<n>.png files.`,
+      ),
+    };
+  return { ok: true, value: { kind: 'directory', path: outAbsolute } };
+};
+
 const rendererOptions = (
   args: RenderArgs | FrameArgs | CheckArgs,
   config: RendererConfig,
@@ -533,7 +579,8 @@ const runRender = async (
         },
       });
     }
-    mkdirSync(outAbsolute, { recursive: true });
+    const created = createOutputDirectory(outAbsolute);
+    if (!created.ok) return decide(failure([created.error]));
     if (!prepareFramesManifest(outAbsolute))
       return decide(
         failure([
@@ -558,14 +605,15 @@ const runRender = async (
     })) {
       if (!result.ok) return decide(frameFailure(result));
       const name = `frame-${String(result.value.frame).padStart(5, '0')}.png`;
-      writeFileSync(join(outAbsolute, name), result.value.image);
+      const written = writeOutputFile(join(outAbsolute, name), result.value.image);
+      if (!written.ok) return decide(failure([written.error]));
       files.push(name);
       width = result.value.width;
       height = result.value.height;
       diagnostics.push(...result.value.diagnostics);
     }
     const manifestPath = join(outAbsolute, 'manifest.json');
-    writeFileSync(
+    const writtenManifest = writeOutputFile(
       manifestPath,
       `${JSON.stringify(
         {
@@ -582,6 +630,7 @@ const runRender = async (
         2,
       )}\n`,
     );
+    if (!writtenManifest.ok) return decide(failure([writtenManifest.error]));
     return decide({
       ok: true,
       diagnostics,
@@ -611,10 +660,10 @@ const runFrame = async (
   if (signal.aborted) return abortedOutcome;
   const outAbsolute = resolve(process.cwd(), args.out);
   const multiple = args.frame.length > 1;
-  if (multiple && (extname(outAbsolute).toLowerCase() === '.png' || isFile(outAbsolute)))
-    return decide(
-      failure([invalidArguments('Pass a directory to --out when capturing multiple frames.')]),
-    );
+  // `--out` is read before the browser exists, so a target that cannot take the write is an
+  // invocation error and costs no launch (agent ADR: `frame` output).
+  const target = frameTarget(outAbsolute, args.frame.length);
+  if (!target.ok) return decide(failure([target.error]));
   const opened = await openRenderer(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
@@ -622,7 +671,10 @@ const runFrame = async (
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
     if (!rate.ok) return decide(failure([rate.error]));
-    mkdirSync(multiple ? outAbsolute : dirname(outAbsolute), { recursive: true });
+    const created = createOutputDirectory(
+      target.value.kind === 'file' ? dirname(target.value.path) : target.value.path,
+    );
+    if (!created.ok) return decide(failure([created.error]));
     const frames: {
       output: string;
       frame: number;
@@ -634,10 +686,12 @@ const runFrame = async (
     for (const frame of args.frame) {
       const result = await renderer.renderFrame({ frame, signal });
       if (!result.ok) return decide(frameFailure(result));
-      const output = multiple
-        ? join(outAbsolute, `frame-${String(frame).padStart(5, '0')}.png`)
-        : outAbsolute;
-      writeFileSync(output, result.value.image);
+      const output =
+        target.value.kind === 'file'
+          ? target.value.path
+          : join(target.value.path, `frame-${String(frame).padStart(5, '0')}.png`);
+      const written = writeOutputFile(output, result.value.image);
+      if (!written.ok) return decide(failure([written.error]));
       frames.push({
         output,
         frame: result.value.frame,

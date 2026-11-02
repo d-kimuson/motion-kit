@@ -1,6 +1,7 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -887,6 +888,86 @@ describe('motion-kit CLI', () => {
     expect(readFileSync(output).length).toBeGreaterThan(0);
   }, 60_000);
 
+  it('writes one frame into an existing directory with the number a batch would give it', async () => {
+    const directory = join(outputRoot, 'single-frame-into-directory');
+    mkdirSync(directory, { recursive: true });
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '3',
+      '--out',
+      directory,
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const output = join(directory, 'frame-00003.png');
+    expect(assertValidEnvelope(result)).toMatchObject({
+      command: 'frame',
+      ok: true,
+      diagnostics: [],
+      data: { output, format: 'png', frame: 3, width: 64, height: 64 },
+    });
+    expect(readFileSync(output).subarray(0, 8)).toEqual(
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+  }, 60_000);
+
+  it('writes one frame into a directory path that does not exist yet', async () => {
+    const directory = join(outputRoot, 'single-frame-new-directory');
+    const result = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '1',
+      '--out',
+      directory,
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const output = join(directory, 'frame-00001.png');
+    expect(assertValidEnvelope(result)).toMatchObject({
+      command: 'frame',
+      ok: true,
+      data: { output, format: 'png', frame: 1 },
+    });
+    expect(readdirSync(directory)).toEqual(['frame-00001.png']);
+  }, 60_000);
+
+  it('classifies --out before it opens a browser, so a file is an invocation error', async () => {
+    const file = join(outputRoot, 'single-frame-existing-file');
+    writeFileSync(file, 'existing');
+    const occupied = join(outputRoot, 'single-frame-directory.png');
+    mkdirSync(occupied, { recursive: true });
+    const empty = mkdtempSync(join(tmpdir(), 'motion-kit-no-browser-'));
+    try {
+      // A `.png` path that is a directory, and a file where a directory belongs, are refused
+      // before the capture: with no browser installed either run would otherwise be exit 1.
+      for (const out of [file, occupied]) {
+        const result = await run(
+          ['frame', 'entry.ts', '--composition', 'one', '--frame', '0', '--out', out, '--json'],
+          { PLAYWRIGHT_BROWSERS_PATH: empty },
+        );
+        expect(result.code).toBe(2);
+        const envelope = assertValidEnvelope(result);
+        expect(envelope).toMatchObject({
+          command: 'frame',
+          ok: false,
+          data: null,
+          diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+        });
+        expect(envelope.diagnostics[0]?.hint).toContain('directory');
+      }
+      expect(readFileSync(file, 'utf8')).toBe('existing');
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it('renders a frame sequence and manifest with the v1 render envelope', async () => {
     const output = join(outputRoot, 'frames');
     const result = await run([
@@ -1063,12 +1144,21 @@ describe('motion-kit CLI', () => {
       output,
       '--json',
     ]);
-    expect(result.code).toBe(3);
+    // The output path refusing a PNG is the caller's to fix, so it is a domain failure (exit 1),
+    // never the internal failure the outer catch would report (TASK-243).
+    expect(result.code).toBe(1);
     expect(assertValidEnvelope(result)).toMatchObject({
       command: 'render',
       ok: false,
       data: null,
-      diagnostics: [{ code: 'internal.unexpected', severity: 'error' }],
+      diagnostics: [
+        {
+          code: 'render.output-unwritable',
+          severity: 'error',
+          location: { file: blocker },
+          details: { output: blocker, code: 'EISDIR' },
+        },
+      ],
     });
     expect(readFileSync(join(output, 'frame-00000.png')).subarray(0, 8)).toEqual(
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
@@ -1076,6 +1166,97 @@ describe('motion-kit CLI', () => {
     expect(readdirSync(blocker)).toEqual(['keep.txt']);
     expect(readFileSync(join(blocker, 'keep.txt'))).toEqual(marker);
     expect(existsSync(manifestPath)).toBe(false);
+  }, 60_000);
+
+  it('reports a write failure on the first frame the same way', async () => {
+    const output = join(outputRoot, 'reused-frames-first-write-failure');
+    const blocker = join(output, 'frame-00000.png');
+    mkdirSync(blocker, { recursive: true });
+
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    expect(assertValidEnvelope(result)).toMatchObject({
+      command: 'render',
+      ok: false,
+      data: null,
+      diagnostics: [
+        {
+          code: 'render.output-unwritable',
+          severity: 'error',
+          location: { file: blocker },
+          details: { output: blocker, code: 'EISDIR' },
+        },
+      ],
+    });
+    expect(readdirSync(output)).toEqual(['frame-00000.png']);
+  }, 60_000);
+
+  it('reports an output directory it cannot create as a write failure, not as a bug', async () => {
+    const output = join(outputRoot, 'frames-occupied-directory');
+    writeFileSync(output, 'a file where a frame directory belongs');
+
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    expect(assertValidEnvelope(result)).toMatchObject({
+      command: 'render',
+      ok: false,
+      data: null,
+      diagnostics: [{ code: 'render.output-unwritable', location: { file: output } }],
+    });
+    expect(readFileSync(output, 'utf8')).toBe('a file where a frame directory belongs');
+  }, 60_000);
+
+  it('reports a frame write refused by a read-only directory the same way', async () => {
+    const directory = join(outputRoot, 'single-frame-read-only');
+    mkdirSync(directory, { recursive: true });
+    chmodSync(directory, 0o500);
+    try {
+      const result = await run([
+        'frame',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '2',
+        '--out',
+        directory,
+        '--json',
+      ]);
+      expect(result.code).toBe(1);
+      const blocker = join(directory, 'frame-00002.png');
+      expect(assertValidEnvelope(result)).toMatchObject({
+        command: 'frame',
+        ok: false,
+        data: null,
+        diagnostics: [
+          {
+            code: 'render.output-unwritable',
+            severity: 'error',
+            location: { file: blocker },
+            details: { output: blocker, code: 'EACCES' },
+          },
+        ],
+      });
+      expect(readdirSync(directory)).toEqual([]);
+    } finally {
+      chmodSync(directory, 0o700);
+    }
   }, 60_000);
 
   it('writes the same frames from several renderers as from one', async () => {

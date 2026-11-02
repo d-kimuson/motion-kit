@@ -33,7 +33,7 @@ const frameCommand = new Command('frame')
     (value: string, previous: string[]) => [...previous, value],
     [],
   )
-  .requiredOption('--out <file-or-dir>')
+  .requiredOption('--out <file-or-dir>', 'a .png file, or a directory for frame-<n>.png files')
   .option('--props <json>')
   .option('--project-root <dir>')
   .option('--vite-config <path>')
