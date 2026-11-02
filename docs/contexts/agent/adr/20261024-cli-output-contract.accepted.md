@@ -56,18 +56,18 @@ _Amended 2026-10-29 (TASK-219):_ `render.page-error` gains a `details` payload f
 
 The code pattern is `^[a-z]+(\.[a-z0-9-]+)+$`. The namespace is the segment before the first dot. `DiagnosticCodeSchema`, a Zod enum, is the single source of truth for allowed codes; its closed membership enforces the pattern and reserved namespaces. Even features not yet implemented reserve their codes:
 
-| Namespace     | Initial codes                                                                                                     |
-| ------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                                       |
-| `composition` | `composition.props-invalid`, `composition.duration-invalid`                                                       |
-| `asset`       | `asset.load-failed`, `asset.not-ready` (readiness barrier timed out)                                              |
-| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error` (page or composition-loading failure) |
-| `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid`           |
-| `seek`        | `seek.uncontrolled` (Tier C detected; emit as warning)                                                            |
-| `layout`      | `layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`, `layout.font-not-loaded`                    |
-| `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                                         |
-| `motion`      | `motion.invalid-input`, `motion.non-finite-result`                                                                |
-| `internal`    | `internal.unexpected`                                                                                             |
+| Namespace     | Initial codes                                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                                                                   |
+| `composition` | `composition.props-invalid`, `composition.duration-invalid`                                                                                   |
+| `asset`       | `asset.load-failed`, `asset.not-ready` (readiness barrier timed out)                                                                          |
+| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error` (page or composition-loading failure), `render.output-unwritable` |
+| `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid`                                       |
+| `seek`        | `seek.uncontrolled` (Tier C detected; emit as warning)                                                                                        |
+| `layout`      | `layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`, `layout.font-not-loaded`                                                |
+| `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                                                                     |
+| `motion`      | `motion.invalid-input`, `motion.non-finite-result`                                                                                            |
+| `internal`    | `internal.unexpected`                                                                                                                         |
 
 TASK-152 adds `motion.invalid-input` for invalid Pure Motion inputs (including non-finite numbers, non-increasing stops, mismatched ranges and invalid Bézier controls), and `motion.non-finite-result` for evaluation overflow or a non-finite easing result. Both are errors with actionable hints and no details payload; see the [Pure Motion contract](../../motion/adr/20261024-pure-motion-contract.accepted.md).
 
@@ -144,6 +144,14 @@ _Amended 2026-11-01 (TASK-246):_ `preview` joins the known command set. `Command
 - **A failure after readiness** (the service ended, or the Vite config or one of its dependencies changed) cannot be a second envelope. It is one stderr line `severity: code: message — hint` and exit 1. A source edit is not a failure: the page rebuilds its realm.
 
 `--project-root` and `--vite-config` apply as for the other commands; `--software-webgl` and `--disable-sandbox` do not exist because no browser is launched. The additive command value and `PreviewDataSchema` leave `schemaVersion` at `1`, and the committed JSON Schema is regenerated. The design is the [browser preview Design Doc](../../../design-doc/20261101-browser-preview.md).
+
+### Output writes and the `frame` target
+
+_Amended 2026-11-02 (TASK-243, TASK-251):_ the writes the CLI performs are a boundary like the ones `src/render` already owns, so a file system that refuses one is a domain failure, not an internal one.
+
+**`render.output-unwritable` joins the `render` row of the namespace table.** It reports a file the command owed its caller that the output path would not take: a PNG frame or the frames `manifest` of the `render` frames route, and a PNG frame of `frame`, including the output directory either route has to create first. It is exit `1`, like every domain diagnostic and unlike `internal.unexpected` (exit `3`, [output and exit codes](#output-and-exit-codes)): the caller chose the output path and can change it, so the failure is theirs to fix. The usual causes are a directory where a frame file belongs (`EISDIR`), a read-only directory or file (`EACCES`), and a full disk (`ENOSPC`). Its `details` payload — recorded here before implementation, as [Diagnostic](#diagnostic) requires — is `{ "output": "/abs/out/frame-00001.png", "code": "EISDIR" }`: `output` is the absolute path the write targeted, and `code` is the Node.js errno code the refusal carried, omitted when it carried none. `location.file` names the same path. The `.mp4` route's destination failures stay `encode.*` ([encoder diagnostics](../../render/adr/20261025-system-ffmpeg-encoder.accepted.md#encoder-diagnostics)); this code covers the writes the CLI performs itself.
+
+**`frame`'s `--out` target is classified by the path, never by the frame count (TASK-251).** A target whose extension is `.png` is one PNG file; every other target is a directory, and each captured frame is written into it as `frame-<frame>.png`. So one frame into an existing directory writes `…/frame-00765.png`, exactly as a batch would, and `--out` means the same thing whatever `--frame` asks for. The classification happens before a browser is opened, so a target that cannot take the write is `cli.invalid-arguments` (exit `2`) and costs no launch: a `.png` target with more than one frame, a `.png` target that is an existing directory, or a directory target that is an existing file. `data` still follows the frame count, so one frame written into a directory is `format: "png"` with `output` naming the file inside it, and several frames stay `format: "png-sequence"`; both members already described their own `output` path as a file or a directory respectively, so no field, schema or `schemaVersion` change follows, and the added code is compatible per [Compatibility](#compatibility).
 
 ## Consequences
 

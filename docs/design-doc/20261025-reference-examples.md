@@ -158,7 +158,7 @@ node dist/cli.js render examples/explainer/entry.tsx --composition explainer \
 
 - `motion-kit` is the same bin (`bin.motion-kit` → `dist/cli.js`); a reader with an installed package writes `motion-kit render …`. Under `--json` the envelope carries `data.format`, `width`, `height`, `fps`, `frameCount` and `durationSeconds`, which is how an example's smoke test asserts its own output.
 - `--out` picks the format from the extension: `.mp4` encodes H.264, anything else writes PNG frames plus `manifest.json`. There is no `--format` flag.
-- `render` creates the directories its output path needs; `frame` does not, and fails with `internal.unexpected` on a missing parent, which is why the block starts with `mkdir -p out`.
+- `render` and `frame` create the directories their output paths need; the block's `mkdir -p out` only makes the gitignored directory visible in a fresh checkout.
 - `frame` has no `--props` (only `render` declares one, `src/cli/commands.ts`). An example whose schema has a required prop therefore has no still route: `chart`'s `series` has no default, so its still is a frames render (`render … --out out/chart-frames`, which writes every frame plus `manifest.json`) rather than `frame`. A `--props` on `frame` is a CLI follow-up, not this document's.
 - A missing entry is `cli.entry-not-found` (exit 2), an unknown `--composition` id is `cli.composition-not-found`, `--props` that is not a JSON object string is `cli.invalid-arguments`, and valid JSON that fails the Composition's schema is `composition.props-invalid`. All four are what an example README tells the reader to expect when they get the command wrong.
 - Every render writes under `out/` at the repository root. `assets.local/` is the only other generated location.

@@ -94,7 +94,8 @@ There is no `--format` flag: the target's extension decides, and the envelope re
 - `--out out/frames` — every frame as `frame-00000.png`, `frame-00001.png`, … plus a `manifest.json`
   (`format`, `composition`, width, height, fps, frame count and the file list). Needs no FFmpeg.
 
-`render` creates the directories its output needs.
+`render` creates the directories its output needs, and a path that refuses a write reports
+`render.output-unwritable` (exit 1) rather than an internal failure.
 
 A frame's bytes do not depend on which renderer captured it, so `--concurrency` changes speed, not
 output. It defaults to half the machine's cores; raise it for a long video, lower it when memory or
@@ -144,26 +145,29 @@ and with no output written.
 
 ## `frame`
 
-| Option               | Meaning                                                                       |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `--composition <id>` | Which Composition to capture. Required when the registry holds more than one. |
-| `--frame <n>`        | Global frame indices, repeatable or comma-separated. Required.                |
-| `--out <path>`       | PNG file for one frame; directory for multiple frames. Required.              |
-| `--props <json>`     | JSON object validated by the Composition's schema.                            |
-| `--json`             | Print the envelope instead of the one-line summary.                           |
+| Option               | Meaning                                                                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| `--composition <id>` | Which Composition to capture. Required when the registry holds more than one.                   |
+| `--frame <n>`        | Global frame indices, repeatable or comma-separated. Required.                                  |
+| `--out <path>`       | A `.png` file for one frame; any other path is a directory for `frame-<n>.png` files. Required. |
+| `--props <json>`     | JSON object validated by the Composition's schema.                                              |
+| `--json`             | Print the envelope instead of the one-line summary.                                             |
 
 ```bash
 motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/kaito/hello-video/out/still.png (1920x1080) in 962.6ms
 ```
 
-`frame` needs no FFmpeg and creates output directories as needed. For several stills, pass
-`--frame 300,0 --frame 120 --out out/stills`; one renderer captures them in ascending order as
-`frame-00000.png`, `frame-00120.png`, and `frame-00300.png`. A multiple-frame target must be a
-directory, not an existing file or a `.png` path. Duplicate, negative, or non-integer indices are
-`cli.invalid-arguments` (exit 2). A frame index outside the Composition is
-`composition.props-invalid` (exit 1, `location.frame` naming the request). Capture stops at the
-first failure; PNGs already written remain.
+`frame` needs no FFmpeg and creates output directories as needed. `--out` is read from the path, not
+from the number of frames: a target ending in `.png` is one PNG file, and every other target is a
+directory, so `--frame 300,0 --frame 120 --out out/stills` writes `frame-00000.png`,
+`frame-00120.png`, and `frame-00300.png` there, and a single `--frame 3 --out out/stills` writes
+`frame-00003.png` into the same directory and reports that file as `data.output`. A `.png` target with
+several frames, a `.png` target that is an existing directory, and a directory target that is an
+existing file are `cli.invalid-arguments` (exit 2), decided before a browser opens. Duplicate,
+negative, or non-integer indices are `cli.invalid-arguments` (exit 2). A frame index outside the
+Composition is `composition.props-invalid` (exit 1, `location.frame` naming the request). Capture
+stops at the first failure; PNGs already written remain.
 
 ## `check`
 
@@ -422,6 +426,10 @@ human-facing logs to stderr. Every document has these fields:
 For multiple frames, `frame` reports `format: "png-sequence"`, an absolute directory `output`,
 and `frames` containing the same per-frame fields except `format`, in ascending order.
 
+`data` follows the frame count, not the `--out` target: one frame written into a directory still
+reports `format: "png"`, with `output` naming the file it wrote inside that directory
+(`/abs/out/stills/frame-00060.png`).
+
 `docs`'s `data` is a union on `format`. A topic carries the file's text verbatim:
 
 ```json
@@ -483,7 +491,7 @@ report today:
 | `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                             |
 | `composition` | `composition.props-invalid`, `composition.duration-invalid`                                             |
 | `asset`       | `asset.load-failed`, `asset.not-ready`                                                                  |
-| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error`                             |
+| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error`, `render.output-unwritable` |
 | `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid` |
 | `seek`        | `seek.uncontrolled` (a warning, emitted by an integration with uncontrolled time)                       |
 | `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                               |
@@ -492,6 +500,11 @@ report today:
 `layout.*` (`layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`,
 `layout.font-not-loaded`) is reserved for the later `inspect`/`validate` work and no command emits it
 in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes they do not know.
+
+`render.output-unwritable` is the one domain code about your disk rather than your Composition: a PNG
+frame, the frames `manifest`, or an output directory could not be written. `location.file` and
+`details.output` name the path and `details.code` carries the errno (`EISDIR`, `EACCES`, `ENOSPC`,
+…). It is exit `1`, not `3`: the output path is yours to fix.
 
 ## Exit codes
 
