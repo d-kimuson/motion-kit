@@ -22,7 +22,7 @@ TASK-155 implements design.md §6.2's Spring Contract and §13.2's arbitrary-tim
 
 Random seeks and explicit target changes are Tier A value computations. Numerical evaluation uses binary64 transcendental functions: repeated evaluations and separate processes on the same Node runtime are byte-identical; cross-engine/platform last-bit identity is not promised. Very large targets can quantize small deviations, and extreme parameter/displacement combinations can exceed the representable solver range and produce a Diagnostic. A last-peak index outside the safe-integer range is also diagnosed: binary64 cannot distinguish its adjacent cycles. Tolerances should be meaningful in the output's numeric scale.
 
-The source barrel exposes the API. As in the existing Pure Motion ADR, the `/motion` package subpath is deferred to the package-layout task (export-map entry, build wiring and consumer smoke test). No package-export change is included here.
+The source barrel exposes the API. As in the existing Pure Motion ADR, the `/motion` package subpath is deferred to the package-layout task (export-map entry, build wiring and consumer smoke test). No package-export change is included here. _Amended 2026-11-02 (TASK-238):_ `/motion` now exists with that entry, build wiring and a built-artifact test (`src/motion/built-artifact.test.ts`).
 
 ## Alternatives
 

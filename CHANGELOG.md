@@ -4,6 +4,20 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## Unreleased
+
+### Added
+
+- **`@kimuson/motion-kit/motion`.** The Pure Motion functions are importable from the package for the
+  first time: `interpolate`, `keyframes`, `easing` (the cubic, exponential and Back families plus
+  `cubicBezier`) and the stateless spring (`spring`, `springState`, `springSettleTime`, `retarget`),
+  with the types `Easing`, `InterpolateOptions`, `Keyframe`, `Spring`, `SpringState` and
+  `RetargetOptions`. Each function takes its time as an argument, holds nothing between calls and
+  returns the shared `Result`, so an invalid range or a non-finite evaluation is a `Diagnostic`, not a
+  throw. A built-artifact test imports the published subpath from `dist` and calls every function, and
+  the [authoring guide](docs/guide/authoring.md#motion-values) shows the usage. The root entry does not
+  re-export it, and `Animate`, `Reveal` and `Stagger` are separate work: `/motion` ships values only.
+
 ## 0.2.1 — 2026-11-02
 
 ### Added

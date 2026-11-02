@@ -408,6 +408,7 @@ export default defineConfig({
         '.agents/**/scripts/**',
         // Separate Node processes; the test-file override glob does not match `*.test.ts`.
         'src/motion/spring-determinism.test.ts',
+        'src/motion/built-artifact.test.ts',
       ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
