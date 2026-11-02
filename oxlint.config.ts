@@ -407,6 +407,9 @@ export default defineConfig({
         'spikes/d-assets/vitest.config.ts',
         '.agents/**/scripts/**',
         // Separate Node processes; the test-file override glob does not match `*.test.ts`.
+        // A glob that does (`**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}`) would also make
+        // the jest rules errors on every `*.test.ts` (four `jest/no-conditional-expect` findings in
+        // src/render/render-video.test.ts), so list the file here instead.
         'src/motion/spring-determinism.test.ts',
         'src/motion/built-artifact.test.ts',
       ],

@@ -2,10 +2,10 @@ import { defineConfig } from 'tsdown';
 
 const vendor = (name: string) => new URL(`src/preview/vendor/${name}.ts`, import.meta.url).pathname;
 
-// One entry per public subpath. Adding a subpath touches four places: an entry
+// One entry per public subpath. Adding a subpath touches five places: an entry
 // here, a condition block in `package.json#exports`, an alias line in
-// `vitest.config.ts`, and a `paths` entry in `tsconfig.json` (see
-// docs/contexts/render/CONTEXT.md).
+// `vitest.config.ts`, a `paths` entry in `tsconfig.json`, and the export pin in
+// `scripts/check-browser-graph.test.ts` (see docs/contexts/render/CONTEXT.md).
 export default defineConfig([
   {
     entry: {
