@@ -4,7 +4,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
-## Unreleased
+## 0.2.1 — 2026-11-02
 
 ### Added
 
@@ -18,6 +18,20 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   config change ends the preview with `render.page-error`. `PreviewDataSchema` and the `preview`
   command join the CLI output contract. The preview samples frames at a low rate and mixes audio in the
   browser, so it can differ from the `.mp4`.
+- **The preview page.** The page has a side panel (dragged to resize, its width remembered) with
+  tabs for the Composition, its named Sequences, Assets (the fonts and images the frame on screen
+  loads with `useAsset`, with their status, above the audio sources), Elements (the DOM tree of
+  the paused frame) and review comments, and a bottom panel with the transport and the timeline,
+  resized by its handle. The page's own text is in English or Japanese, chosen in a settings
+  popover and remembered, and otherwise taken from the browser's languages.
+- **Review comments in the preview.** Comment mode (Comment or C) pauses playback and outlines the
+  visible element under the pointer: the text whose glyphs are under it first, then what draws there,
+  film-look overlays (blended or full-frame) and layout boxes last. Scrolling the wheel outlines the
+  other elements under the pointer, and a click drafts a comment on the outlined one; a comment can
+  also cover the whole frame or a range of frames. Copy Markdown puts every comment on the
+  clipboard with its time, the named Sequences showing, the element with the `file:line:col` of its
+  JSX in your project (`data-source`, added only in preview mode) and a `motion-kit frame` command
+  that renders the frame. Comments are kept in `localStorage` per project root and entry.
 - **Named Sequences.** `Sequence` and `TransitionScene` accept an optional `name`. Named ancestors
   form a path, and the runtime reports each mounted named Sequence as the frames it is visible in,
   so a host such as the preview can show and anchor on shots instead of bare frame numbers.
@@ -44,6 +58,10 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Changed
 
+- **`Composition` accepts `frameChange`.** `'live'` (the default, what the renderer uses) commits
+  each frame as soon as it is published; `'held'` keeps the committed frame on screen until the next
+  one can commit, so a host that shows the live page does not flash a Suspense fallback while assets
+  load. The type is exported as `FrameChange`.
 - **A Three.js frame fails when its shader cannot compile.** `ThreeCanvas` hooks
   `renderer.debug.onShaderError`, so a `shaderMaterial` that does not compile or link fails the frame
   with `render.page-error` — and every later frame of that canvas — instead of publishing a scene the
@@ -55,6 +73,18 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   recorded in the [three qualification
   ADR](docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md); the [Three.js
   guide](docs/guide/three.md) lists what to use instead of each excluded item.
+
+### Fixed
+
+- **A cancelled render into a reused directory no longer leaves a stale frames manifest.** The
+  previous `frames.json` written by motion-kit is removed before the first new PNG, so partial
+  frames never sit beside a completion receipt; a JSON file of your own is left untouched.
+- **`encode.ffmpeg-failed` gives a truthful hint.** It names the Composition, target path and
+  environment causes, and suggests a retry only when the failure looks transient (such as
+  `Cannot allocate memory` while muxing).
+- **A frame's registered assets no longer include Sequences it stopped rendering.** Asset readiness
+  leaves out the owners of renders cut off before they committed, and `useAsset` releases its
+  assets as the owner unmounts.
 
 ## 0.2.0 — 2026-10-29
 
