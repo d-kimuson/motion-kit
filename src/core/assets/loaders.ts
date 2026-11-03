@@ -2,6 +2,7 @@ import { AssetLoaderFailure, defaultPhase, failurePhase } from './diagnostics.ts
 import {
   type AssetDescriptor,
   type FontAssetDescriptor,
+  type FontFamilyAssetDescriptor,
   type ImageAssetDescriptor,
 } from './types.ts';
 
@@ -35,7 +36,7 @@ const raceSignal = async <T>(work: Promise<T>, signal: AbortSignal): Promise<T> 
 
 const fontSource = (source: string): string => `url(${JSON.stringify(source)})`;
 
-const fontShorthand = (descriptor: FontAssetDescriptor): string => {
+const fontShorthand = (descriptor: FontAssetDescriptor | FontFamilyAssetDescriptor): string => {
   const family = /[\s"]/u.test(descriptor.family)
     ? JSON.stringify(descriptor.family)
     : descriptor.family;
@@ -73,6 +74,34 @@ export const loadFont = async (
   return face;
 };
 
+/**
+ * Waits for the faces the page's `@font-face` rules declare for this family that cover `text`. The
+ * font set does the unicode-range matching: only faces whose range intersects the text are loaded,
+ * so a family split into dozens of subsets fetches the subsets the frame needs and no others.
+ */
+export const loadFontFamily = async (
+  descriptor: FontFamilyAssetDescriptor,
+  signal: AbortSignal,
+): Promise<readonly FontFace[]> => {
+  if (signal.aborted) throw abortError();
+  let faces: FontFace[];
+  try {
+    faces = await raceSignal(
+      document.fonts.load(fontShorthand(descriptor), descriptor.text),
+      signal,
+    );
+  } catch (error) {
+    if (signal.aborted) throw abortError();
+    throw new AssetLoaderFailure('load', error);
+  }
+  if (signal.aborted) throw abortError();
+  // No declared face covers the text. The frame would capture the machine's fallback font, whose
+  // glyphs differ per machine, so the requirement fails instead of being reported ready.
+  if (faces.length === 0) throw new AssetLoaderFailure('font-set');
+  if (faces.some((face) => face.status !== 'loaded')) throw new AssetLoaderFailure('font-set');
+  return faces;
+};
+
 export const loadImage = async (
   descriptor: ImageAssetDescriptor,
   signal: AbortSignal,
@@ -99,6 +128,7 @@ export const loadImage = async (
 };
 
 export const loadRegisteredAsset: AssetLoader = (descriptor, signal) => {
+  if (descriptor.kind === 'font-family') return loadFontFamily(descriptor, signal);
   if (descriptor.kind === 'font') return loadFont(descriptor, signal);
   return loadImage(descriptor, signal);
 };

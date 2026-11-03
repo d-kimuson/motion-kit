@@ -17,6 +17,12 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   throw. A built-artifact test imports the published subpath from `dist` and calls every function, and
   the [authoring guide](docs/guide/authoring.md#motion-values) shows the usage. The root entry does not
   re-export it, and `Animate`, `Reveal` and `Stagger` are separate work: `/motion` ships values only.
+- **Fonts that CSS declares.** `useAsset({ kind: 'font-family', family, weight?, style?, text })`
+  waits for the faces a stylesheet's `@font-face` rules provide for the text a frame renders, so a
+  fontsource family split by `unicode-range` into dozens of subsets is captured only after the
+  subsets that text needs are loaded, instead of drawing the system fallback. It returns the loaded
+  `FontFace` objects and reports a family that no stylesheet declares for the text as
+  `asset.load-failed`, naming the family. The subset URLs stay in the stylesheet.
 
 ## 0.2.1 — 2026-11-02
 

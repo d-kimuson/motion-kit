@@ -11,6 +11,13 @@ const staticFiles = [
     to: 'abel.ttf',
   },
   {
+    from: new URL(
+      '../../../examples/explainer/assets/fonts/NotoSansJP[wght].woff2',
+      import.meta.url,
+    ).pathname,
+    to: 'noto-jp.woff2',
+  },
+  {
     from: new URL('../../../spikes/d-assets/assets/checker.svg', import.meta.url).pathname,
     to: 'checker.svg',
   },
@@ -83,6 +90,26 @@ describe('phase 1 determinism suite', () => {
       ...requiredDeterminismModes,
     ]);
   }, 60_000);
+
+  it('captures Japanese text in a CSS-declared split family identically, though the faces load lazily', async () => {
+    // The sustained passes capture the same frames again in one session: the first pass loads the
+    // faces lazily, so a capture that did not wait for them would differ from the later passes.
+    const report = await runDeterminismSuite(referenceSuite('css-font-split', 3));
+    logModes(report);
+    expect(report.passed).toBe(true);
+    expect(report.compositions[0]?.framesDiffer).toBe(true);
+    expect(report.compositions[0]?.modes.map((mode) => mode.mode)).toEqual([
+      'sequential-then-n',
+      'random',
+      'reverse',
+      'repeated',
+      'fresh-realm',
+      'held-session',
+      'sustained-session',
+      'fresh-renderer',
+      'concurrent',
+    ]);
+  }, 120_000);
 
   it('fails a Math.random render and names the byte mismatch', async () => {
     const report = await runDeterminismSuite(referenceSuite('nondeterministic'));

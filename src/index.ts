@@ -51,6 +51,7 @@ export { useAsset } from './core/assets/use-asset.ts';
 export type {
   AssetDescriptor,
   FontAssetDescriptor,
+  FontFamilyAssetDescriptor,
   ImageAssetDescriptor,
 } from './core/assets/types.ts';
 export type { Clock } from './lib/clock.ts';

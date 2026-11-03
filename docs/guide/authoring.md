@@ -245,15 +245,51 @@ const Title = () => {
   a JavaScript import of the file. An absolute file path is not a URL and does not load.
 - `id` is your cache key within the Composition; for a font, `family` is the CSS family the face is
   registered under.
-- `useAsset({ kind: 'image' })` returns an `HTMLImageElement` and `useAsset({ kind: 'font' })` a
-  `FontFace`; the overloads keep the two result types apart.
+- `useAsset({ kind: 'image' })` returns an `HTMLImageElement`, `useAsset({ kind: 'font' })` a
+  `FontFace`, and `useAsset({ kind: 'font-family' })` the `FontFace` objects it waited for; the
+  overloads keep the result types apart.
 - **Put every `useAsset` consumer inside a local `<Suspense>`** with a `fallback` of your choice. A
   throw that reaches the root suspends the whole Composition, and the page never acknowledges the
   frame: the render waits for its deadline and then reports `render.frame-timeout` /
   `asset.not-ready` instead of the real cause.
 - A missing or undecodable asset throws a diagnostic-backed error that surfaces as
-  `asset.load-failed`, naming the source. There is no image or font type beyond these two: video is
-  not an asset kind in 0.0.1.
+  `asset.load-failed`, naming the source. Video is not an asset kind.
+
+### Fonts that CSS declares
+
+`@fontsource/*` splits one family into dozens of `@font-face` rules by `unicode-range`, one file per
+subset. Import the CSS and require the family for the text the frame renders: `useAsset` waits for
+only the subsets that text needs, and the frame is captured after they are loaded.
+
+```tsx
+import '@fontsource/noto-sans-jp/400.css';
+
+const Title = () => {
+  useAsset({
+    kind: 'font-family',
+    id: 'title',
+    family: 'Noto Sans JP',
+    weight: 400,
+    text: 'こんにちは世界',
+  });
+  return <h1 style={{ fontFamily: 'Noto Sans JP', fontSize: 72 }}>こんにちは世界</h1>;
+};
+```
+
+- `text` is **required** and must be the text the frame draws. It selects the subsets: a frame of
+  Japanese characters loads the Japanese subsets and never the Latin one.
+- `family`, `weight` and `style` are matched the way CSS matches them, so declare the faces you
+  imported. The requirement is keyed by all four fields, including `text`.
+- A family no stylesheet declares, or one whose declared faces do not cover the text at all, fails
+  the frame with `asset.load-failed` and names the family instead of capturing the system fallback.
+  A character that no subset covers still falls back; glyph coverage is not checked.
+- The stylesheet has to be in the page before the frame renders. An `import` of the CSS in your
+  entry is; a `<style>` element rendered inside the suspending subtree is not.
+- The returned faces are the ones that were loaded, so `faces[0].family` is the CSS family. Most
+  scenes only need the wait and ignore the return value.
+- A subset file that fails to load stays failed for the life of the page: a script cannot replace a
+  stylesheet’s `@font-face`. The frame reports `asset.load-failed` (phase `load`) and the hint says
+  to reload the preview or start a new renderer; a retry in the same page fails the same way.
 
 ## Audio
 

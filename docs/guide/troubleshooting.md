@@ -150,15 +150,19 @@ never decodes — the pending list in `asset.not-ready` names each one with its 
 
 ### `asset.load-failed`
 
-A font, image or declared audio file could not be loaded. `location.file` (and `details.assets[].source`)
-name the source as it was written, redacted:
+A font, image or declared audio file could not be loaded, or a CSS-declared font family did not
+become ready. `location.file` (and `details.assets[].source`) name the source as it was written,
+redacted for a URL; a `font-family` requirement reports its **family** instead, because the subset
+files stay in the stylesheet:
 
-| Symptom                                              | Cause and fix                                                                                                                                                                                                                                                                     |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A font or image that exists in the project fails     | `source` must be a **root-relative URL** (`/assets/logo.png`), not a filesystem path and not a JavaScript import.                                                                                                                                                                 |
-| Nothing found under `examples/<name>/assets.local`   | The example's placeholders were never generated: run `node examples/slideshow/fetch-assets.ts` or `node examples/explainer/fetch-assets.ts --placeholders`.                                                                                                                       |
-| An audio clip fails before the first frame           | `audio[].src` is resolved against the project root (the working directory by default); a missing, non-file or unreadable path is reported with no output written.                                                                                                                 |
-| `--props '{"assets":"final"}'` fails on the examples | `final` reads media a clone does not have: `slideshow` reads `assets/` (nothing is committed there yet) and `explainer` reads `assets.local/portraits/` and `assets.local/voice/`, which only step 2 of its `fetch-assets.ts` writes. Render the default (`placeholder`) instead. |
+| Symptom                                                    | Cause and fix                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A font or image that exists in the project fails           | `source` must be a **root-relative URL** (`/assets/logo.png`), not a filesystem path and not a JavaScript import.                                                                                                                                                                 |
+| Nothing found under `examples/<name>/assets.local`         | The example's placeholders were never generated: run `node examples/slideshow/fetch-assets.ts` or `node examples/explainer/fetch-assets.ts --placeholders`.                                                                                                                       |
+| A `font-family` requirement fails with `phase: "font-set"` | The imported CSS declares no `@font-face` for that `family`, `weight` and `style`, or none of its `unicode-range`s covers the `text`. Check the CSS import, and pass the text the frame actually renders.                                                                         |
+| A `font-family` requirement fails with `phase: "load"`     | A subset file could not be fetched or parsed. Fix the `src` in the CSS, then **reload the preview or start a new renderer**: the browser keeps that stylesheet face in `error` for the life of the page, so a retry in the same page fails the same way.                          |
+| An audio clip fails before the first frame                 | `audio[].src` is resolved against the project root (the working directory by default); a missing, non-file or unreadable path is reported with no output written.                                                                                                                 |
+| `--props '{"assets":"final"}'` fails on the examples       | `final` reads media a clone does not have: `slideshow` reads `assets/` (nothing is committed there yet) and `explainer` reads `assets.local/portraits/` and `assets.local/voice/`, which only step 2 of its `fetch-assets.ts` writes. Render the default (`placeholder`) instead. |
 
 ## `render.output-unwritable`
 

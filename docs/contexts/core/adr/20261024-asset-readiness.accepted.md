@@ -24,28 +24,31 @@ Font loads use `FontFace.load()`, then `document.fonts.ready` and `document.font
 
 Scene authors opt in by calling `useAsset`. A raw `<img>` or CSS font is outside the guarantee. A component that suspends and is removed before its effect commits can leave a registration until release or disposal; pass-end garbage collection was rejected because a suspended child does not re-render. _Amended 2026-11-02 (TASK-281):_ such a registration no longer reaches a preview reply: `assetReadiness(generation)` leaves out the owners that never committed from an earlier generation, and an owner that unmounted or that a Suspense fallback hid since it committed (`markUncommitted`, in `useAsset`'s layout-effect cleanup). StrictMode double-mounting is unverified. Font weight substitution, variable fonts, glyph coverage and large raster decode pressure remain the parked Phase 2 qualification. GPU resources stay in three.
 
+_Amended 2026-11-02 (TASK-237):_ a CSS font is inside the guarantee when it is declared as `useAsset({ kind: 'font-family', family, text })`; the descriptor names no source, reports the family instead of a redacted URL, and adds the rendered text to its cache identity. `FontFamilyAssetDescriptor` is a third member of the `AssetDescriptor` union, loaded through `document.fonts.load` for the `unicode-range` subsets the text needs. The [CSS-declared font readiness ADR](../../render/adr/20261102-css-declared-font-readiness.accepted.md) records the API, the failure phases and the negative controls; an unregistered CSS family stays outside the guarantee.
+
 The opt-in mutation round is `node scripts/mutate-asset-readiness.ts`. Each mutant is restored in `finally`.
 
-| Mutant                             | Killing test                                                                        |
-| ---------------------------------- | ----------------------------------------------------------------------------------- |
-| Register after the suspense read   | `registers before the suspense read is observable`                                  |
-| Single `Promise.all` snapshot      | `drains registrations discovered after the first pending set settles`               |
-| Cache key includes caller id       | `shares a load for the same source and distinguishes weight and source`             |
-| Retry does not start               | `retries a failed load as a new attempt`                                            |
-| Accept a stale acknowledgement     | `suppresses a stale load acknowledgement`                                           |
-| Skip source redaction              | `redacts credentials signed queries and loader exception text`                      |
-| Copy loader exception text         | `redacts credentials signed queries and loader exception text`                      |
-| Timeout lists one asset            | `lists every pending registration and timeoutMs`                                    |
-| Map load failure to not-ready      | `maps font and image load failures to asset.load-failed`                            |
-| Keep userinfo                      | `redacts credentials signed queries and loader exception text`                      |
-| Image key ignores source           | `shares a load for the same source and distinguishes weight and source`             |
-| Confirm ignores new pending        | `keeps the barrier waiting when a registration appears during confirmation`         |
-| Timeout before failure             | `prefers asset.load-failed when the deadline flag and a rejection are both visible` |
-| Pending includes failed            | `reports load-failed when a rejection and a still-pending registration coexist`     |
-| Publish only the first diagnostic  | `publishes every asset diagnostic from a failed settlement`                         |
-| Restore query parameter names      | `redacts query values under unrelated parameter names`                              |
-| Redact an already-redacted marker  | `returns an already-redacted source unchanged`                                      |
-| Boundary drops registered failures | `publishes every failed registration when the boundary fails`                       |
+| Mutant                                    | Killing test                                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| Register after the suspense read          | `registers before the suspense read is observable`                                  |
+| Single `Promise.all` snapshot             | `drains registrations discovered after the first pending set settles`               |
+| Cache key includes caller id              | `shares a load for the same source and distinguishes weight and source`             |
+| Retry does not start                      | `retries a failed load as a new attempt`                                            |
+| Accept a stale acknowledgement            | `suppresses a stale load acknowledgement`                                           |
+| Skip source redaction                     | `redacts credentials signed queries and loader exception text`                      |
+| Copy loader exception text                | `redacts credentials signed queries and loader exception text`                      |
+| Timeout lists one asset                   | `lists every pending registration and timeoutMs`                                    |
+| Map load failure to not-ready             | `maps font and image load failures to asset.load-failed`                            |
+| Keep userinfo                             | `redacts credentials signed queries and loader exception text`                      |
+| Image key ignores source                  | `shares a load for the same source and distinguishes weight and source`             |
+| Confirm ignores new pending               | `keeps the barrier waiting when a registration appears during confirmation`         |
+| Timeout before failure                    | `prefers asset.load-failed when the deadline flag and a rejection are both visible` |
+| Pending includes failed                   | `reports load-failed when a rejection and a still-pending registration coexist`     |
+| Publish only the first diagnostic         | `publishes every asset diagnostic from a failed settlement`                         |
+| Restore query parameter names             | `redacts query values under unrelated parameter names`                              |
+| Redact an already-redacted marker         | `returns an already-redacted source unchanged`                                      |
+| Boundary drops registered failures        | `publishes every failed registration when the boundary fails`                       |
+| Font family reports ready without waiting | `reports a CSS-declared family whose subset cannot be loaded`                       |
 
 `drop-entry-identity-stale-check` is not a survivor. The object-identity comparison was removed because release, retry and dispose increment `attempt` before a replacement entry can settle. A stale completion already fails the attempt check, so the identity line had no separate behavior to pin.
 
