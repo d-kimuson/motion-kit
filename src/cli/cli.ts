@@ -899,9 +899,9 @@ const runFrame = async (
 /**
  * The Contact Sheet route: one PNG of representative frames (agent ADR: contact-sheet). Everything
  * that can be refused before a renderer exists is refused here — the target's extension with the
- * rest of argv, and the output directory before a browser opens — so a bad invocation costs no
- * capture. The sheet's own grid and frame choice are decided against the mounted descriptor, which
- * is the only place the resolved length lives.
+ * rest of argv — so a bad invocation costs no browser. The sheet's own grid, frame choice and range
+ * are decided against the mounted descriptor, which is the only place the resolved length lives, and
+ * the output path is touched only at the write, so a refused or cancelled run leaves nothing on disk.
  */
 const runContactSheet = async (
   args: ContactSheetArgs,
@@ -911,8 +911,6 @@ const runContactSheet = async (
 ): Promise<CommandOutcome> => {
   if (signal.aborted) return abortedOutcome;
   const outAbsolute = resolve(process.cwd(), args.out);
-  const created = createOutputDirectory(dirname(outAbsolute));
-  if (!created.ok) return decide(failure([created.error]));
   const opened = await openRenderer(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
@@ -943,6 +941,11 @@ const runContactSheet = async (
       signal,
     });
     if (!sheet.ok) return decide('aborted' in sheet ? abortedOutcome : failure([...sheet.error]));
+    // The file system is touched only once the image exists: the directory is created and the PNG
+    // written here, after selection, layout, every capture and the composite, so a refused,
+    // failed or cancelled run leaves no directory and no partial image behind (agent CONTEXT.md).
+    const created = createOutputDirectory(dirname(outAbsolute));
+    if (!created.ok) return decide(failure([created.error]));
     const written = writeOutputFile(outAbsolute, sheet.value.image);
     if (!written.ok) return decide(failure([written.error]));
     const data: ContactSheetData = {

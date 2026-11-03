@@ -325,7 +325,7 @@ from scene to scene — in one image, and an MP4 costs the full render.
 | Option               | Meaning                                                                                                           |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `--every <n>`        | One tile every `n` frames, from the region's first frame, always ending on its last frame. Positive integer.      |
-| `--frame <n>`        | Explicit tile frames, repeatable or comma-separated; taken as written. Use this or `--every`, not both.           |
+| `--frame <n>`        | Explicit tile frames, repeatable or comma-separated; ascending, each frame once. Use this or `--every`, not both. |
 | `--out <file.png>`   | The PNG file to write. Required, and must end in `.png`: a sheet is one image, never a directory.                 |
 | `--columns <n>`      | Tiles per row. Positive integer, default `4`, capped at the number of tiles.                                      |
 | `--tile-width <px>`  | One tile's width in sheet pixels. Positive integer, default `320`; the tile keeps the Composition's aspect ratio. |
@@ -349,19 +349,26 @@ same half-open interval as they do for `render`, so a section can be reviewed on
 `--from 4:20 --to 4:35 --every 30`.
 
 One sheet holds at most 64 tiles, at most 16384 pixels on a side and at most 32 million pixels in
-total — a resource bound on one screenshot, not a resolution the browser is asked to exceed. Every
-limit is `cli.invalid-arguments` (exit 2) with a hint naming the option that fixes it, decided once
-the Composition's length is known and before a frame is captured. Neither `--every` nor `--frame`, both of them, a step or column count that is not a
-positive integer, an `--out` that is not a `.png` path, and an empty or reversed `--from`/`--to` are
-the same code and exit before a browser opens. A `--frame` outside the Composition is
-`composition.props-invalid` (exit 1, `location.frame`), as it is for `frame` and `check`; one inside
-the Composition but outside the written `--from`/`--to` region is `cli.invalid-arguments`.
+total — a resource bound on one screenshot, not a resolution the browser is asked to exceed. A
+limit that is exceeded is `cli.invalid-arguments` (exit 2) with a hint naming the option that fixes
+it.
 
-The image is written once, at the end: a failed or cancelled run leaves no partial sheet, and an
-output path that refuses the write is `render.output-unwritable` (exit 1), like every other PNG the
-CLI writes. The tiles are captured in ascending frame order through one renderer, so a sheet is a
+The refusals come in two stages. The ones argv alone decides exit before a browser opens: neither
+`--every` nor `--frame`, both of them, a step, column count or tile width that is not a positive
+integer, an `--out` that is not a `.png` path, and a `--from`/`--to` pair in one unit that makes the
+range empty or reversed. The rest need the mounted Composition's frame count and frame rate, and are
+decided once the descriptor is known and before a frame is captured: a range outside the Composition
+or a mixed-unit range that is empty, a selection or grid bigger than one sheet holds, and a
+`--frame` inside the Composition but outside the written `--from`/`--to` region. A `--frame` outside
+the Composition is `composition.props-invalid` (exit 1, `location.frame`), as it is for `frame` and
+`check`.
+
+The output path is touched as late as the write allows: once the image exists, `contact-sheet`
+creates the parent directory and writes the PNG, so a refused invocation, a failed capture and a
+cancellation all leave no directory and no partial sheet. An output path that refuses the write is
+`render.output-unwritable` (exit 1), like every other PNG the CLI writes. The tiles are captured in ascending frame order through one renderer, so a sheet is a
 pure function of the Composition, the frames it selected, the grid options and the Chromium build:
-run it twice and the two files are byte-identical ([the contact-sheet ADR](../contexts/agent/adr/20261104-contact-sheet.accepted.md)
+run it twice and the two files are byte-identical ([the contact-sheet ADR](../contexts/agent/adr/20261103-contact-sheet.accepted.md)
 records how the grid is composited and why).
 
 `data` is a strict `format: "contact-sheet"` object: the Composition id, the absolute `output` path,

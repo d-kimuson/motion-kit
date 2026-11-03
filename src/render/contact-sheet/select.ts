@@ -3,9 +3,9 @@ import { type Result } from '../../lib/result.ts';
 import { maxTiles } from './layout.ts';
 
 // Which frames a Contact Sheet shows. The choice is data, not a side effect of capturing: a step
-// (`--every`) walks the region from its first frame and always ends on its last, and explicit
-// frames are taken as written. Both shapes are resolved here so the sheet, the envelope and the
-// tests read the same list.
+// (`--every`) walks the region from its first frame and always ends on its last, and an explicit
+// list is a set of frames, ascending and each once. Both shapes are resolved here so the sheet, the
+// envelope and the tests read the same list.
 
 /** Half-open Global Frame region a sheet draws from: `startFrame` inclusive, `endFrame` exclusive. */
 export type ContactSheetRegion = {

@@ -1439,6 +1439,93 @@ describe('motion-kit CLI', () => {
       });
     }, 60_000);
 
+    it('leaves no output directory behind when the invocation is refused', async () => {
+      // A registry of two without --composition, and a frame past the Composition: the first is
+      // refused as soon as the registry mounts, the second once the descriptor is known. Neither
+      // may leave the directory a successful run would write into.
+      for (const { argv, code } of [
+        { argv: ['--every', '2'], code: 2 },
+        { argv: ['--composition', 'one', '--frame', '6'], code: 1 },
+      ]) {
+        const directory = join(outputRoot, 'contact-sheet-refused-directory');
+        const output = join(directory, 'sheet.png');
+        const result = await run(['contact-sheet', 'entry.ts', ...argv, '--out', output, '--json']);
+        expect(result.code).toBe(code);
+        expect(assertValidEnvelope(result).ok).toBe(false);
+        expect(existsSync(directory)).toBe(false);
+      }
+    }, 90_000);
+
+    it('refuses a sheet with more tiles than one sheet holds, naming --every', async () => {
+      const directory = join(outputRoot, 'contact-sheet-too-many-tiles');
+      const output = join(directory, 'sheet.png');
+      // 120 frames with a tile each: more than the 64 tiles one sheet holds, decided from the
+      // descriptor and before any capture.
+      const result = await run([
+        'contact-sheet',
+        'entry-long.tsx',
+        '--composition',
+        'long',
+        '--every',
+        '1',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        command: 'contact-sheet',
+        ok: false,
+        data: null,
+        diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+      });
+      expect(envelope.diagnostics[0]?.message).toContain('64');
+      expect(envelope.diagnostics[0]?.hint).toContain('--every');
+      expect(existsSync(directory)).toBe(false);
+    }, 90_000);
+
+    it('leaves neither a partial image nor a directory when the run is cancelled', async () => {
+      const directory = join(outputRoot, 'contact-sheet-cancelled');
+      const output = join(directory, 'sheet.png');
+      // 41 tiles of a 480 px grid: seconds of captures, so the signal lands mid-run on any machine.
+      const child = spawnRun(
+        [
+          'contact-sheet',
+          'entry-long.tsx',
+          '--composition',
+          'long',
+          '--every',
+          '3',
+          '--tile-width',
+          '480',
+          '--out',
+          output,
+          '--json',
+        ],
+        {},
+      );
+      const pid = child.child.pid ?? -1;
+      try {
+        // The loading service is the first process the run owns, so waiting for it proves the CLI
+        // is past startup — its signal handlers are installed before any renderer opens — and the
+        // captures are what the stop interrupts.
+        await waitFor(() => childrenOf(pid).length > 0, 60_000, 'the loading service');
+        expectStillRunning(pid, 'the SIGINT is sent');
+        child.child.kill('SIGINT');
+        expect(await child.exit).toEqual({ code: 130, signal: null });
+        expect(child.stdout()).toBe('');
+        expect(abortedLines(child.stderr())).toEqual([
+          'contact-sheet aborted; no output was produced',
+        ]);
+        expect(existsSync(output)).toBe(false);
+        expect(existsSync(directory)).toBe(false);
+      } finally {
+        if (child.child.exitCode === null && child.child.signalCode === null)
+          child.child.kill('SIGKILL');
+      }
+    }, 120_000);
+
     it('reports an output the sheet cannot be written to as render.output-unwritable', async () => {
       const directory = join(outputRoot, 'contact-sheet-read-only');
       mkdirSync(directory, { recursive: true });

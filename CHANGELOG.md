@@ -12,8 +12,8 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   --out sheet.png` writes one PNG holding a grid of representative frames, each labelled with its
   frame number and presentation time, so a coding agent judges the pacing and the per-scene layout
   from a single image instead of reading one frame at a time. `--every <n>` walks the region from its
-  first frame and always ends on its last, `--frame <n>[,<n>...]` names the tiles instead (one or the
-  other, never both), and `--from`/`--to` reuse the range `render` already accepts, so a section can
+  first frame and always ends on its last, `--frame <n>[,<n>...]` names the tiles instead, ascending and
+  each frame once (one or the other, never both), and `--from`/`--to` reuse the range `render` already accepts, so a section can
   be reviewed on its own. `--columns` and `--tile-width` shape the grid and the labels scale with it;
   one sheet holds at most 64 tiles, at most 16384 pixels a side and at most 32 million pixels in
   total. The frames are captured in
@@ -21,10 +21,14 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   writes byte-identical PNGs twice; `--out` must be a `.png` path and a refused write is
   `render.output-unwritable`. `--json` reports `data.format: "contact-sheet"` with the output path,
   the grid dimensions and every tile's frame, time and cell. Invalid arguments (no selection, both,
-  a malformed step or grid, a non-`.png` target, a frame the written range leaves out) are
-  `cli.invalid-arguments` (exit 2) before a browser opens, a frame outside the Composition stays
-  `composition.props-invalid`, and no Diagnostic code is added, so `schemaVersion` stays `1`. The
-  [contact-sheet ADR](docs/contexts/agent/adr/20261104-contact-sheet.accepted.md) records the
+  a malformed step or grid, a non-`.png` target) are `cli.invalid-arguments` (exit 2) before a
+  browser opens; the findings that need the Composition's length — a range it cannot hold, a
+  selection or grid larger than one sheet holds, a frame the written range leaves out — are the same
+  code once the descriptor is known and before a frame is captured, and a frame outside the
+  Composition stays `composition.props-invalid`. The output path is touched only once the image
+  exists, so a refused or cancelled run leaves no directory and no partial image. No Diagnostic code
+  is added, so `schemaVersion` stays `1`. The
+  [contact-sheet ADR](docs/contexts/agent/adr/20261103-contact-sheet.accepted.md) records the
   compositing method and the determinism argument.
 - **`render` reports progress, and the CLI has one stderr policy.** `render` writes
   `rendering <done>/<total> frames (<percent>%) ETA <duration>` to stderr for both routes, the total

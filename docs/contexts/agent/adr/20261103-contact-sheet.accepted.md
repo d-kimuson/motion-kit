@@ -3,10 +3,11 @@
 ## Context
 
 A coding agent can capture single frames (`motion-kit frame`) and a whole video (`render`), but it
-has no way to read the pacing of a video without opening one image per frame. The comparable tool,
-Celesta, offers `--every 150 --contact-sheet sheet.png`: one image holding every 150th frame, which
-sits between "look at one PNG" and "watch the MP4" and lets an agent judge the whole flow from one
-image it can read. `contact-sheet` is already the agent context's term for exactly that artifact.
+has no way to read the pacing of a Composition without opening one image per frame, and a full
+render is minutes of work for a question about composition. What is missing is one image holding a
+sample of the whole timeline — every nth frame, plus the end — which sits between "look at one PNG"
+and "watch the MP4" and lets an agent judge pacing and per-scene layout from an image it can read.
+`contact-sheet` is already the agent context's term for exactly that artifact.
 
 The pieces exist: `frame` captures one or more frames ascending through one renderer, the CLI maps
 its writes to `render.output-unwritable`, `--from`/`--to` resolve a half-open Global Frame range
@@ -36,8 +37,8 @@ same treatment for both browsers.
 
 `--every <n>` walks the region from its first frame in steps of `n` and always ends on the region's
 last frame (`endFrame - 1`), so the sheet shows where the video starts and where it finishes. The
-last frame is not repeated when the walk already landed on it. `--frame <n>[,<n>...]` is taken as
-written, ascending. Exactly one of the two is required: `--every` with `--frame` is
+last frame is not repeated when the walk already landed on it. `--frame <n>[,<n>...]` is a set: the CLI
+sorts it ascending and a repeated frame is refused. Exactly one of the two is required: `--every` with `--frame` is
 `cli.invalid-arguments`, as is neither.
 
 `--from`/`--to` bound the region with `resolveFrameRange`, the same function and the same notation
@@ -68,11 +69,12 @@ small fixture.
 ### Output and refusals
 
 `--out` must be a `.png` path — a sheet is one file, never a directory — and the extension is
-checked with the rest of argv, before a renderer opens. The parent directory is created before the
-captures start, and a file system that refuses either that directory or the write is
-`render.output-unwritable` (exit 1, `location.file` and `details.output`/`details.code`), the code
-the CLI's other writes already use. The image is written once, at the end, so a cancelled or failed
-run leaves no partial sheet.
+checked with the rest of argv, before a renderer opens. The output path is touched as late as the
+write allows: once the image exists, the command creates the parent directory and writes the PNG,
+so a refused invocation, a failed capture and a cancellation all leave the file system as they
+found it — no directory and no partial sheet. A file system that refuses that directory or the write
+is `render.output-unwritable` (exit 1, `location.file` and `details.output`/`details.code`), the code
+the CLI's other writes already use.
 
 ## Consequences
 

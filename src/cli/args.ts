@@ -243,7 +243,7 @@ export const ContactSheetArgsSchema = z
       .transform(Number)
       .pipe(z.int().positive())
       .optional(),
-    /** Explicit tiles, taken as written; one of `--every` or `--frame` is required. */
+    /** Explicit tiles, sorted ascending by argv; one of `--every` or `--frame` is required. */
     frame: optionalFrameList,
     columns: z
       .string()
