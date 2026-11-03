@@ -11,6 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-ci
   cancel-in-progress: true
 
+# The check job only reads the repository; jobs that need more scopes declare their own.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: check
