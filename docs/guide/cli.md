@@ -338,8 +338,8 @@ from scene to scene — in one image, and an MP4 costs the full render.
 | `--json`             | Print the envelope instead of the one-line summary.                                                               |
 
 ```bash
-motion-kit contact-sheet entry.tsx --composition teaser --every 150 --out out/sheet.png --json
-# wrote 6 frames to /abs/out/sheet.png (1320x432)
+motion-kit contact-sheet entry.tsx --composition teaser --every 150 --out out/sheet.png
+# wrote 6 frames to /abs/out/sheet.png (1320x432) in 4299.7ms
 ```
 
 `--every` walks the region from its first frame in steps of `n` and always ends on the region's last

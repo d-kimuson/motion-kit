@@ -121,7 +121,7 @@ at a glance:
 
 ```bash
 pnpm exec motion-kit contact-sheet entry.tsx --every 30 --out out/sheet.png
-# wrote 6 frames to /Users/you/hello-video/out/sheet.png (1320x432)
+# wrote 6 frames to /Users/you/hello-video/out/sheet.png (1320x432) in 3214.2ms
 ```
 
 Add `--json` to any command to get one versioned envelope on stdout instead of its text output:

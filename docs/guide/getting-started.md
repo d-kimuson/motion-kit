@@ -154,7 +154,7 @@ pnpm exec motion-kit contact-sheet entry.tsx --every 30 --out sheet.png
 ```
 
 ```text
-wrote 6 frames to /Users/kaito/hello-video/sheet.png (1320x432)
+wrote 6 frames to /Users/kaito/hello-video/sheet.png (1320x432) in 3214.2ms
 ```
 
 `--every 30` takes the Composition's first frame and every 30th after it, always ending on its last
