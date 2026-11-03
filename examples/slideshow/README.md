@@ -153,9 +153,10 @@ not reproduced since ([CI policy](../../docs/design-doc/20261025-reference-examp
 - **The type is the system sans stack, so the look is fixed per machine**, exactly as the teaser: its
   determinism evidence is fixed-environment, per the
   [Phase 1 determinism record](../../docs/contexts/render/knowledge/20261024-phase1-determinism.md).
-- **Motion is hand-rolled arithmetic.** `/motion` and `/theme` are Phase 2 and have no public subpath,
-  so `plan.ts` does the Ken Burns maths and the colours, sizes and durations are constants. The example
-  that lands after Phase 2 replaces them; the ids and the acceptance look do not change.
+- **Motion is hand-rolled arithmetic.** `/motion` publishes the values and `/theme` is still Phase 2, so
+  `plan.ts` keeps the Ken Burns maths and the colours, sizes and durations as constants; adopting them
+  re-baselines the frames and belongs to the example task. The ids and the acceptance look do not
+  change.
 - **Two rendering choices are load-bearing for the gate.** A glyph run inside the transformed picture
   layer made `random`, `reverse`, `fresh-realm`, `held-session` and `fresh-renderer` differ (5.9–9.8 k
   bytes): Chromium rasterises text in a transformed layer differently between paints. The probe's

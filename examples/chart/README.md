@@ -184,9 +184,9 @@ file under `data/` and no code change.
   drawn with `shapeRendering="crispEdges"`, and every coordinate is a whole pixel. Replacing a marker
   with a `<circle>`, or the polyline's `crispEdges` with smoothing, brings the failure back. See
   [the troubleshot](../../.agents/troubleshots/chromium-antialiased-edge-png-drift.md).
-- **Motion is hand-rolled arithmetic.** `/motion` (`interpolate`, `easing`) and `/theme` are Phase 2
-  and have no public subpath, so `scale.ts` implements `clamp01`/`easeOutCubic`/the timing plan and
-  `chart.tsx` hard-codes the palette. The example that lands after Phase 2 replaces both; the
+- **Motion is hand-rolled arithmetic.** `/motion` publishes `interpolate` and `easing` and `/theme` is
+  still Phase 2, so `scale.ts` keeps `clamp01`/`easeOutCubic`/the timing plan and `chart.tsx`
+  hard-codes the palette; adopting the subpath is the example task that re-baselines the frames. The
   Composition ids and the acceptance look do not change.
 - **No `Intl`.** `formatNumber` groups thousands by hand: ICU data differs between a developer machine
   and the CI runner, and the gate compares PNG bytes.

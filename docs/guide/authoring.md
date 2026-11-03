@@ -2,8 +2,9 @@
 
 A motion-kit video is a React tree plus the metadata that fixes its timeline. This page covers what
 an entry file exports, the hooks that report time, the two structural components (`Sequence` and
-`TransitionSeries`), asset loading, and audio declarations. Everything it names is exported from
-`@kimuson/motion-kit` in 0.0.1; anything marked planned is not.
+`TransitionSeries`), the [motion values](#motion-values), asset loading, and audio declarations.
+Everything it names is exported from `@kimuson/motion-kit` in 0.0.1, except the motion values, which
+come from the `@kimuson/motion-kit/motion` subpath; anything marked planned is not.
 
 ## The registry
 
@@ -108,18 +109,29 @@ const Fade = () => {
 };
 ```
 
-| Function                                                                | Returns                          | Notes                                                                                                       |
-| ----------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `interpolate(input, inputRange, outputRange, options?)`                 | `Result<number>`                 | At least two strictly ascending input stops. Options: the extrapolation mode and the easing.                |
-| `keyframes(time, frames, options?)`                                     | `Result<number>`                 | `{ time, value }` stops; the same rules and options as `interpolate`.                                       |
-| `easing`                                                                | `Easing` values                  | `linear`, the cubic, exponential and Back in/out/in-out families, and `easing.cubicBezier(x1, y1, x2, y2)`. |
-| `spring(time, { from, to, start, velocity, stiffness, damping, mass })` | `Result<number>`                 | A damped spring evaluated in closed form; it holds `from` before `start`.                                   |
-| `springState(time, spring)`                                             | `Result<{ position, velocity }>` | The position and the analytic velocity at that time.                                                        |
-| `springSettleTime(spring, tolerance)`                                   | `Result<number>`                 | When the spring last stays inside ±`tolerance` of its target, in seconds; not its first crossing.           |
-| `retarget(spring, time, { to, stiffness?, damping?, mass? })`           | `Result<Spring>`                 | A new spring that starts at `time` with the old one's position and velocity; the old one is never mutated.  |
+`easing.cubicBezier` is the one easing that can fail, because it validates its control points, so it
+returns `Result<Easing>` rather than an `Easing`:
 
-- Failures are values: an input range that is not strictly ascending, a non-positive stiffness, or an
-  evaluation outside the finite range returns `{ ok: false, error }` with a `Diagnostic`, never a throw.
+```tsx
+const curve = easing.cubicBezier(0.25, 0.1, 0.25, 1); // Result<Easing>
+const eased = interpolate(seconds, [0, 0.6], [0, 1], curve.ok ? { easing: curve.value } : {});
+```
+
+| Function                                                                | Returns                          | Notes                                                                                                                       |
+| ----------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `interpolate(input, inputRange, outputRange, options?)`                 | `Result<number>`                 | At least two strictly ascending input stops. Options: the extrapolation mode and the easing.                                |
+| `keyframes(time, frames, options?)`                                     | `Result<number>`                 | `{ time, value }` stops; the same rules and options as `interpolate`.                                                       |
+| `easing`                                                                | `Easing` values                  | `linear` and the cubic, exponential and Back in/out/in-out families: plain `Easing` functions.                              |
+| `easing.cubicBezier(x1, y1, x2, y2)`                                    | `Result<Easing>`                 | A CSS curve. `x1` and `x2` must be in `[0, 1]`, so the call can fail: unwrap it before passing it on.                       |
+| `spring(time, { from, to, start, velocity, stiffness, damping, mass })` | `Result<number>`                 | A damped spring evaluated in closed form; it holds `from` before `start`.                                                   |
+| `springState(time, spring)`                                             | `Result<{ position, velocity }>` | The position and the analytic velocity at that time.                                                                        |
+| `springSettleTime(spring, tolerance)`                                   | `Result<number>`                 | A duration in seconds from `start` until the spring's sustained last entry into ±`tolerance`; add `start` for a frame time. |
+| `retarget(spring, time, { to, stiffness?, damping?, mass? })`           | `Result<Spring>`                 | A new spring that starts at `time` with the old one's position and velocity; the old one is never mutated.                  |
+
+- Invalid input is a value, not a throw: an input range that is not strictly ascending, a
+  non-positive stiffness, or an evaluation outside the finite range returns `{ ok: false, error }`
+  with a `Diagnostic`. Programmer errors still throw — a custom `easing` callback that throws
+  propagates out of `interpolate`/`keyframes`, because nothing catches it.
 - `options.extrapolate` defaults to `clamp`; `extend` continues the outer segment's slope, and
   `identity` returns the input unchanged outside the range.
 - Every exact input stop returns that stop's value without calling the easing, so a custom easing

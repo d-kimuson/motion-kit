@@ -113,10 +113,10 @@ never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all e
   determinism evidence is fixed-environment (as the
   [Phase 1 determinism record](../../docs/contexts/render/knowledge/20261024-phase1-determinism.md)
   says) and a frame rendered on another OS will differ in its glyphs.
-- **Motion is hand-rolled arithmetic.** `/motion` (`interpolate`, `easing`, `spring`, `Stagger`) and
-  `/theme` are Phase 2 and have no public subpath, so `motion.ts` implements the springs and `scenes.tsx`
-  hard-codes the colours, sizes and durations. The example that lands after Phase 2 replaces both; the
-  Composition ids and the acceptance look do not change.
+- **Motion is hand-rolled arithmetic.** `/motion` publishes the values (`interpolate`, `easing`,
+  `spring`) and `/theme` is still Phase 2, so `motion.ts` keeps the springs and `scenes.tsx` the
+  hard-coded colours, sizes and durations: adopting them changes the numbers the acceptance look fixes
+  and re-baselines the frames. The Composition ids and the acceptance look do not change.
 - **Two rendering choices are load-bearing for the gate, and touching them breaks it.** A `translateY`
   on an individual text span, and a `transform` on the full-frame layer that holds a word, both made
   Chromium rasterise the same frame differently between paints — `reverse` and `random` failed with

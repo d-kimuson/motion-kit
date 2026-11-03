@@ -1,15 +1,15 @@
 # Context Map
 
-| Context | Responsibility                                                                                                                                   | Implementation                                |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| core    | The master clock: Composition, timeline, Sequence, Transition, the Time Module (frame/time conversion, rounding), asset readiness, runtime hooks | `src/core`, root export                       |
-| motion  | Deterministic values from time: `interpolate`, `spring`, `keyframes`, easing; `Animate`, `Reveal`, `Stagger`; the motion library integration     | `src/motion`, `/motion`                       |
-| theme   | Defaults and direction for expression: `defineTheme`, token resolution by priority, scoped CSS variables, fonts                                  | `src/theme`, `/theme`                         |
-| three   | 3D on the timeline: `ThreeCanvas`, `CameraRig`, manual frame advance for React Three Fiber                                                       | `src/three`, `/three`                         |
-| presets | Reusable scene components with Zod schemas and agent-facing metadata (typography, backgrounds, transitions, three)                               | `src/presets`, `/presets`                     |
-| render  | Turning a Composition into frames and a file: browser capture, readiness barrier, media, encoding                                                | `src/render`, `/render` (Node only)           |
-| preview | A human's authoring loop: the browser host page that plays, scrubs and steps a Composition with its declared audio and a Sequence/audio timeline | `src/preview`, served by `motion-kit preview` |
-| agent   | What a coding agent operates: the CLI (`render`, `frame`, `docs`, `check`, `preview`; `inspect`/`validate` later), diagnostics, layout checks    | `src/agent`, `src/cli`, `/agent` (Node only)  |
+| Context | Responsibility                                                                                                                                                                                | Implementation                                |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| core    | The master clock: Composition, timeline, Sequence, Transition, the Time Module (frame/time conversion, rounding), asset readiness, runtime hooks                                              | `src/core`, root export                       |
+| motion  | Deterministic values from time, published at `/motion`: `interpolate`, `spring`, `keyframes`, easing. Planned, not shipped: `Animate`, `Reveal`, `Stagger` and the motion library integration | `src/motion`, `/motion`                       |
+| theme   | Defaults and direction for expression: `defineTheme`, token resolution by priority, scoped CSS variables, fonts                                                                               | `src/theme`, `/theme`                         |
+| three   | 3D on the timeline: `ThreeCanvas`, `CameraRig`, manual frame advance for React Three Fiber                                                                                                    | `src/three`, `/three`                         |
+| presets | Reusable scene components with Zod schemas and agent-facing metadata (typography, backgrounds, transitions, three)                                                                            | `src/presets`, `/presets`                     |
+| render  | Turning a Composition into frames and a file: browser capture, readiness barrier, media, encoding                                                                                             | `src/render`, `/render` (Node only)           |
+| preview | A human's authoring loop: the browser host page that plays, scrubs and steps a Composition with its declared audio and a Sequence/audio timeline                                              | `src/preview`, served by `motion-kit preview` |
+| agent   | What a coding agent operates: the CLI (`render`, `frame`, `docs`, `check`, `preview`; `inspect`/`validate` later), diagnostics, layout checks                                                 | `src/agent`, `src/cli`, `/agent` (Node only)  |
 
 `src/lib` holds utilities with no domain meaning (`Result`, clock abstractions) that any context may import.
 
