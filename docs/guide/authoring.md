@@ -227,9 +227,14 @@ const eased = interpolate(seconds, [0, 0.6], [0, 1], curve.ok ? { easing: curve.
   `Transition` between two scenes the cut is hard.
 - A `Transition`'s `duration` is the overlap, and it may be at most the smaller of the two adjacent
   scene durations.
-- A `Transition`'s children mount **only during the overlap**, and they are the only code that can
-  read `useTransitionProgress()` (0 → 1 across the overlap). Both sides therefore have to be declared
-  inside the transition's children to be animated.
+- Each `TransitionScene` stays mounted for its whole `duration`, so **both adjacent scenes are
+  mounted during an overlap**. A `Transition`'s children are mounted in addition, **only during the
+  overlap**, drawn after (above) the scenes, and they are the only code that can read
+  `useTransitionProgress()` (0 → 1 across the overlap). A scene cannot read it.
+- To animate a scene across an overlap you therefore have two options: fade each scene itself from
+  `useSequence().time` / `.remaining` (the scene sits in its own Sequence, so `remaining` counts down
+  to its end) and let the `Transition` child draw only an overlay such as a wipe bar; or declare both
+  sides again inside the transition's children (below) and draw them over the scenes.
 - `TransitionScene` must be a direct child of `TransitionSeries`, with at most one `Transition`
   between adjacent scenes; anything else is a malformed tree and fails the frame as
   `render.page-error`.
@@ -237,7 +242,8 @@ const eased = interpolate(seconds, [0, 0.6], [0, 1], curve.ok ? { easing: curve.
   alpha. When one side is opaque, fade only the incoming layer over the outgoing one as its base
   instead of fading both — otherwise the overlap dips towards the background.
 
-A crossfade component reads the progress once and applies it to both layers:
+A crossfade component that redraws both sides reads the progress once and applies it to both layers.
+It is drawn over the scenes, which are still mounted underneath:
 
 ```tsx
 const CrossFade = () => {

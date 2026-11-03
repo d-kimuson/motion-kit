@@ -18,6 +18,12 @@ Nothing here is shipped in the npm package (`package.json#files` is `dist` only)
 | `slideshow`           | 1080×1920  | 30  | 900 (30 s)   | Vertical 9:16, Ken Burns, audio mixing, aspect switching                              | smoke renders `slideshow-ci`, determinism runs `slideshow-probe`               |
 | `slideshow-landscape` | 1920×1080  | 30  | 900 (30 s)   | The same slide components at 16:9 (`useTimeline().width/height`)                      | descriptor plus one still frame in the smoke test                              |
 
+## Beyond the four targets
+
+`promo` (`examples/promo/`) is a 30-second promotion video for motion-kit itself, made with
+motion-kit: six scenes in one `TransitionSeries`, 1920×1080 at 30 fps for 900 frames. It adds no new
+axis, so it carries a `promo-ci` smoke Composition but no determinism probe; its README says why.
+
 ## The short Compositions
 
 Every example's entry holds more than one Composition, so `--composition <id>` is always required.
@@ -36,6 +42,7 @@ example's scene components — never a simplified copy. The `-probe` Composition
 | `chart-probe`     | 480×270    | 30  | 30     | determinism, frames `[0, 15, 29]`          |
 | `slideshow-ci`    | 540×960    | 30  | 60     | smoke MP4                                  |
 | `slideshow-probe` | 480×270    | 30  | 30     | determinism, frames `[0, 15, 29]`          |
+| `promo-ci`        | 960×540    | 30  | 60     | smoke MP4 (`promo.smoke.test.ts`)          |
 
 ## Running an example
 
