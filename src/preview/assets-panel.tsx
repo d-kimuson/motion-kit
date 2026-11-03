@@ -90,20 +90,23 @@ const RegisteredAssets = ({ state }: { state: PreviewState }) => {
   return (
     <ul className="grid grid-cols-1 gap-0.5">
       {assets.map((asset) => {
-        const Icon = asset.kind === 'font' ? Type : Image;
+        const Icon = asset.kind === 'font' || asset.kind === 'font-family' ? Type : Image;
+        // A CSS-declared family's source is its family, so the name and the source are the same
+        // string; the kind label below says what it is instead of repeating it.
+        const name = assetName(asset.source, t);
         return (
           <li
             key={`${asset.kind}:${asset.source}`}
             data-slot="asset"
             className="flex items-center gap-2 rounded-md px-1 py-1"
           >
-            <Icon
-              className="size-3.5 shrink-0 text-muted-foreground"
-              aria-label={t.kind(asset.kind)}
-            />
+            <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0 flex-1" title={asset.source}>
-              <div className="truncate text-xs">{assetName(asset.source, t)}</div>
-              <div className="truncate text-[11px] text-muted-foreground">{asset.source}</div>
+              <div className="truncate text-xs">{name}</div>
+              <div className="truncate text-[11px] text-muted-foreground">
+                <span data-slot="asset-kind">{t.kind(asset.kind)}</span>
+                {asset.source === name ? null : ` · ${asset.source}`}
+              </div>
             </div>
             {asset.status === 'failed' ? (
               <Badge variant="destructive">

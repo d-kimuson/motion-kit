@@ -20,6 +20,21 @@ const metadata = {
   durationInFrames: 6,
 };
 
+/**
+ * A family split by `unicode-range`, as fontsource ships one. Injected at module evaluation, like a
+ * stylesheet the entry imports. The Japanese face is a multi-megabyte variable font, so the suite
+ * exercises a lazy load that has to land before the first capture.
+ */
+const splitFamilyStyle = () => {
+  const style = document.createElement('style');
+  style.textContent = [
+    "@font-face { font-family: 'DeterminismSplit'; font-style: normal; font-weight: 400; font-display: swap; src: url('/noto-jp.woff2') format('woff2'); unicode-range: U+3040-30FF, U+4E00-9FFF; }",
+    "@font-face { font-family: 'DeterminismSplit'; font-style: normal; font-weight: 400; font-display: swap; src: url('/abel.ttf') format('truetype'); unicode-range: U+0041-005A, U+0030-0039; }",
+  ].join('\n');
+  document.head.append(style);
+};
+splitFamilyStyle();
+
 const stage = {
   position: 'relative' as const,
   width: 64,
@@ -50,6 +65,34 @@ const DomText = () => {
       }}
     >
       {frame}
+    </div>
+  );
+};
+
+/** Text in a CSS-declared family: both faces load lazily, only when the first capture asks. */
+const CssFontSplit = () => {
+  const frame = useFrame();
+  useAsset({
+    kind: 'font-family',
+    id: 'css-split-font',
+    family: 'DeterminismSplit',
+    weight: 400,
+    style: 'normal',
+    text: 'あA',
+  });
+  return (
+    <div
+      style={{
+        ...stage,
+        background: '#fff',
+        color: '#111',
+        fontFamily: 'DeterminismSplit',
+        fontSize: 28,
+        lineHeight: '40px',
+      }}
+    >
+      あA
+      <div style={{ width: 8 + frame * 8, height: 4, background: '#f80' }} />
     </div>
   );
 };
@@ -212,6 +255,7 @@ const Nondeterministic = () => (
 
 export const compositions = defineCompositions([
   defineComposition({ id: 'dom-text', component: DomText, ...metadata }),
+  defineComposition({ id: 'css-font-split', component: CssFontSplit, ...metadata }),
   defineComposition({ id: 'css-transform', component: CssTransform, ...metadata }),
   defineComposition({ id: 'svg-path', component: SvgPath, ...metadata }),
   defineComposition({ id: 'canvas-drawing', component: CanvasDrawing, ...metadata }),

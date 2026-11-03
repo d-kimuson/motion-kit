@@ -20,6 +20,21 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   `cli.invalid-arguments` (exit 2); the first two are decided before a browser opens. The
   [render frame range ADR](docs/contexts/agent/adr/20261103-render-frame-range.accepted.md) records
   the notation, the rounding and how the range combines with `--fps`, `--scale` and `--concurrency`.
+- **Metadata from props.** `defineComposition` accepts `resolveMetadata`, a callback that derives a
+  Composition's `durationInFrames` (and optionally `width`, `height` and `fps`) from its validated
+  props, with the types `CompositionMetadataInput`, `CompositionMetadataOverride` and
+  `MetadataResolver`. It runs once per mount in the page, may be asynchronous and has a fresh
+  loading timeout of its own, so `render`, `frame`, `check` and `preview` read the same metadata for
+  the same props: a generated script now renders with `--props` alone instead of being imported
+  statically. The resolver reads a frozen copy of the props, so it cannot change what the component
+  renders, and a renderer pool stops at mount when two realms resolve different metadata instead of
+  mixing two Compositions. A missing field keeps the declaration's value, `listCompositions()` keeps
+  reporting the declaration, and invalid, thrown or timed-out resolutions stay Diagnostics
+  (`composition.duration-invalid`, `render.page-error`) with no new code. The
+  [authoring guide](docs/guide/authoring.md#metadata-from-props) shows the usage and the
+  [decision](docs/contexts/core/adr/20261103-props-driven-metadata.accepted.md) records the
+  resolution point.
+
 - **`@kimuson/motion-kit/motion`.** The Pure Motion functions are importable from the package for the
   first time: `interpolate`, `keyframes`, `easing` (the cubic, exponential and Back families plus
   `cubicBezier`) and the stateless spring (`spring`, `springState`, `springSettleTime`, `retarget`),
@@ -29,6 +44,12 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   throw. A built-artifact test imports the published subpath from `dist` and calls every function, and
   the [authoring guide](docs/guide/authoring.md#motion-values) shows the usage. The root entry does not
   re-export it, and `Animate`, `Reveal` and `Stagger` are separate work: `/motion` ships values only.
+- **Fonts that CSS declares.** `useAsset({ kind: 'font-family', family, weight?, style?, text })`
+  waits for the faces a stylesheet's `@font-face` rules provide for the text a frame renders, so a
+  fontsource family split by `unicode-range` into dozens of subsets is captured only after the
+  subsets that text needs are loaded, instead of drawing the system fallback. It returns the loaded
+  `FontFace` objects and reports a family that no stylesheet declares for the text as
+  `asset.load-failed`, naming the family. The subset URLs stay in the stylesheet.
 
 ## 0.2.1 — 2026-11-02
 

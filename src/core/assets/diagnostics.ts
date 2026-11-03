@@ -86,14 +86,30 @@ const redactSource = (source: string): string => {
 /** Schema validation does not redact. Every asset Diagnostic must pass through here. */
 export const redactAssetSource = (source: string): string => redactSource(source);
 
+/**
+ * The one kind whose source is not a URL: a CSS-declared font family reports its family, which is
+ * authored CSS and carries nothing to redact. Every other kind, including one a later version adds,
+ * is treated as a URL and redacted, so a new kind fails closed.
+ */
+const unredactedSourceKinds: ReadonlySet<string> = new Set(['font-family']);
+
+/** The identity a Diagnostic or readiness snapshot reports for a required asset. */
+export const reportedAssetSource = (asset: Readonly<{ kind: string; source: string }>): string =>
+  unredactedSourceKinds.has(asset.kind) ? asset.source : redactAssetSource(asset.source);
+
 const loadFailedMessage = (kind: string): string => {
   if (kind === 'font') return 'The required font failed to load.';
+  if (kind === 'font-family') return 'The required font family failed to load.';
   if (kind === 'image') return 'The required image failed to decode.';
   return 'The required asset failed to load.';
 };
 
-const loadFailedHint = (kind: string): string => {
+const loadFailedHint = (kind: string, phase: string): string => {
   if (kind === 'font') return 'Check the font source, family, weight and style.';
+  if (kind === 'font-family')
+    return phase === 'load'
+      ? 'Check that the imported CSS loads its subset files. A stylesheet face that failed stays failed for the page, so reload the preview, or start a new renderer, to retry it.'
+      : 'Check the family, weight and style, and that the imported CSS declares faces for the rendered text.';
   if (kind === 'image') return 'Check the image source and file format.';
   return 'Check the asset source and retry the frame.';
 };
@@ -108,7 +124,7 @@ export type AssetDiagnosticInput = Readonly<{
 }>;
 
 const assetRecord = (asset: AssetDiagnosticInput): PendingAsset => {
-  const source = redactAssetSource(asset.source);
+  const source = reportedAssetSource(asset);
   return {
     ...(asset.id === undefined ? {} : { id: asset.id }),
     kind: asset.kind,
@@ -146,6 +162,7 @@ export const assetLoadFailed = (input: {
   cause: unknown;
 }): Diagnostic => {
   const kind = input.assets[0]?.kind ?? 'asset';
+  const phase = input.assets[0]?.phase ?? 'load';
   const message = loadFailedMessage(kind);
   void input.cause;
   const location = locationFor(input.location, input.assets);
@@ -154,7 +171,7 @@ export const assetLoadFailed = (input: {
     severity: 'error',
     ...(location === undefined ? {} : { location }),
     message,
-    hint: loadFailedHint(kind),
+    hint: loadFailedHint(kind, phase),
     details: { assets: input.assets.map(assetRecord) },
   };
 };
@@ -205,7 +222,7 @@ const recordedAssets = (diagnostic: Diagnostic): AssetDiagnosticInput[] => {
 };
 
 const assetIdentity = (asset: AssetDiagnosticInput): string =>
-  `${asset.phase}\u0000${redactAssetSource(asset.source)}`;
+  `${asset.phase}\u0000${reportedAssetSource(asset)}`;
 
 /**
  * Union of registry failures and diagnostics thrown through the error boundary.

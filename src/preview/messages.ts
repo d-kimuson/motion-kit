@@ -72,7 +72,14 @@ const en = {
     failed: 'failed',
     pending: 'loading',
     dataUrl: 'data: URL',
-    kind: (kind: string) => (kind === 'font' ? 'Font' : kind === 'image' ? 'Image' : kind),
+    kind: (kind: string) =>
+      kind === 'font'
+        ? 'Font'
+        : kind === 'font-family'
+          ? 'Font family'
+          : kind === 'image'
+            ? 'Image'
+            : kind,
   },
   elements: {
     collapse: 'Collapse',
@@ -174,7 +181,14 @@ const ja: Messages = {
     failed: '失敗',
     pending: '読み込み中',
     dataUrl: 'data: URL',
-    kind: (kind) => (kind === 'font' ? 'フォント' : kind === 'image' ? '画像' : kind),
+    kind: (kind) =>
+      kind === 'font'
+        ? 'フォント'
+        : kind === 'font-family'
+          ? 'フォントファミリー'
+          : kind === 'image'
+            ? '画像'
+            : kind,
   },
   elements: {
     collapse: '折りたたむ',

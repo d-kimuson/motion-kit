@@ -710,6 +710,7 @@ it('lists the fonts and images of the shown frame only, with their status', () =
       sequences: [],
       assets: [
         { kind: 'font', source: '/inter.woff2', status: 'ready' },
+        { kind: 'font-family', source: 'Noto Sans JP', status: 'ready' },
         { kind: 'image', source: '/photo.png', status: 'failed' },
         { kind: 'image', source: '/next.png', status: 'pending' },
       ],
@@ -717,14 +718,22 @@ it('lists the fonts and images of the shown frame only, with their status', () =
   });
   const { root, tab } = mount(controller);
   expect(tab('Info').textContent).toBe('Info');
-  expect(root.textContent).toContain('Fonts and images on this frame3');
+  expect(root.textContent).toContain('Fonts and images on this frame4');
   act(() => tab('Assets').click());
-  expect(
-    [...root.querySelectorAll<HTMLElement>('[data-slot=asset]')].map((row) => row.textContent),
-  ).toEqual([
+  const rows = [...root.querySelectorAll<HTMLElement>('[data-slot=asset]')];
+  expect(rows.map((row) => row.textContent)).toEqual([
     expect.stringContaining('inter.woff2'),
+    // A CSS-declared family says what it is instead of repeating the family as its source.
+    'Noto Sans JPFont family',
     expect.stringMatching(/photo\.png.*failed/),
     expect.stringMatching(/next\.png.*loading/),
+  ]);
+  // The kind is visible text, not only an icon: a font family reads as its own kind.
+  expect(rows.map((row) => row.querySelector('[data-slot=asset-kind]')?.textContent)).toEqual([
+    'Font',
+    'Font family',
+    'Image',
+    'Image',
   ]);
 });
 

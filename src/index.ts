@@ -7,6 +7,11 @@ export {
   type PreparedComposition,
   type MountCompositionOptions,
 } from './core/composition/registry.ts';
+export {
+  type CompositionMetadataInput,
+  type CompositionMetadataOverride,
+  type MetadataResolver,
+} from './core/composition/metadata.ts';
 /** An audio clip a Composition declares; the render muxes it onto the frame timeline. */
 export type { AudioTrack, SequenceSpan } from './lib/loading-protocol.ts';
 export {
@@ -51,6 +56,7 @@ export { useAsset } from './core/assets/use-asset.ts';
 export type {
   AssetDescriptor,
   FontAssetDescriptor,
+  FontFamilyAssetDescriptor,
   ImageAssetDescriptor,
 } from './core/assets/types.ts';
 export type { Clock } from './lib/clock.ts';

@@ -30,7 +30,7 @@ TASK-157 implements supervised loading, frame transport and PNG capture over cor
 
 ## Invariants
 
-- A frame is captured only after the Readiness Barrier passes; a timed wait is not readiness.
+- A frame is captured only after the Readiness Barrier passes; a timed wait is not readiness. A CSS-declared font family (`useAsset({ kind: 'font-family' })`) is required work like any other registration: the frame waits for the `unicode-range` subsets its rendered text needs, and a family the page's stylesheets do not declare for that text is `asset.load-failed`, never a capture of the machine's fallback ([CSS-declared font readiness](adr/20261102-css-declared-font-readiness.accepted.md)).
 - Within supported A/B paths and a fixed qualified environment, rendering frames in any order produces the same files as rendering them in sequence; detected Tier C emits `seek.uncontrolled` instead of a determinism claim.
 - The [loading contract](design-doc/20261024-composition-loading.md) uses bundled Vite 7.3.7 and the named Composition registry. Node-owned shell/entry generators do not enter the browser import graph.
 - Settlement retains the capture lease until the host validates capture; resource-version changes re-settle under the original deadline, while cancellation aborts without publication.

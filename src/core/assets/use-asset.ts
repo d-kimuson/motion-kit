@@ -10,6 +10,7 @@ import {
   type AssetContext,
   type AssetDescriptor,
   type FontAssetDescriptor,
+  type FontFamilyAssetDescriptor,
   type ImageAssetDescriptor,
 } from './types.ts';
 
@@ -24,10 +25,15 @@ export const openAssetRead = (
 const loadedValue = (
   kind: AssetDescriptor['kind'],
   value: unknown,
-): FontFace | HTMLImageElement => {
+): FontFace | readonly FontFace[] | HTMLImageElement => {
   if (kind === 'font') {
     if (!(value instanceof FontFace))
       throw new Error('Font asset loader returned an unexpected value.');
+    return value;
+  }
+  if (kind === 'font-family') {
+    if (!Array.isArray(value) || !value.every((face) => face instanceof FontFace))
+      throw new Error('Font family asset loader returned an unexpected value.');
     return value;
   }
   if (!(value instanceof HTMLImageElement))
@@ -35,10 +41,13 @@ const loadedValue = (
   return value;
 };
 
-// Overloads keep font and image results distinct.
+// Overloads keep font, font family and image results distinct.
 export function useAsset(descriptor: FontAssetDescriptor): FontFace;
+export function useAsset(descriptor: FontFamilyAssetDescriptor): readonly FontFace[];
 export function useAsset(descriptor: ImageAssetDescriptor): HTMLImageElement;
-export function useAsset(descriptor: AssetDescriptor): FontFace | HTMLImageElement {
+export function useAsset(
+  descriptor: AssetDescriptor,
+): FontFace | readonly FontFace[] | HTMLImageElement {
   assertAssetDescriptor(descriptor);
   const runtime = useAssetRuntime();
   const snapshot = useCompositionFrame();

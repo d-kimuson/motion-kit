@@ -69,8 +69,9 @@ export const previewRequestSchema = z.discriminatedUnion('type', [
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
 
 /**
- * A font or image the Composition registered with `useAsset` while the frame settled. The source
- * is redacted as in asset diagnostics: no query, fragment or userinfo.
+ * A font, font family or image the Composition registered with `useAsset` while the frame settled.
+ * A URL source is redacted as in asset diagnostics: no query, fragment or userinfo. A CSS-declared
+ * font family reports its family instead.
  */
 export const registeredAssetSchema = z.object({
   kind: z.string(),

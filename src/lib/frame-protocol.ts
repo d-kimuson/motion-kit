@@ -49,7 +49,10 @@ export const ownershipSchema = z.object({
   globalFrame: z.int().nonnegative(),
 });
 export type Ownership = z.infer<typeof ownershipSchema>;
-/** Current required work. Sources are redacted by the asset diagnostic producer. */
+/**
+ * Current required work. The source is the reported identity: a URL for a font file or an image,
+ * which the asset diagnostic producer redacts, or the family of a CSS-declared font.
+ */
 export const pendingAssetSchema = z.object({
   id: z.string().min(1).optional(),
   kind: z.string(),

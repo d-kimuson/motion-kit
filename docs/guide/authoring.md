@@ -36,15 +36,16 @@ hint, not as a crash.
 
 ### Composition fields
 
-| Field              | Type                         | Meaning                                                               |
-| ------------------ | ---------------------------- | --------------------------------------------------------------------- |
-| `id`               | `string`                     | The id `--composition` selects. Unique in the registry, non-empty.    |
-| `component`        | React component              | Receives the schema's output as props.                                |
-| `schema`           | Zod object schema            | Validates and normalizes props. Its defaults are the only defaults.   |
-| `width`, `height`  | positive integers            | The captured viewport in pixels.                                      |
-| `fps`              | `{ numerator, denominator }` | The frame rate, as a rational. Never a number, never a rounded float. |
-| `durationInFrames` | nonnegative integer          | The length of the Composition in frames.                              |
-| `audio`            | `AudioTrack[]`, optional     | Clips the `.mp4` route muxes. See [audio](#audio).                    |
+| Field              | Type                         | Meaning                                                                           |
+| ------------------ | ---------------------------- | --------------------------------------------------------------------------------- |
+| `id`               | `string`                     | The id `--composition` selects. Unique in the registry, non-empty.                |
+| `component`        | React component              | Receives the schema's output as props.                                            |
+| `schema`           | Zod object schema            | Validates and normalizes props. Its defaults are the only defaults.               |
+| `width`, `height`  | positive integers            | The captured viewport in pixels.                                                  |
+| `fps`              | `{ numerator, denominator }` | The frame rate, as a rational. Never a number, never a rounded float.             |
+| `durationInFrames` | nonnegative integer          | The length of the Composition in frames.                                          |
+| `audio`            | `AudioTrack[]`, optional     | Clips the `.mp4` route muxes. See [audio](#audio).                                |
+| `resolveMetadata`  | function, optional           | Derives metadata from the props. See [metadata from props](#metadata-from-props). |
 
 Two declarations are rejected on purpose:
 
@@ -68,6 +69,50 @@ frame, with two restrictions that come from how they cross into the page:
 
 `--props '{"title":"Ship it"}'` on the CLI overrides them for one run; fields you omit fall back to
 their schema defaults. `frame` accepts the same `--props` object for stills.
+
+### Metadata from props
+
+A generated script — synthesized audio, a transcript, a data file — often decides how long the
+video is, so the length cannot be written into the entry. `resolveMetadata` derives the metadata
+from the props: it receives the validated props (defaults applied) and the declaration, and returns
+the fields it derives. Every field it omits keeps the declared value.
+
+```tsx
+defineComposition({
+  id: 'episode',
+  component: Episode,
+  schema: z.object({ frames: z.number().int().nonnegative(), script: z.string() }),
+  width: 1920,
+  height: 1080,
+  fps: { numerator: 30, denominator: 1 },
+  durationInFrames: 1, // the baseline a list reports; the props decide the real length
+  resolveMetadata: ({ props }) => ({ ok: true, value: { durationInFrames: props.frames } }),
+});
+```
+
+```sh
+motion-kit render entry.tsx --composition episode --props "$(cat script.json)" --out out.mp4
+```
+
+- It runs **once per mount**, in the page, after the schema and before anything renders, so `render`,
+  `frame`, `check` and `preview` all read the same descriptor for the same props, and
+  `useTimeline()` reports the resolved `durationInFrames`. A renderer pool resolves once per realm,
+  so the resolver must be deterministic: same props, same metadata.
+- It may derive `durationInFrames`, `width`, `height` and `fps`. It cannot change the `id` or the
+  `audio` declarations. Audio clip times are **frame counts** (`startInFrames`, `endInFrames`,
+  `offsetInFrames`), so an `fps` override keeps those clips on the same frames and moves them in
+  seconds: deriving the frame rate shifts every declared clip in time, and a clip that then outlasts
+  the video is trimmed. See [audio](#audio).
+- It may be asynchronous (`async` or a promise) and gets a fresh loading timeout of its own. The page
+  can `fetch` a project file but has no filesystem: to derive a duration from an audio file, probe it
+  in your own Node script and pass the number through `--props`, or fetch the file and read it in the
+  page.
+- It returns a `Result`: `{ ok: true, value: { durationInFrames: 900 } }` or
+  `{ ok: false, error: <Diagnostic> }`. An invalid duration is `composition.duration-invalid`, an
+  invalid width, height or FPS is `render.page-error`, and a resolver that throws, returns something
+  else or does not settle in time is `render.page-error` too. Nothing renders on failure.
+- `listCompositions()` keeps reporting the declared metadata, because a list has no props to resolve
+  against; treat `durationInFrames` there as the baseline.
 
 ## Time
 
@@ -245,15 +290,51 @@ const Title = () => {
   a JavaScript import of the file. An absolute file path is not a URL and does not load.
 - `id` is your cache key within the Composition; for a font, `family` is the CSS family the face is
   registered under.
-- `useAsset({ kind: 'image' })` returns an `HTMLImageElement` and `useAsset({ kind: 'font' })` a
-  `FontFace`; the overloads keep the two result types apart.
+- `useAsset({ kind: 'image' })` returns an `HTMLImageElement`, `useAsset({ kind: 'font' })` a
+  `FontFace`, and `useAsset({ kind: 'font-family' })` the `FontFace` objects it waited for; the
+  overloads keep the result types apart.
 - **Put every `useAsset` consumer inside a local `<Suspense>`** with a `fallback` of your choice. A
   throw that reaches the root suspends the whole Composition, and the page never acknowledges the
   frame: the render waits for its deadline and then reports `render.frame-timeout` /
   `asset.not-ready` instead of the real cause.
 - A missing or undecodable asset throws a diagnostic-backed error that surfaces as
-  `asset.load-failed`, naming the source. There is no image or font type beyond these two: video is
-  not an asset kind in 0.0.1.
+  `asset.load-failed`, naming the source. Video is not an asset kind.
+
+### Fonts that CSS declares
+
+`@fontsource/*` splits one family into dozens of `@font-face` rules by `unicode-range`, one file per
+subset. Import the CSS and require the family for the text the frame renders: `useAsset` waits for
+only the subsets that text needs, and the frame is captured after they are loaded.
+
+```tsx
+import '@fontsource/noto-sans-jp/400.css';
+
+const Title = () => {
+  useAsset({
+    kind: 'font-family',
+    id: 'title',
+    family: 'Noto Sans JP',
+    weight: 400,
+    text: 'こんにちは世界',
+  });
+  return <h1 style={{ fontFamily: 'Noto Sans JP', fontSize: 72 }}>こんにちは世界</h1>;
+};
+```
+
+- `text` is **required** and must be the text the frame draws. It selects the subsets: a frame of
+  Japanese characters loads the Japanese subsets and never the Latin one.
+- `family`, `weight` and `style` are matched the way CSS matches them, so declare the faces you
+  imported. The requirement is keyed by all four fields, including `text`.
+- A family no stylesheet declares, or one whose declared faces do not cover the text at all, fails
+  the frame with `asset.load-failed` and names the family instead of capturing the system fallback.
+  A character that no subset covers still falls back; glyph coverage is not checked.
+- The stylesheet has to be in the page before the frame renders. An `import` of the CSS in your
+  entry is; a `<style>` element rendered inside the suspending subtree is not.
+- The returned faces are the ones that were loaded, so `faces[0].family` is the CSS family. Most
+  scenes only need the wait and ignore the return value.
+- A subset file that fails to load stays failed for the life of the page: a script cannot replace a
+  stylesheet’s `@font-face`. The frame reports `asset.load-failed` (phase `load`) and the hint says
+  to reload the preview or start a new renderer; a retry in the same page fails the same way.
 
 ## Audio
 
@@ -315,7 +396,8 @@ Everything worth naming is exported from the package root: `CompositionDefinitio
 `CompositionDescriptor`, `CompositionRegistry`, `SequenceProps`, `TransitionSeriesProps`,
 `TransitionSceneProps`, `TransitionProps`, `SequenceContext`, `TimelineContext`, `AssetDescriptor`,
 `FontAssetDescriptor`, `ImageAssetDescriptor`, `AudioTrack`, `SequenceSpan`, `Diagnostic`, `DiagnosticCode`,
-`Result`, `FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`.
+`Result`, `FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`, `CompositionMetadataInput`,
+`CompositionMetadataOverride`, `MetadataResolver`.
 
 `/three` names its own: `ThreeCanvas`, `ThreeCanvasProps`, `CameraRig`, `CameraRigProps`,
 `CameraPose`, `Vector3Tuple`.
