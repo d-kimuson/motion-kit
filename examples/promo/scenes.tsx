@@ -525,7 +525,7 @@ export const AgentScene = () => {
   const { time } = useSequence();
   const terminal = pop(time, 0.2);
   const { frame, rate } = useLocalFrame();
-  const typed = revealed(frame, rate, 500, 64, renderCommand.length);
+  const typed = revealed(frame, rate, 500, 76, renderCommand.length);
   const progress = ease(time, [2.0, 3.1], [0, 1], easing.linear);
   const bars = Math.round(progress * 24);
   const envelopeLines = revealed(frame, rate, 3250, 9, renderEnvelope.length);
