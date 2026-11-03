@@ -23,19 +23,19 @@ but no determinism probe (see [Why there is no probe](#why-there-is-no-probe)).
 
 ## Files
 
-| File                  | What it is                                                                        |
-| --------------------- | --------------------------------------------------------------------------------- |
-| `plan.ts`             | The storyboard: scene order, scene lengths, the overlap, and `placeScenes`        |
-| `copy.ts`             | Every word on screen, including the tokenised code and JSON the scenes type out   |
-| `look.ts`             | Colours, type stacks and the design grid                                          |
-| `motion.ts`           | `ease`, `pop`, `revealed` and `phase` over `/motion`'s `interpolate` and `spring` |
-| `parts.tsx`           | `Stage`, `Backdrop`, `SceneShell`, `Wipe`, `Heading`, `Window` and `CodeView`     |
-| `scenes.tsx`          | The six scenes                                                                    |
-| `PromoScene.tsx`      | The storyboard laid out as a `TransitionSeries`                                   |
-| `entry.tsx`           | The `promo` and `promo-ci` registry                                               |
-| `plan.test.ts`        | Property tests for the storyboard arithmetic                                      |
-| `motion.test.ts`      | Unit tests for the motion helpers                                                 |
-| `promo.smoke.test.ts` | The CI smoke test (descriptors plus the `promo-ci` MP4 and `ffprobe`)             |
+| File                  | What it is                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `plan.ts`             | The storyboard: scene order, scene lengths, the overlap, and `placeScenes`                                                           |
+| `copy.ts`             | Every word on screen, including the tokenised code and JSON the scenes type out                                                      |
+| `look.ts`             | Colours, type stacks and the design grid                                                                                             |
+| `motion.ts`           | `ease`, `pop` and `phase` over `/motion`'s `interpolate` and `spring`; `steps`, `revealed` and `hundredths`, counted in whole frames |
+| `parts.tsx`           | `Stage`, `useLocalFrame`, `Backdrop`, `SceneShell`, `Wipe`, `Heading`, `Window` and `CodeView`                                       |
+| `scenes.tsx`          | The six scenes                                                                                                                       |
+| `PromoScene.tsx`      | The storyboard laid out as a `TransitionSeries`                                                                                      |
+| `entry.tsx`           | The `promo` and `promo-ci` registry                                                                                                  |
+| `plan.test.ts`        | Property tests for the storyboard arithmetic                                                                                         |
+| `motion.test.ts`      | Unit tests for the motion helpers                                                                                                    |
+| `promo.smoke.test.ts` | The CI smoke test (descriptors, the `promo-ci` MP4 and `ffprobe`, and one `promo` still per scene)                                   |
 
 No `fetch-assets.ts`: this example has no media to generate or fetch.
 

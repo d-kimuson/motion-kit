@@ -55,6 +55,11 @@ export const revealed = (
     ),
   );
 
+/** Whole hundredths of a second elapsed at `frame`, so a timecode agrees with the frame counter on
+ * every frame (in seconds, `Math.floor((2.3 - 2) * 100)` is `29`). */
+export const hundredths = (frame: number, rate: Rate): number =>
+  Math.floor((frame * Number(rate.denominator) * 100) / Number(rate.numerator));
+
 /** Where `time` falls inside a repeating `period`, from 0 up to (not including) 1. */
 export const phase = (time: number, period: number): number =>
   (((time % period) + period) % period) / period;

@@ -22,7 +22,7 @@ import {
   TOKEN_COLOURS,
   VIOLET,
 } from './look.ts';
-import { ease, phase, pop, type Rate } from './motion.ts';
+import { ease, hundredths, phase, pop, type Rate } from './motion.ts';
 
 /** The 1920x1080 design grid, scaled to the Composition's own size so `promo-ci` draws the same
  * tree at half resolution. */
@@ -67,17 +67,17 @@ export const useLocalFrame = (): { readonly frame: number; readonly rate: Rate }
   return { frame: Math.floor(localFramePosition), rate: frameRate };
 };
 
-const formatTimecode = (seconds: number): string => {
-  const whole = Math.floor(seconds);
+const formatTimecode = (frame: number, rate: Rate): string => {
+  const total = hundredths(frame, rate);
+  const whole = Math.floor(total / 100);
   const minutes = Math.floor(whole / 60);
-  const hundredths = Math.floor((seconds - whole) * 100);
-  return `${String(minutes).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+  return `${String(minutes).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}.${String(total % 100).padStart(2, '0')}`;
 };
 
 /** Everything that moves for the whole clip, on Composition time: two drifting glows, a dot grid
  * sliding diagonally, the timecode and frame counter in the corner and the progress rule. */
 export const Backdrop = () => {
-  const { time, globalFrame, progress } = useTimeline();
+  const { time, globalFrame, progress, frameRate } = useTimeline();
   const drift = phase(time, 6) * 48;
   const glowA = { x: 0.3 + 0.12 * Math.sin(time * 0.45), y: 0.32 + 0.1 * Math.cos(time * 0.38) };
   const glowB = { x: 0.74 + 0.1 * Math.cos(time * 0.33), y: 0.7 + 0.12 * Math.sin(time * 0.41) };
@@ -113,7 +113,7 @@ export const Backdrop = () => {
           letterSpacing: 1,
         }}
       >
-        {formatTimecode(time)} · frame {String(globalFrame).padStart(4, '0')}
+        {formatTimecode(globalFrame, frameRate)} · frame {String(globalFrame).padStart(4, '0')}
       </div>
       <div
         style={{

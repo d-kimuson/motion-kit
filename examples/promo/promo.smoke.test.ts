@@ -126,7 +126,7 @@ describe('promo example', () => {
   }, 120_000);
 
   // `promo-ci` reaches only the first two scenes, so one still from each of the six scenes of the
-  // full promo proves every scene mounts and draws (the frames the README's contact sheet uses).
+  // full promo proves every scene mounts and draws (the frames the README's stills loop uses).
   it('draws a still of every scene of the full promo', async () => {
     const scenes = placeScenes(promoStoryboard);
     const frames = [60, 170, 340, 510, 650, 830];

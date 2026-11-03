@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { ease, phase, pop, revealed, steps } from './motion.ts';
+import { ease, hundredths, phase, pop, revealed, steps } from './motion.ts';
 
 const seconds = fc.double({ min: -10, max: 60, noNaN: true });
 const frame = fc.integer({ min: 0, max: 2000 });
@@ -80,6 +80,18 @@ describe('promo motion', () => {
     );
     expect(revealed(15, thirty, 500, 40, 100)).toBe(0);
     expect(revealed(30, thirty, 500, 40, 100)).toBe(20);
+  });
+
+  it('counts whole hundredths exactly as integer floor division does, at any rate', () => {
+    fc.assert(
+      fc.property(frame, rate, (at, fps) => {
+        const expected = floorDivide(BigInt(at) * fps.denominator * 100n, fps.numerator);
+        expect(hundredths(at, fps)).toBe(Number(expected));
+      }),
+    );
+    // In seconds, `Math.floor((2.3 - 2) * 100)` is 29: frame 69 would read `02.29`.
+    expect(hundredths(69, thirty)).toBe(230);
+    expect(hundredths(36, thirty)).toBe(120);
   });
 
   it('wraps time into one period', () => {
