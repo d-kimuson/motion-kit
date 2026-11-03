@@ -84,6 +84,18 @@ export const encoderInvariantDiagnostic = (message: string, hint: string): Diagn
 });
 
 /**
+ * A Composition that declares no audio cannot produce a WAV: the file would be silence nobody
+ * asked for, so the export stops after the mount and writes nothing (audio export ADR).
+ */
+export const noAudioDiagnostic = (compositionId: string): Diagnostic => ({
+  code: 'render.no-audio',
+  severity: 'error',
+  message: `Composition "${compositionId}" declares no audio, so a WAV export would be silent.`,
+  hint: 'Declare the clips in the audio array of defineComposition, or render the Composition with --out out.mp4 instead.',
+  location: { compositionId },
+});
+
+/**
  * An audio file the Composition declared is not readable. It is an input problem, not an encoder
  * failure: the file is named in `location` and in the contract's `asset.load-failed` payload, and
  * the encode stops before any encode child runs (audio muxing ADR).

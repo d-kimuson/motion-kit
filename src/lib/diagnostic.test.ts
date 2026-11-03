@@ -23,8 +23,9 @@ describe('Diagnostic', () => {
   it('reserves all initial codes and their namespaces', () => {
     // TASK-159 added `encode.ffmpeg-unsupported` and `encode.output-invalid` to the enum; Issue #60
     // added the three `check.*` codes the composition determinism checker reports; TASK-243 added
-    // `render.output-unwritable` for a file system that refuses an output write.
-    expect(DiagnosticCodeSchema.options).toHaveLength(26);
+    // `render.output-unwritable` for a file system that refuses an output write; TASK-249 added
+    // `render.no-audio` for a WAV export of a Composition that declares no audio.
+    expect(DiagnosticCodeSchema.options).toHaveLength(27);
     const namespaces = [
       'cli',
       'composition',

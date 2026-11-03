@@ -60,6 +60,10 @@ ffmpeg -hide_banner -encoders | grep libx264
 Upgrade the package; a build without `libx264` cannot encode H.264 in motion-kit's route, and there is
 no flag to choose another encoder.
 
+`--out out.wav` is the exception: it encodes no video, so it checks only the FFmpeg version and a
+build without `libx264` still exports audio. On that route the code appears only when the version is
+below 6.0, with an empty `missing` array.
+
 ### `encode.ffmpeg-failed`
 
 FFmpeg started, encoded at least one frame, and exited non-zero. `details.stderrTail` is a bounded,
@@ -185,6 +189,25 @@ Composition is wrong, so read the code and fix the path.
 Both routes create the directories they write into, so a missing parent is never the cause, and a
 missing `manifest.json` is the normal first-run state. The `.mp4` route reports its destination
 failures as `encode.output-invalid` instead.
+
+## `render.no-audio`
+
+`render --out out.wav` asked for the Composition's mixed audio, but the Composition declares no
+`audio`. Nothing is written: a silent WAV would answer a question about audio with a file that has
+none.
+
+```json
+{
+  "code": "render.no-audio",
+  "message": "Composition \"intro\" declares no audio, so a WAV export would be silent.",
+  "location": { "compositionId": "intro" }
+}
+```
+
+Declare the clips on the Composition ([audio](authoring.md#audio)), or render an `.mp4` when the
+silence is intended. A Composition that _does_ declare audio always exports a file: a range that
+contains none of the clips writes silence and reports `trackCount: 0`, which is what the MP4's audio
+holds for the same range.
 
 ## `render.page-error`
 

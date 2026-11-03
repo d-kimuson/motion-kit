@@ -22,6 +22,22 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   `schemaVersion` stays `1`. The
   [stderr policy ADR](docs/contexts/agent/adr/20261103-cli-stderr.accepted.md) records the levels,
   the progress format and the failure block.
+- **Export the mixed audio alone.** `render` takes an `--out` ending in `.wav` and writes the
+  Composition's declared `audio` mixed into 48 kHz stereo 16-bit PCM, without capturing a single
+  frame: a loudness (RMS), balance or whisper check that used to cost a full 2.6–6 minute MP4 render
+  now takes seconds. The file is the encoder's own mix — the same filter graph, gains, channel
+  handling and frame-derived placement — so the WAV and the MP4's decoded audio are directly
+  comparable, and `--from`/`--to` clip the declared clips against the range exactly as the video's
+  audio is clipped. The export mounts one Renderer and never captures, because the resolved length
+  and the declared clips live only in the page realm; `--concurrency`, `--video-crf`,
+  `--video-bitrate`, `--scale` and `--fps` are `cli.invalid-arguments` (exit 2) for a `.wav` target,
+  and the FFmpeg probe only checks the version, because no video is encoded. `--json` reports
+  `data.format: "wav"` with `sampleRate`, `channels`, `bitDepth`, `durationSeconds`, `trackCount`
+  and the same `range`; a Composition that declares no audio is the new `render.no-audio` (exit 1)
+  instead of a silent file, while a range that keeps no clip writes silence with `trackCount: 0`.
+  A missing clip stays `asset.load-failed` and a refused target keeps the `encode.*` codes. The
+  [audio export ADR](docs/contexts/render/adr/20261103-audio-only-wav-export.accepted.md) records the
+  surface, the format and why a realm is still opened.
 
 - **Render part of a Composition.** `render` takes `--from` and `--to`, each a Global Frame (`3600`),
   `mm:ss[.fff]` (`4:20`) or seconds with an `s` suffix (`260s`), and writes only that half-open

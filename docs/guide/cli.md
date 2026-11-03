@@ -15,8 +15,9 @@ For `render`, `frame`, `check` and `preview`, the first argument is an entry fil
 ## Commands
 
 ```bash
-# Whole Composition: an .mp4 target is encoded video, any other target is a PNG directory.
-motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> \
+# Whole Composition: an .mp4 target is encoded video, a .wav target the mixed audio alone, and any
+# other target is a PNG directory.
+motion-kit render <entry> [--composition <id>] --out <file.mp4 | file.wav | dir> \
   [--props <json>] [--concurrency <n>] [--verbose | --quiet] [--json]
 
 # One frame as a PNG, or several stills in a directory.
@@ -118,17 +119,17 @@ motion-kit render entry.tsx --out out/teaser.mp4 --json 2> render.log
 
 ## `render`
 
-| Option               | Meaning                                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `--composition <id>` | Which Composition to render. Required when the registry holds more than one; otherwise optional.              |
-| `--out <path>`       | Where to write. `.mp4` encodes H.264 video; any other path is a PNG frame directory. Required.                |
-| `--props <json>`     | Props object as a JSON string, validated by the Composition's Zod schema before the first frame.              |
-| `--concurrency <n>`  | How many renderers capture frames at once; each is its own browser. Positive integer, default half the cores. |
-| `--from <bound>`     | Where to start: a Global Frame (`3600`), `mm:ss[.fff]` (`4:20`) or seconds (`260s`). Defaults to the start.   |
-| `--to <bound>`       | Exclusive end of the range, in the same notations. Defaults to the Composition end.                           |
-| `--verbose`          | Stream the Composition's page console and the loading service's output as it arrives.                         |
-| `--quiet`            | Print neither the progress lines nor the renderer log.                                                        |
-| `--json`             | Print the one-line summary as a JSON envelope instead.                                                        |
+| Option               | Meaning                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `--composition <id>` | Which Composition to render. Required when the registry holds more than one; otherwise optional.                                     |
+| `--out <path>`       | Where to write. `.mp4` encodes H.264 video, `.wav` exports the mixed audio alone; any other path is a PNG frame directory. Required. |
+| `--props <json>`     | Props object as a JSON string, validated by the Composition's Zod schema before the first frame.                                     |
+| `--concurrency <n>`  | How many renderers capture frames at once; each is its own browser. Positive integer, default half the cores.                        |
+| `--from <bound>`     | Where to start: a Global Frame (`3600`), `mm:ss[.fff]` (`4:20`) or seconds (`260s`). Defaults to the start.                          |
+| `--to <bound>`       | Exclusive end of the range, in the same notations. Defaults to the Composition end.                                                  |
+| `--verbose`          | Stream the Composition's page console and the loading service's output as it arrives.                                                |
+| `--quiet`            | Print neither the progress lines nor the renderer log.                                                                               |
+| `--json`             | Print the one-line summary as a JSON envelope instead.                                                                               |
 
 ```bash
 node dist/cli.js render examples/teaser/entry.tsx --composition teaser --out out/teaser.mp4 --json
@@ -143,6 +144,12 @@ There is no `--format` flag: the target's extension decides, and the envelope re
   after a successful encode, so a failed or cancelled run leaves no partial file. Needs FFmpeg 6.0+
   with `libx264`, probed once per invocation before the first frame; a Composition that declares
   audio also needs `ffprobe` from the same install.
+- `--out out.wav` — the Composition's declared audio mixed alone, as 48 kHz stereo 16-bit PCM. No
+  frame is captured: one FFmpeg child runs the same filter graph the MP4's audio uses, so the file
+  holds exactly the mix the video would carry and can be measured for loudness or fed to whisper.
+  It still mounts the Composition once (that is where the resolved length and the declared clips
+  live), so it takes seconds instead of a full render. Needs FFmpeg 6.0+ and `ffprobe`; `libx264`
+  is not required, because no video is encoded. See [exporting the audio alone](#exporting-the-audio-alone).
 - `--out out/frames` — every frame as `frame-00000.png`, `frame-00001.png`, … plus a `manifest.json`
   (`format`, `composition`, width, height, fps, frame count, the original timeline `range` and the
   file list). Needs no FFmpeg.
@@ -245,6 +252,32 @@ project root. There is no `--audio`, `--mute` or gain option:
 [audio is Composition data](authoring.md#audio). A declared file that is missing, is not a regular
 file, or cannot be opened for reading is `asset.load-failed`, reported before any frame is encoded
 and with no output written.
+
+### Exporting the audio alone
+
+An `--out` ending in `.wav` writes the Composition's mixed audio and nothing else, so a loudness
+(RMS), balance or speech-recognition check does not pay for a full render:
+
+```bash
+motion-kit render entry.tsx --out out/mix.wav --json
+motion-kit render entry.tsx --out out/fix.wav --from 4:20 --to 4:35 --json
+```
+
+The file is 48 kHz stereo signed 16-bit PCM, the same rate and channel count as the MP4's audio, so
+the two are directly comparable. It is the encoder's own mix: the same filter graph, the same gains,
+the same channel handling and the same frame-derived placement, with `--from`/`--to` clipping the
+declared clips exactly as the video's audio clips them. A comparison between the WAV and the MP4's
+decoded audio is therefore by level and waveform, not by bytes: the video's stream is 192 kbit/s
+AAC, which is lossy. Because it captures no frame, a successful export reports no per-frame warnings
+and its `diagnostics` is empty.
+
+`--concurrency` does not apply (one realm is mounted and nothing is captured), and neither do
+`--video-crf`, `--video-bitrate`, `--scale` or `--fps`; all five are `cli.invalid-arguments`
+(exit 2) for a `.wav` target, decided before a browser opens. A Composition that declares no audio
+is `render.no-audio` (exit 1) rather than a silent file, and a range that contains none of the
+declared clips writes silence with `trackCount: 0` — the same thing the MP4's audio holds for that
+range. Every declared `src` is still validated, so a missing file is `asset.load-failed` with no
+output written.
 
 ## `frame`
 
@@ -531,6 +564,29 @@ human-facing logs to stderr. Every document has these fields:
 }
 ```
 
+The `.wav` route reports the audio alone: no `width`, `height`, `fps` or `frameCount`, because the
+artifact has no frames. `trackCount` is how many declared clips the range kept and mixed (zero means
+the file is silence), and `range` is the same interval object:
+
+```json
+{
+  "output": "/abs/out/mix.wav",
+  "format": "wav",
+  "sampleRate": 48000,
+  "channels": 2,
+  "bitDepth": 16,
+  "durationSeconds": 15,
+  "trackCount": 2,
+  "range": {
+    "startFrame": 7800,
+    "endFrame": 8250,
+    "startSeconds": 260,
+    "endSeconds": 275,
+    "frameCount": 450
+  }
+}
+```
+
 `frame`'s single-frame `data` is flat:
 
 ```json
@@ -611,16 +667,16 @@ Each Diagnostic has `code`, `severity` (`error`, `warning` or `info`), `message`
 (`compositionId`, `file`, `line`, `frame`, `timeSeconds`, …) and `details`. The codes a run can
 report today:
 
-| Namespace     | Codes                                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------------------- |
-| `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                             |
-| `composition` | `composition.props-invalid`, `composition.duration-invalid`                                             |
-| `asset`       | `asset.load-failed`, `asset.not-ready`                                                                  |
-| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error`, `render.output-unwritable` |
-| `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid` |
-| `seek`        | `seek.uncontrolled` (a warning, emitted by an integration with uncontrolled time)                       |
-| `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                               |
-| `internal`    | `internal.unexpected`                                                                                   |
+| Namespace     | Codes                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `cli`         | `cli.invalid-arguments`, `cli.entry-not-found`, `cli.composition-not-found`                                                |
+| `composition` | `composition.props-invalid`, `composition.duration-invalid`                                                                |
+| `asset`       | `asset.load-failed`, `asset.not-ready`                                                                                     |
+| `render`      | `render.browser-launch-failed`, `render.frame-timeout`, `render.page-error`, `render.output-unwritable`, `render.no-audio` |
+| `encode`      | `encode.ffmpeg-not-found`, `encode.ffmpeg-unsupported`, `encode.ffmpeg-failed`, `encode.output-invalid`                    |
+| `seek`        | `seek.uncontrolled` (a warning, emitted by an integration with uncontrolled time)                                          |
+| `check`       | `check.frame-differs`, `check.history-not-run`, `check.uncontrolled-time`                                                  |
+| `internal`    | `internal.unexpected`                                                                                                      |
 
 `layout.*` (`layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`,
 `layout.font-not-loaded`) is reserved for the later `inspect`/`validate` work and no command emits it
@@ -630,6 +686,11 @@ in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes th
 frame, the frames `manifest`, the previous run's manifest, or an output directory could not be
 accessed. `location.file` and `details.output` name the path and `details.code` carries the errno
 (`EISDIR`, `EACCES`, `ENOSPC`, …). It is exit `1`, not `3`: the output path is yours to fix.
+
+`render.no-audio` is what `--out out.wav` reports for a Composition that declares no `audio`: there
+is nothing to mix, so nothing is written — not the file and not the directory it would need — and
+`location.compositionId` names the Composition. Declare the clips
+([audio](authoring.md#audio)), or render an `.mp4` if the silence is intended.
 
 ## Exit codes
 

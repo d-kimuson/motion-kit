@@ -7,6 +7,7 @@ import {
 } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';
+import { audioRangeFor } from './encoding/audio.ts';
 import { encoderInvariantDiagnostic } from './encoding/diagnostics.ts';
 import {
   type EncodeOutcome,
@@ -109,10 +110,11 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
   const duration = frameToTime(BigInt(to - from), sourceRate.value);
   // A range that covers the whole Composition is the whole-Composition render: nothing is
   // clipped, so a clip declared outside it stays an input exactly as before (audio muxing ADR).
-  const audioRange =
-    options.range === undefined || (from === 0 && to === compositionFrames)
-      ? undefined
-      : { from, to };
+  // The WAV export reads the same rule, so both artifacts hold the same audio.
+  const audioRange = audioRangeFor({
+    range: options.range,
+    durationInFrames: compositionFrames,
+  });
   const count = frameCount(duration, outputRate.value);
   if (
     !count.ok ||

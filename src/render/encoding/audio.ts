@@ -19,6 +19,11 @@ import { audioFileMissingDiagnostic } from './diagnostics.ts';
 export const AUDIO_SAMPLE_RATE = 48_000;
 /** Stereo AAC at 192 kbit/s: transparent for narration and music at this sample rate. */
 export const AUDIO_BITRATE = '192k';
+/** The WAV export's sample format: 16-bit signed PCM, the shape every audio tool reads. */
+export const AUDIO_EXPORT_CODEC = 'pcm_s16le';
+export const AUDIO_EXPORT_BIT_DEPTH = 16;
+/** The mixed stream's channel count, so an exported WAV and the MP4's audio have the same shape. */
+export const AUDIO_EXPORT_CHANNELS = 2;
 
 /** A declaration with its path resolved and its frame times converted once, by the Time Module. */
 export type ResolvedAudioTrack = {
@@ -190,10 +195,15 @@ const channelGraph = (channels: number | undefined): string =>
  * keeps each declared gain as authored; FFmpeg's default would divide them by the track count.
  * Rebuild mixed timestamps from sample counts; amix can retain a short first input's end PTS.
  * Finite `apad` fills the tail and the final `atrim` ends audio at the Composition duration.
+ *
+ * `firstInputIndex` is the child input the first track arrives on: 1 when a video stream is input
+ * 0 (the MP4 encode), 0 when the artifact is audio alone (the WAV export). The graph itself is the
+ * same one, so both artifacts mix with one implementation (audio muxing ADR).
  */
 export const audioFilterGraph = (
   tracks: readonly ResolvedAudioTrack[],
   durationSeconds: number,
+  firstInputIndex = 1,
 ): string => {
   const chains = tracks.map((track, index) => {
     const trim =
@@ -208,7 +218,7 @@ export const audioFilterGraph = (
       channelGraph(track.channels),
       `adelay=${String(track.startMs)}:all=1`,
     ].join(',');
-    return `[${String(index + 1)}:a]${chain}[a${String(index)}]`;
+    return `[${String(index + firstInputIndex)}:a]${chain}[a${String(index)}]`;
   });
   const mixed = tracks.map((_, index) => `[a${String(index)}]`).join('');
   return `${chains.join(';')};${mixed}amix=inputs=${String(tracks.length)}:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=${secondsText(durationSeconds)},atrim=end=${secondsText(durationSeconds)}[aout]`;
@@ -219,8 +229,23 @@ export const audioFilterGraph = (
  * stream even when the rendered range contains none of its clips, so the artifact's stream layout
  * does not depend on where the range falls (audio muxing ADR).
  */
-const audioSilenceFilterGraph = (durationSeconds: number): string =>
+export const audioSilenceFilterGraph = (durationSeconds: number): string =>
   `anullsrc=channel_layout=stereo:sample_rate=${String(AUDIO_SAMPLE_RATE)},atrim=end=${secondsText(durationSeconds)}[aout]`;
+
+/**
+ * The interval the declared tracks are re-expressed against, or `undefined` for the whole
+ * Composition. A range that covers the whole Composition is the whole-Composition render, so
+ * nothing is clipped and a clip declared at or after the end stays an input as it always did; the
+ * MP4 encode and the WAV export share this rule, so both artifacts hold the same audio.
+ */
+export const audioRangeFor = (options: {
+  readonly range: { readonly from: number; readonly to: number } | undefined;
+  readonly durationInFrames: number;
+}): { readonly from: number; readonly to: number } | undefined =>
+  options.range === undefined ||
+  (options.range.from === 0 && options.range.to === options.durationInFrames)
+    ? undefined
+    : options.range;
 
 /** Output-side arguments: the graph, both maps, AAC stereo, and the exact output duration. An empty
  * track list is the declared-but-all-outside case, which emits silence rather than no stream. */
@@ -242,4 +267,27 @@ export const audioOutputArguments = (
   AUDIO_BITRATE,
   '-ar',
   String(AUDIO_SAMPLE_RATE),
+];
+
+/**
+ * Output-side arguments for the WAV export: the same mix graph, mapped alone into 48 kHz stereo
+ * PCM. There is no video stream, so the tracks are inputs 0..N-1 and `[aout]` is the only map. An
+ * empty track list emits silence of the artifact duration, exactly as the MP4's audio does.
+ */
+export const audioOnlyOutputArguments = (
+  tracks: readonly ResolvedAudioTrack[],
+  durationSeconds: number,
+): string[] => [
+  '-filter_complex',
+  tracks.length === 0
+    ? audioSilenceFilterGraph(durationSeconds)
+    : audioFilterGraph(tracks, durationSeconds, 0),
+  '-map',
+  '[aout]',
+  '-c:a',
+  AUDIO_EXPORT_CODEC,
+  '-ar',
+  String(AUDIO_SAMPLE_RATE),
+  '-ac',
+  String(AUDIO_EXPORT_CHANNELS),
 ];
