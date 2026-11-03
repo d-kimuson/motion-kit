@@ -47,15 +47,15 @@ No `fetch-assets.ts`: this example has no media to generate or fetch.
 Seven scenes in one `TransitionSeries`, each named after its kind so the preview timeline labels them,
 with a 12-frame (0.4 s) overlap between neighbours:
 
-| Scene      | Frames | Starts at | What it shows                                                                                          |
-| ---------- | ------ | --------- | ------------------------------------------------------------------------------------------------------ |
-| `intro`    | 120    | 0         | The mark pops in, the wordmark lands letter by letter, then the tagline and three tags                 |
-| `code`     | 180    | 108       | An editor types a `useTime` + `interpolate` scene while a preview window plays the ball it describes   |
-| `time`     | 180    | 276       | Eight thumbnails of one scene, captured out of order, then the eight determinism traversal modes       |
-| `three`    | 180    | 444       | Nine frame cards of one clip in 3D; a playhead sweeps them, lifting each card, while the camera cranes |
-| `pipeline` | 150    | 612       | React/TSX → Chromium → FFmpeg → MP4, with packets on the links and a frame counter filling to 1068     |
-| `agent`    | 180    | 750       | A terminal types `motion-kit render … --json`, a progress bar fills, and the JSON envelope appears     |
-| `outro`    | 150    | 918       | The mark and wordmark again, the tagline, the install command with a blinking caret, the repository    |
+| Scene      | Frames | Starts at | What it shows                                                                                                   |
+| ---------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `intro`    | 120    | 0         | The mark pops in, the wordmark lands letter by letter, then the tagline and three tags                          |
+| `code`     | 180    | 108       | An editor types a `useTime` + `interpolate` scene while a preview window plays the ball it describes            |
+| `time`     | 180    | 276       | Eight thumbnails of one scene, captured out of order, then the eight determinism traversal modes                |
+| `three`    | 180    | 444       | Nine frame cards of one clip in 3D; a playhead sweeps them, lifting each card, while the camera cranes          |
+| `pipeline` | 150    | 612       | React/TSX → Chromium → FFmpeg → MP4, with packets on the links and a frame counter filling to 1068              |
+| `agent`    | 180    | 750       | A terminal types `npx @kimuson/motion-kit render … --json`, a progress bar fills, and the JSON envelope appears |
+| `outro`    | 150    | 918       | The mark and wordmark again, the tagline, the install command with a blinking caret, the repository             |
 
 `TransitionSeries` keeps both neighbours mounted during an overlap and mounts a `Transition`'s
 children only then. So each scene fades itself in and out over its own half of the handoff

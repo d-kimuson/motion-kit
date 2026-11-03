@@ -100,7 +100,7 @@ export const pipelineStages = [
 export const pipelineSteps = 'seek → readiness barrier → capture → encode';
 
 export const renderCommand =
-  'motion-kit render examples/promo/entry.tsx --composition promo --out promo.mp4 --json';
+  'npx @kimuson/motion-kit render examples/promo/entry.tsx --composition promo --out promo.mp4 --json';
 
 /** The envelope `render --json` prints for this very video. */
 export const renderEnvelope: readonly CodeLine[] = [
