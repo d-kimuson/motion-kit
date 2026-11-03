@@ -13,6 +13,7 @@ export default defineConfig({
       { find: /^@kimuson\/motion-kit\/render$/, replacement: srcEntry('./src/render/index.ts') },
       { find: /^@kimuson\/motion-kit\/agent$/, replacement: srcEntry('./src/agent/cli-output.ts') },
       { find: /^@kimuson\/motion-kit\/three$/, replacement: srcEntry('./src/three/index.ts') },
+      { find: /^@kimuson\/motion-kit\/motion$/, replacement: srcEntry('./src/motion/index.ts') },
       { find: /^@kimuson\/motion-kit$/, replacement: srcEntry('./src/index.ts') },
     ],
   },

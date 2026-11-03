@@ -76,9 +76,10 @@ portraits instead of the placeholder badges. The full 6660-frame render is a loc
   than a different picture, and speaking is a bob and a glow rather than a moving mouth. A full
   expression set would be a hand-downloaded 立ち絵 pack, which this example deliberately does not
   require.
-- **`/motion` has no public subpath yet.** `motion.ts` names the curves the scenes share (a closed-form
-  spring, rises and pops) as plain arithmetic on a scene's local seconds; Phase 2 swaps them for
-  `/motion` without changing the scenes.
+- **The example keeps its own motion.** `/motion` publishes the values now, but `motion.ts` still names
+  the curves the scenes share (a closed-form spring, rises and pops) as plain arithmetic on a scene's
+  local seconds: switching them changes the numbers the acceptance look fixes. The example task that
+  adopts `/motion` does it without changing the scenes.
 - **The subtitle line breaks are computed, not left to the browser.** Chromium's `word-break:
   auto-phrase` cannot be predicted from Node, so the plate could not be sized against it.
   `layout.ts` cuts a sentence into phrases (after a particle before a word, after punctuation, never

@@ -47,6 +47,10 @@
       "types": "./dist/agent.d.ts",
       "import": "./dist/agent.js"
     },
+    "./motion": {
+      "types": "./dist/motion.d.ts",
+      "import": "./dist/motion.js"
+    },
     "./three": {
       "types": "./dist/three.d.ts",
       "import": "./dist/three.js"

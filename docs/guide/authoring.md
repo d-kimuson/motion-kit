@@ -2,8 +2,9 @@
 
 A motion-kit video is a React tree plus the metadata that fixes its timeline. This page covers what
 an entry file exports, the hooks that report time, the two structural components (`Sequence` and
-`TransitionSeries`), asset loading, and audio declarations. Everything it names is exported from
-`@kimuson/motion-kit` in 0.0.1; anything marked planned is not.
+`TransitionSeries`), the [motion values](#motion-values), asset loading, and audio declarations.
+Everything it names is exported from `@kimuson/motion-kit` in 0.0.1, except the motion values, which
+come from the `@kimuson/motion-kit/motion` subpath; anything marked planned is not.
 
 ## The registry
 
@@ -89,6 +90,55 @@ const fadeIn = () => Math.min(1, useTime() / 0.3); // 0 → 1 over the first 300
 `useTimeline().width` and `.height` are how a component adapts to the Composition's size instead of
 hard-coding it; `useSequence().progress` is `time / duration` of the sequence it sits in, which is
 what a Ken Burns move or a slide transition needs.
+
+## Motion values
+
+`@kimuson/motion-kit/motion` turns a time into a value: interpolation between stops, a keyframe
+track, the built-in easings and a closed-form spring. Every function is pure — the time is an
+argument, nothing is remembered between frames — so a value computed here is as seekable as the
+frame that asks for it.
+
+```tsx
+import { useTime } from '@kimuson/motion-kit';
+import { easing, interpolate } from '@kimuson/motion-kit/motion';
+
+const Fade = () => {
+  const seconds = useTime();
+  const opacity = interpolate(seconds, [0, 0.6], [0, 1], { easing: easing.easeOutCubic });
+  return <div style={{ opacity: opacity.ok ? opacity.value : 0 }} />;
+};
+```
+
+`easing.cubicBezier` is the one easing that can fail, because it validates its control points, so it
+returns `Result<Easing>` rather than an `Easing`:
+
+```tsx
+const curve = easing.cubicBezier(0.25, 0.1, 0.25, 1); // Result<Easing>
+const eased = interpolate(seconds, [0, 0.6], [0, 1], curve.ok ? { easing: curve.value } : {});
+```
+
+| Function                                                                | Returns                          | Notes                                                                                                                       |
+| ----------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `interpolate(input, inputRange, outputRange, options?)`                 | `Result<number>`                 | At least two strictly ascending input stops. Options: the extrapolation mode and the easing.                                |
+| `keyframes(time, frames, options?)`                                     | `Result<number>`                 | `{ time, value }` stops; the same rules and options as `interpolate`.                                                       |
+| `easing`                                                                | `Easing` values                  | `linear` and the cubic, exponential and Back in/out/in-out families: plain `Easing` functions.                              |
+| `easing.cubicBezier(x1, y1, x2, y2)`                                    | `Result<Easing>`                 | A CSS curve. `x1` and `x2` must be in `[0, 1]`, so the call can fail: unwrap it before passing it on.                       |
+| `spring(time, { from, to, start, velocity, stiffness, damping, mass })` | `Result<number>`                 | A damped spring evaluated in closed form; it holds `from` before `start`.                                                   |
+| `springState(time, spring)`                                             | `Result<{ position, velocity }>` | The position and the analytic velocity at that time.                                                                        |
+| `springSettleTime(spring, tolerance)`                                   | `Result<number>`                 | A duration in seconds from `start` until the spring's sustained last entry into ±`tolerance`; add `start` for a frame time. |
+| `retarget(spring, time, { to, stiffness?, damping?, mass? })`           | `Result<Spring>`                 | A new spring that starts at `time` with the old one's position and velocity; the old one is never mutated.                  |
+
+- Invalid input is a value, not a throw: an input range that is not strictly ascending, a
+  non-positive stiffness, or an evaluation outside the finite range returns `{ ok: false, error }`
+  with a `Diagnostic`. Programmer errors still throw — a custom `easing` callback that throws
+  propagates out of `interpolate`/`keyframes`, because nothing catches it.
+- `options.extrapolate` defaults to `clamp`; `extend` continues the outer segment's slope, and
+  `identity` returns the input unchanged outside the range.
+- Every exact input stop returns that stop's value without calling the easing, so a custom easing
+  that does not preserve `0` and `1` cannot move a stop.
+- A spring is determined by its seven fields alone. To change the target mid-flight, call `retarget`
+  at the switch time and sample the spring it returns; sampling the old spring would keep the old target.
+- The subpath ships values, not components. `Animate`, `Reveal` and `Stagger` are not part of it.
 
 ## `Sequence`
 
@@ -270,16 +320,19 @@ Everything worth naming is exported from the package root: `CompositionDefinitio
 `/three` names its own: `ThreeCanvas`, `ThreeCanvasProps`, `CameraRig`, `CameraRigProps`,
 `CameraPose`, `Vector3Tuple`.
 
+`/motion` names its own: `Easing`, `InterpolateOptions`, `Keyframe`, `Spring`, `SpringState`,
+`RetargetOptions`, and re-exports `Result`.
+
 `Composition`, `CompositionContent` and `useCompositionFrame` are exported too, but they are the page
 bootstrap's own API: an entry never renders `Composition` itself.
 
 ## Not available in 0.0.1
 
-`interpolate`, `spring`, `keyframes`, easing, `Animate`, `Reveal` and `Stagger` (`/motion`);
-`defineTheme` and tokens (`/theme`); the scene presets (`/presets`); the preview UI, which arrives with the unreleased
-[`motion-kit preview`](cli.md#preview); `inspect` and `validate`. Until `/motion` lands, motion
-is plain arithmetic on `useTime()` / `useSequence()`, which is exactly what the
-[reference examples](examples.md) do.
+`Animate`, `Reveal` and `Stagger` — the components that apply values to a wrapper element, which
+`/motion` does not ship; `defineTheme` and tokens (`/theme`); the scene presets (`/presets`); the
+preview UI, which arrives with the unreleased [`motion-kit preview`](cli.md#preview); `inspect` and
+`validate`. Until those land, a component writes its own motion over the [motion values](#motion-values),
+which is what the [reference examples](examples.md) do.
 
 ## Related
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-motion-kit is an agent-first framework for programmatic video: scenes are written as React/TSX on a deterministic timeline, every frame is a pure function of time, and the render pipeline captures frames in Chromium (Playwright) and encodes them with FFmpeg. A CLI and structured diagnostics let coding agents render, inspect, and validate compositions without a GUI. It is an MIT alternative to Remotion, published as `@kimuson/motion-kit` with subpath exports (`/motion`, `/theme`, `/presets`, `/three`).
+motion-kit is an agent-first framework for programmatic video: scenes are written as React/TSX on a deterministic timeline, every frame is a pure function of time, and the render pipeline captures frames in Chromium (Playwright) and encodes them with FFmpeg. A CLI and structured diagnostics let coding agents render, inspect, and validate compositions without a GUI. It is an MIT alternative to Remotion, published as `@kimuson/motion-kit` with subpath exports (`/motion`, `/render`, `/agent`, `/three`).
 
 Stack: TypeScript, React, Zod (schema-first props and CLI input), Three.js + React Three Fiber (optional, `/three` only), Node.js for rendering and the CLI. Tooling: pnpm, oxlint/oxfmt, vitest + fast-check, Lean 4 specs for the time module.
 
