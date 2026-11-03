@@ -77,11 +77,11 @@ decode, or an unsupported codec inside a clip; check the clip on its own with `f
 
 The encode produced no usable file. `details.reason` says which observation failed:
 
-| `reason`       | Meaning                                                                                      |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `"no-frames"`  | The Composition has `durationInFrames: 0`, so nothing was ever handed to FFmpeg.             |
-| `"unwritable"` | The destination directory refused the temporary file (`EACCES`, `ENOSPC`); no child started. |
-| `"empty"`      | FFmpeg exited 0 and left zero bytes.                                                         |
+| `reason`       | Meaning                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `"no-frames"`  | The Composition has `durationInFrames: 0`, so nothing was ever handed to FFmpeg.                                            |
+| `"unwritable"` | The destination refused the file (`EACCES`, `ENOSPC`), or the destination directory could not be created; no child started. |
+| `"empty"`      | FFmpeg exited 0 and left zero bytes.                                                                                        |
 
 Check write access and free disk space in the destination directory
 (`df -h .`), or give `--out` a path you own. A zero-frame Composition produces no video by
@@ -160,6 +160,24 @@ name the source as it was written, redacted:
 | An audio clip fails before the first frame           | `audio[].src` is resolved against the project root (the working directory by default); a missing, non-file or unreadable path is reported with no output written.                                                                                                                 |
 | `--props '{"assets":"final"}'` fails on the examples | `final` reads media a clone does not have: `slideshow` reads `assets/` (nothing is committed there yet) and `explainer` reads `assets.local/portraits/` and `assets.local/voice/`, which only step 2 of its `fetch-assets.ts` writes. Render the default (`placeholder`) instead. |
 
+## `render.output-unwritable`
+
+The output path refused a file the command had to access: a PNG frame, the frames `manifest`, the
+previous run's manifest, or the directory the run creates for any of them. `location.file` and
+`details.output` name the path and `details.code` carries the errno. It is exit `1`: nothing about the
+Composition is wrong, so read the code and fix the path.
+
+| `details.code` | Usual cause                                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EISDIR`       | Something at the file's own name is a directory — a leftover from another tool, an `--out` that names one of its own frames, or a `manifest.json` directory. |
+| `EACCES`       | The directory or file is not readable or writable by the user running the command. Fix its permissions or choose another `--out`.                            |
+| `ENOSPC`       | The disk is full. Free space (`df -h .`) and re-run.                                                                                                         |
+| `EEXIST`       | The frames directory `--out` names is an existing file. Move it, or give `--out` a directory path.                                                           |
+
+Both routes create the directories they write into, so a missing parent is never the cause, and a
+missing `manifest.json` is the normal first-run state. The `.mp4` route reports its destination
+failures as `encode.output-invalid` instead.
+
 ## `render.page-error`
 
 The Composition declaration or the loaded registry is invalid, or — for a Three.js Composition — a canvas could not draw the frame. The message names the case; the common declaration ones:
@@ -216,13 +234,15 @@ The hint says which of those applies. Without `--json` the same text goes to std
 
 ## `internal.unexpected`
 
-A bug or an unconverted exception; exit code `3` and the stack trace on stderr. Two cases are known
-and avoidable rather than real bugs:
+A bug or an unconverted exception; exit code `3` and the stack trace on stderr. One case is known and
+avoidable rather than a real bug:
 
 - `--out` naming an existing directory for an `.mp4` target: the encoder cannot rename its temporary
   file onto a directory. Point `--out` at a file path.
 
-Anything else: keep the envelope and the stack, and report it.
+A write the output path refuses is not this: the frames route and `frame` report it as
+[`render.output-unwritable`](#renderoutput-unwritable) (exit 1). Anything else: keep the envelope and
+the stack, and report it.
 
 ## `preview` problems
 

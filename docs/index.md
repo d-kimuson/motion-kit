@@ -107,10 +107,10 @@ pnpm exec motion-kit render entry.tsx --out out.mp4
 # encoded 150 frames to /Users/you/hello-video/out.mp4 (1920x1080) in 6212.9ms
 ```
 
-Capture one still instead — `frame` writes only the file, so the directory must exist:
+Capture one still instead — an `--out` ending in `.png` is one PNG file, any other `--out` is a
+directory that receives `frame-<n>.png`, and both create the directories they need:
 
 ```bash
-mkdir -p out
 pnpm exec motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/you/hello-video/out/still.png (1920x1080) in 962.6ms
 ```

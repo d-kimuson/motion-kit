@@ -138,9 +138,10 @@ pnpm exec motion-kit frame entry.tsx --frame 60 --out still.png
 captured frame 60 to /Users/kaito/hello-video/still.png (1920x1080) in 962.6ms
 ```
 
-`frame` captures exactly one frame and needs neither FFmpeg nor a video target. It writes only the
-file, so the directory must already exist (`mkdir -p out` before `--out out/still.png`); `render`
-creates the directories its output needs.
+`frame` captures exactly one frame and needs neither FFmpeg nor a video target. An `--out` ending in
+`.png` is one PNG file; any other `--out` is a directory that receives `frame-<n>.png`, so one still
+and a batch mean the same thing by `--out`. Both forms create the directories they need, as `render`
+does.
 
 ## Preview in the browser
 

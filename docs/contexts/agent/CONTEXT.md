@@ -25,7 +25,11 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 
 ## Batch stills
 
-`frame` accepts repeated or comma-separated frame indices and captures them in ascending order with one renderer. One frame writes a PNG file; multiple frames write numbered PNGs to a directory. The command accepts Composition props, creates directories, and leaves already-written PNGs on failure or cancellation.
+`frame` accepts repeated or comma-separated frame indices and captures them in ascending order with one renderer. `--out` is classified by the path, never by how many frames were asked for: a target ending in `.png` is one PNG file, and every other target is a directory that receives `frame-<frame>.png` files, so a single still into an existing directory writes `frame-00765.png` there instead of failing. The classification runs before a renderer is opened, and a target that cannot take the write — a `.png` path with several frames, a `.png` path that is a directory, or a directory path that is a file — is `cli.invalid-arguments` (exit `2`). The command accepts Composition props, creates directories, and leaves already-written PNGs on failure or cancellation.
+
+## Output writes
+
+`render`'s frames route and `frame` create their output directory, write every PNG and the manifest, and read and remove the previous run's manifest through `src/cli/output.ts`. A file system that refuses any of those accesses is `render.output-unwritable` (exit `1`), with the refused path in `location.file` and `details.output` and the Node.js errno code in `details.code`, never `internal.unexpected`: the output path is the caller's, so the failure is theirs to fix. A manifest this route does not own stays `cli.invalid-arguments`, and a missing one is the first-run state. The `.mp4` route keeps the encoder's vocabulary, including for the destination directory it cannot create: `encode.output-invalid` with `reason: "unwritable"`.
 
 ## Renderer configuration
 
