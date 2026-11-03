@@ -33,6 +33,6 @@ export const TOKEN_COLOURS = {
   plain: CHALK,
 } as const;
 
-/** The preview's comment-mode colour (`--comment` in the preview's stylesheet), so the mock preview
- * in the review scene marks what the real one marks. */
+/** The preview's comment-mode colour (`--comment` in the preview's stylesheet), for the mock
+ * preview's hint, outline and comment marker in the review scene. */
 export const MAGENTA = '#e12afb';

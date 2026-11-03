@@ -6,6 +6,7 @@ import {
   headings,
   helloSource,
   helloTitle,
+  pickingHint,
   launchCommand,
   previewHost,
   previewServing,
@@ -94,7 +95,7 @@ const LaunchTerminal = () => {
         left: PREVIEW_LEFT,
         top: WINDOW_TOP,
         width: PREVIEW_WIDTH,
-        height: 170,
+        height: 210,
         opacity: Math.max(0, Math.min(1, shown)),
         transform: `translateY(${(1 - Math.min(1, shown)) * 30}px)`,
       }}
@@ -116,9 +117,6 @@ const HelloStage = ({ shownFrame }: { readonly shownFrame: number }) => {
   const { time } = useSequence();
   const growth = titleGrowth(time);
   const along = shownFrame / PAUSE_FRAME;
-  const reload =
-    ease(time, [beats.reload, beats.reload + 0.15], [0, 1]) *
-    ease(time, [beats.reload + 1.0, beats.reload + 1.3], [1, 0]);
   const stage = layout.stage;
   const title = layout.title;
   return (
@@ -170,95 +168,67 @@ const HelloStage = ({ shownFrame }: { readonly shownFrame: number }) => {
           background: CYAN,
         }}
       />
-      <div
-        style={{
-          position: 'absolute',
-          right: 12,
-          top: 12,
-          padding: '4px 10px',
-          borderRadius: 6,
-          background: `${INK}cc`,
-          fontFamily: MONO,
-          fontSize: 13,
-          color: CYAN,
-          opacity: reload,
-        }}
-      >
-        ↻ reloaded
-      </div>
     </div>
   );
 };
 
-/** Comment mode's marks over the stage: the magenta frame, the hint, and the hovered element. */
+/** Comment mode's marks over the stage: the hint while picking, and the outline on the title from
+ * the hover until the comment is saved, labelled with its selector while picking. */
 const CommentOverlay = () => {
   const { time } = useSequence();
-  const on = commentMode(time);
-  const hovered = time >= beats.hover && time < beats.save;
+  const picking = commentMode(time);
+  const outlined = time >= beats.hover && time < beats.save;
   const stage = layout.stage;
-  const title = layout.title;
   return (
     <>
-      <div
-        style={{
-          ...box({
-            x: stage.x - 3,
-            y: stage.y - 3,
-            width: stage.width + 6,
-            height: stage.height + 6,
-          }),
-          border: `3px solid ${MAGENTA}`,
-          borderRadius: 8,
-          opacity: on ? 1 : 0,
-        }}
-      />
       <div
         style={{
           position: 'absolute',
           left: stage.x,
           width: stage.width,
-          top: stage.y + stage.height - 44,
+          top: stage.y + 10,
           display: 'flex',
           justifyContent: 'center',
-          opacity: on ? 1 : 0,
+          opacity: picking ? 1 : 0,
         }}
       >
         <div
           style={{
-            padding: '6px 14px',
-            borderRadius: 8,
-            background: `${INK}e6`,
-            border: `1.5px solid ${MAGENTA}`,
-            fontSize: 14,
-            color: CHALK,
+            padding: '4px 10px',
+            borderRadius: 6,
+            background: MAGENTA,
+            fontSize: 12,
+            color: '#ffffff',
+            whiteSpace: 'nowrap',
           }}
         >
-          Click an element to comment on it · Esc to stop
+          {pickingHint}
         </div>
       </div>
       <div
         style={{
-          ...box(title),
+          ...box(layout.title),
           background: `${MAGENTA}26`,
           outline: `2px solid ${MAGENTA}`,
-          opacity: hovered ? 1 : 0,
+          opacity: outlined ? 1 : 0,
         }}
       >
         <div
           style={{
             position: 'absolute',
             left: -2,
-            top: -26,
-            padding: '2px 8px',
-            borderRadius: 4,
+            bottom: '100%',
+            marginBottom: 2,
+            padding: '1px 6px',
+            borderRadius: 3,
             background: MAGENTA,
             fontFamily: MONO,
             fontSize: 13,
-            color: CHALK,
-            whiteSpace: 'nowrap',
+            color: '#ffffff',
+            opacity: picking ? 1 : 0,
           }}
         >
-          h1 · {helloSource}
+          h1
         </div>
       </div>
     </>
@@ -304,7 +274,7 @@ const SidePanel = () => {
   const typed = commentTyped(frame, rate, reviewComment.length);
   const panel = layout.panel;
   const draft = layout.draft;
-  const tabs = ['Info', 'Sequences', 'Comments'];
+  const tabs = ['Info', 'Sequences', 'Assets', 'Elements', 'Comments'];
   return (
     <>
       <div
@@ -315,21 +285,37 @@ const SidePanel = () => {
           border: `1.5px solid ${PANEL_EDGE}`,
         }}
       >
-        <div style={{ display: 'flex', gap: 4, padding: 6 }}>
+        <div style={{ display: 'flex', gap: 1, padding: 6 }}>
           {tabs.map((tab) => {
             const active = open ? tab === 'Comments' : tab === 'Info';
             return (
               <div
                 key={tab}
                 style={{
-                  padding: '4px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 4px',
                   borderRadius: 5,
-                  fontSize: 14,
+                  fontSize: 11,
                   color: active ? CHALK : MUTED,
                   background: active ? '#ffffff14' : 'transparent',
                 }}
               >
                 {tab}
+                {tab === 'Comments' && saved ? (
+                  <span
+                    style={{
+                      padding: '0 5px',
+                      borderRadius: 4,
+                      background: '#ffffff1f',
+                      fontSize: 10,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    1
+                  </span>
+                ) : null}
               </div>
             );
           })}
@@ -359,7 +345,7 @@ const SidePanel = () => {
               padding: 10,
               borderRadius: 8,
               background: PANEL,
-              border: `1.5px solid ${saved ? PANEL_EDGE : MAGENTA}`,
+              border: `1.5px solid ${saved ? 'transparent' : MAGENTA}`,
               opacity: Math.min(1, card),
               transform: `scale(${0.94 + 0.06 * card})`,
               transformOrigin: 'top center',
@@ -373,8 +359,23 @@ const SidePanel = () => {
                 fontSize: 12,
               }}
             >
-              <span style={{ fontWeight: 700 }}>{clock(PAUSE_FRAME)}</span>
-              <span style={{ color: MUTED }}>h1 · {helloSource}</span>
+              {saved ? <span style={{ color: MUTED, marginRight: 8 }}>1.</span> : null}
+              <span style={saved ? { color: MAGENTA } : { fontWeight: 700 }}>
+                {clock(PAUSE_FRAME)}
+              </span>
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  paddingLeft: 8,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: MUTED,
+                }}
+              >
+                h1 · {helloSource}
+              </span>
             </div>
             <div
               style={{
@@ -393,11 +394,7 @@ const SidePanel = () => {
               {typed === 0 ? 'What should change here?' : reviewComment.slice(0, typed)}
               {!saved && typed > 0 && typed < reviewComment.length ? <Caret size={15} /> : null}
             </div>
-            {saved ? (
-              <div style={{ marginTop: 10, fontFamily: MONO, fontSize: 12, color: MUTED }}>
-                One frame
-              </div>
-            ) : (
+            {saved ? null : (
               <div
                 style={{
                   marginTop: 10,
@@ -422,9 +419,11 @@ const SidePanel = () => {
               Save
             </Button>
           )}
-          <Button rect={layout.copy} active={copied}>
-            {copied ? '✓ Copied' : 'Copy Markdown'}
-          </Button>
+          <div style={{ opacity: saved ? 1 : 0.45 }}>
+            <Button rect={layout.copy} active={copied}>
+              {copied ? '✓ Copied' : 'Copy Markdown'}
+            </Button>
+          </div>
         </>
       ) : null}
     </>

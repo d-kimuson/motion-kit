@@ -68,7 +68,7 @@ children only then. So each scene fades itself in and out over its own half of t
 ## The expected look
 
 A near-black ground (`#090b14`) with a violet-to-cyan accent (`#8b6cff` → `#2fe3d0`), amber for
-numbers and pink for the terminal prompt. The review scene adds the preview's own comment-mode magenta (`#e12afb`) for the stage frame, the hovered element and the draft. The backdrop moves through the whole clip: two glows drift,
+numbers and pink for the terminal prompt. The review scene adds the preview's own comment-mode magenta (`#e12afb`) for the comment-mode hint, the picked element's outline, the draft and the saved comment's timecode. The backdrop moves through the whole clip: two glows drift,
 a dot grid slides diagonally, a timecode and frame counter tick in the top-right corner, and a
 progress rule grows along the bottom edge.
 
@@ -131,7 +131,7 @@ timeline time, with no clock and no randomness.
   `<canvas>` and used as a `canvasTexture`.
 - **The 3D scene's pixels depend on the WebGL backend**: a hardware GPU and `--software-webgl`
   (SwiftShader) antialias and light it slightly differently.
-- **The review scene's preview is a drawing, not the preview page.** It follows the real page's layout and English labels (the comment-mode hint, the Comments tab, Copy Markdown), and the transcript quotes the head of the review Markdown, but it is a mock in the design grid, so a change to the preview page does not show up here on its own.
+- **The review scene's preview is a drawing, not the preview page.** The labels it shows are the real page's English ones (the comment-mode hint, the five tabs, the draft's buttons, Copy Markdown), and the transcript quotes the head of the review Markdown, but it is a simplified mock in the design grid: the transport, the timeline and the Info tab carry fewer controls than the real page, and a change to the preview page does not show up here on its own.
 - **No audio.** The video is silent; adding a music bed would need a generated or licensed track and
   an `assets.manifest.json`.
 

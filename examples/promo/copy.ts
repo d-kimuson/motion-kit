@@ -155,10 +155,13 @@ export const agentFacts = [
 export const launchCommand = 'npx @kimuson/motion-kit preview src/entry.tsx --composition hello';
 /** What `preview` prints once it serves the page. */
 export const previewServing =
-  'serving http://127.0.0.1:4173/__motion-kit/preview/?composition=hello';
+  'serving http://127.0.0.1:4173/__motion-kit/preview/?composition=hello (Ctrl-C to stop); ready';
 export const previewHost = '127.0.0.1:4173';
 export const helloTitle = 'Hello, motion';
 export const helloSource = 'src/Hello.tsx:12:7';
+/** The preview's hint over the stage while comment mode picks an element. */
+export const pickingHint =
+  'Click an element to comment on it · Scroll for the one beneath · Esc to stop';
 export const reviewComment = 'Make the title bigger and warmer.';
 
 export type TranscriptLine = {

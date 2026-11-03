@@ -83,11 +83,13 @@ export const previewFrame = (frame: number, rate: Rate): number =>
 export const commentTyped = (frame: number, rate: Rate, total: number): number =>
   revealed(frame, rate, ms(beats.type), 32, total);
 
-/** Comment mode is on from the click on Comment until the comment is saved. */
+/** Comment mode is on from the click on Comment until the click that picks the title. */
 export const commentMode = (time: number): boolean =>
-  time >= beats.commentMode && time < beats.save;
+  time >= beats.commentMode && time < beats.select;
 
-const centre = (rect: Rect): Point => [rect.x + rect.width / 2, rect.y + rect.height / 2];
+// The pointer clicks right of and below a control's centre, so the arrow, which hangs down and to
+// the right of its tip, leaves the label readable.
+const aim = (rect: Rect): Point => [rect.x + rect.width * 0.8, rect.y + rect.height * 0.7];
 
 /** The four clicks, each on the control its beat names. */
 export const clicks: readonly { readonly at: number; readonly target: Control }[] = [
@@ -101,10 +103,10 @@ export const clicks: readonly { readonly at: number; readonly target: Control }[
 // before the click on that control. The moves never overlap.
 const pointerStart: Point = [560, 300];
 const pointerMoves: readonly { readonly depart: number; readonly arrive: number; to: Point }[] = [
-  { depart: 2.65, arrive: 3.0, to: centre(layout.comment) },
-  { depart: 3.25, arrive: beats.hover, to: centre(layout.title) },
-  { depart: 5.15, arrive: 5.45, to: centre(layout.save) },
-  { depart: 5.6, arrive: 5.85, to: centre(layout.copy) },
+  { depart: 2.65, arrive: 3.0, to: aim(layout.comment) },
+  { depart: 3.25, arrive: beats.hover, to: aim(layout.title) },
+  { depart: 5.15, arrive: 5.45, to: aim(layout.save) },
+  { depart: 5.6, arrive: 5.85, to: aim(layout.copy) },
 ];
 
 export const pointerAt = (time: number): Point =>

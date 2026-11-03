@@ -89,10 +89,10 @@ describe('promo review scene', () => {
     expect(pointerShown(beats.copy)).toBe(1);
   });
 
-  it('is in comment mode from the click on Comment until the comment is saved', () => {
+  it('is in comment mode from the click on Comment until the click that picks the title', () => {
     fc.assert(
       fc.property(seconds, (time) => {
-        expect(commentMode(time)).toBe(time >= beats.commentMode && time < beats.save);
+        expect(commentMode(time)).toBe(time >= beats.commentMode && time < beats.select);
       }),
     );
   });
