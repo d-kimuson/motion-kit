@@ -22,6 +22,7 @@ const kinds: readonly SceneKind[] = [
   'three',
   'pipeline',
   'agent',
+  'review',
   'outro',
 ];
 
@@ -39,8 +40,8 @@ const storyboard = fc.integer({ min: 1, max: 12 }).chain((overlapFrames) =>
 );
 
 describe('promo storyboard', () => {
-  it('fills the full promo with 1068 frames and the CI twin with 60', () => {
-    expect(storyboardFrames(promoStoryboard)).toBe(1068);
+  it('fills the full promo with 1371 frames and the CI twin with 60', () => {
+    expect(storyboardFrames(promoStoryboard)).toBe(1371);
     expect(storyboardFrames(promoCiStoryboard)).toBe(60);
   });
 

@@ -3,6 +3,7 @@ import { type ComponentType, type ReactNode, useMemo } from 'react';
 
 import { Backdrop, SceneShell, Stage, Wipe } from './parts.tsx';
 import { placeScenes, type SceneKind, type Storyboard } from './plan.ts';
+import { ReviewScene } from './ReviewScene.tsx';
 import {
   AgentScene,
   CodeScene,
@@ -20,6 +21,7 @@ const sceneComponents: Readonly<Record<SceneKind, ComponentType>> = {
   three: ThreeScene,
   pipeline: PipelineScene,
   agent: AgentScene,
+  review: ReviewScene,
   outro: OutroScene,
 };
 

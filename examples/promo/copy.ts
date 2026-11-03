@@ -3,6 +3,7 @@
 // make about the current release.
 
 import type { TOKEN_COLOURS } from './look.ts';
+import type { AgentBeat } from './review.ts';
 
 import { promoFrames } from './plan.ts';
 
@@ -21,6 +22,7 @@ export const headings = {
   three: { kicker: '03 · 3D', title: 'Three.js runs on the same clock.' },
   pipeline: { kicker: '04 · Render', title: 'Chromium captures. FFmpeg encodes.' },
   agent: { kicker: '05 · Automate', title: 'A CLI your coding agent can read.' },
+  review: { kicker: '06 · Review', title: 'Point at it. Your agent fixes it.' },
 } as const;
 
 /** The chips under the 3D scene: what draws it, and what it promises. */
@@ -147,3 +149,39 @@ export const agentFacts = [
   { title: 'Stable diagnostic codes', detail: 'composition.props-invalid, …' },
   { title: 'Exit codes 0 · 1 · 2 · 3', detail: 'success, domain, invocation, internal' },
 ] as const;
+
+/** The review scene: the command that opens the preview, the Composition it reviews, the comment a
+ * reviewer leaves on its title, and what the coding agent does with the copied review Markdown. */
+export const launchCommand = 'npx @kimuson/motion-kit preview src/entry.tsx --composition hello';
+/** What `preview` prints once it serves the page. */
+export const previewServing =
+  'serving http://127.0.0.1:4173/__motion-kit/preview/?composition=hello';
+export const previewHost = '127.0.0.1:4173';
+export const helloTitle = 'Hello, motion';
+export const helloSource = 'src/Hello.tsx:12:7';
+export const reviewComment = 'Make the title bigger and warmer.';
+
+export type TranscriptLine = {
+  readonly beat: AgentBeat;
+  readonly kind: 'prompt' | 'quote' | 'tool' | 'detail' | 'removed' | 'added' | 'result' | 'reply';
+  readonly text: string;
+};
+
+/** The agent's session, from the pasted review (an excerpt of what Copy Markdown writes) to the
+ * re-rendered frame. */
+export const reviewTranscript: readonly TranscriptLine[] = [
+  { beat: 'paste', kind: 'prompt', text: 'Fix what this review asks for.' },
+  { beat: 'paste', kind: 'quote', text: '# Preview review of `hello`' },
+  { beat: 'paste', kind: 'quote', text: '## 1. 00:01.20 (frame 36)' },
+  { beat: 'paste', kind: 'quote', text: `- Element: \`h1\` from \`${helloSource}\`` },
+  { beat: 'paste', kind: 'quote', text: `> ${reviewComment}` },
+  { beat: 'read', kind: 'tool', text: 'Read src/Hello.tsx' },
+  { beat: 'edit', kind: 'tool', text: 'Edit src/Hello.tsx' },
+  { beat: 'edit', kind: 'removed', text: "fontSize: 120, color: '#eef1fa'," },
+  { beat: 'edit', kind: 'added', text: "fontSize: 180, color: '#ffc861'," },
+  { beat: 'run', kind: 'tool', text: 'Run npx @kimuson/motion-kit frame src/entry.tsx' },
+  { beat: 'run', kind: 'detail', text: '--composition hello --frame 36' },
+  { beat: 'run', kind: 'detail', text: '--out review/frame-36.png' },
+  { beat: 'rendered', kind: 'result', text: '✓ review/frame-36.png · 1920×1080' },
+  { beat: 'reply', kind: 'reply', text: 'The title is 180 px and amber now.' },
+];
