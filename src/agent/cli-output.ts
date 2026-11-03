@@ -11,6 +11,15 @@ const videoShape = {
   fps: z.strictObject({ numerator: z.int().positive(), denominator: z.int().positive() }),
   frameCount: z.int().nonnegative(),
   durationSeconds: z.number().nonnegative(),
+  range: z.strictObject({
+    /** Global Frames on the Composition's timeline: `startFrame` inclusive, `endFrame` exclusive. */
+    startFrame: z.int().nonnegative(),
+    endFrame: z.int().positive(),
+    startSeconds: z.number().nonnegative(),
+    endSeconds: z.number().nonnegative(),
+    /** `endFrame - startFrame`: the Composition frames the artifact covers. */
+    frameCount: z.int().positive(),
+  }),
 };
 
 // Encoding is TASK-150/159; until it lands, `render` honestly produces a frame

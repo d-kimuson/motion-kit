@@ -93,17 +93,29 @@ const isReadableFile = (source: string): boolean => {
 /**
  * Resolves every declared track against the project root and converts its frame times.
  * A path that is not a readable file stops the encode before the child is spawned: no output,
- * `asset.load-failed` with the file in `location` (audio muxing ADR).
+ * `asset.load-failed` with the file in `location` (audio muxing ADR). Every declared source is
+ * validated even when `range` keeps none of it, so a ranged render reports a bad `src` exactly as
+ * the whole-Composition render does.
+ *
+ * `range` re-expresses the tracks against the rendered interval: only what the range can play is
+ * resolved, so a clip outside it adds no input. Omitted means the whole Composition, where every
+ * declaration is an input exactly as before.
  */
 export const resolveAudioTracks = (options: {
   readonly tracks: readonly AudioTrack[];
   readonly projectRoot: string;
   readonly rate: FrameRate;
+  readonly range?: { readonly from: number; readonly to: number };
 }): Result<readonly ResolvedAudioTrack[]> => {
   const resolved: ResolvedAudioTrack[] = [];
-  for (const track of options.tracks) {
-    const source = isAbsolute(track.src) ? track.src : resolve(options.projectRoot, track.src);
+  for (const declared of options.tracks) {
+    const source = isAbsolute(declared.src)
+      ? declared.src
+      : resolve(options.projectRoot, declared.src);
     if (!isReadableFile(source)) return { ok: false, error: audioFileMissingDiagnostic(source) };
+    const track =
+      options.range === undefined ? declared : clipAudioTracks([declared], options.range).at(0);
+    if (track === undefined) continue;
     const offset = frameToTime(BigInt(track.offsetInFrames ?? 0), options.rate);
     let endSeconds: number | undefined;
     if (track.endInFrames !== undefined) {
@@ -122,6 +134,38 @@ export const resolveAudioTracks = (options: {
     });
   }
   return { ok: true, value: resolved };
+};
+
+/**
+ * Re-expresses the Composition's declared tracks relative to a render range, so the encoder keeps
+ * placing and trimming by frame counts and the Time Module stays the only frame→second converter.
+ *
+ * The range is `from` (inclusive) to `to` (exclusive) in Global Frames. A kept clip starts at its
+ * own timeline start minus `from`, reads its source from where the range enters it, and ends where
+ * the range leaves it; a clip with no declared end keeps playing to the source's natural end and
+ * the graph's final `atrim` ends it at the range. A clip whose declared span does not overlap the
+ * range is dropped, so the range keeps only the clips that can be heard in it.
+ */
+export const clipAudioTracks = (
+  tracks: readonly AudioTrack[],
+  range: { readonly from: number; readonly to: number },
+): readonly AudioTrack[] => {
+  const kept: AudioTrack[] = [];
+  for (const track of tracks) {
+    const start = track.startInFrames ?? 0;
+    const offset = track.offsetInFrames ?? 0;
+    const end = track.endInFrames;
+    if (start >= range.to || (end !== undefined && end <= range.from)) continue;
+    // Frames of this clip the range cut off its head; the source resumes after exactly those.
+    const headCut = Math.max(0, range.from - start);
+    kept.push({
+      ...track,
+      startInFrames: Math.max(start, range.from) - range.from,
+      offsetInFrames: offset + headCut,
+      ...(end === undefined ? {} : { endInFrames: Math.min(end, range.to) - range.from }),
+    });
+  }
+  return kept;
 };
 
 /** One `-i` per declared track, in declaration order; input index `i + 1` is track `i`. */
@@ -170,13 +214,24 @@ export const audioFilterGraph = (
   return `${chains.join(';')};${mixed}amix=inputs=${String(tracks.length)}:duration=longest:normalize=0,asetpts=N/SR/TB,apad=whole_dur=${secondsText(durationSeconds)},atrim=end=${secondsText(durationSeconds)}[aout]`;
 };
 
-/** Output-side arguments: the graph, both maps, AAC stereo, and the exact output duration. */
+/**
+ * A silent stream of exactly `durationSeconds`. A Composition that declares audio keeps one audio
+ * stream even when the rendered range contains none of its clips, so the artifact's stream layout
+ * does not depend on where the range falls (audio muxing ADR).
+ */
+const audioSilenceFilterGraph = (durationSeconds: number): string =>
+  `anullsrc=channel_layout=stereo:sample_rate=${String(AUDIO_SAMPLE_RATE)},atrim=end=${secondsText(durationSeconds)}[aout]`;
+
+/** Output-side arguments: the graph, both maps, AAC stereo, and the exact output duration. An empty
+ * track list is the declared-but-all-outside case, which emits silence rather than no stream. */
 export const audioOutputArguments = (
   tracks: readonly ResolvedAudioTrack[],
   durationSeconds: number,
 ): string[] => [
   '-filter_complex',
-  audioFilterGraph(tracks, durationSeconds),
+  tracks.length === 0
+    ? audioSilenceFilterGraph(durationSeconds)
+    : audioFilterGraph(tracks, durationSeconds),
   '-map',
   '0:v:0',
   '-map',

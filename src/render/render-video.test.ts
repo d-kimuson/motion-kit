@@ -426,6 +426,62 @@ describe('renderVideo', () => {
     }
   }, 180_000);
 
+  it('renders only the requested range, as a zero-based video of that range', async () => {
+    const renderer = await open();
+    const full = join(directory, 'full.mp4');
+    const ranged = join(directory, 'ranged.mp4');
+    expect(await renderVideo({ composition: renderer, output: full })).toMatchObject({
+      ok: true,
+      value: { frameCount: 40, durationSeconds: 2 },
+    });
+    const outcome = await renderVideo({
+      composition: renderer,
+      output: ranged,
+      range: { from: 13, to: 28 },
+    });
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { output: ranged, frameCount: 15, durationSeconds: 0.75 },
+    });
+    expect(probe(ranged)).toMatchObject({ r_frame_rate: '20/1', nb_frames: '15' });
+    expect(Number(probe(ranged)['duration'])).toBeCloseTo(0.75, 1);
+
+    // The range is the frames it names: decoded output frame n is Composition frame 13 + n, and
+    // the same frame cut from a whole-Composition render agrees within the encoding tolerance.
+    for (const [outputFrame, sourceFrame] of [
+      [0, 13],
+      [14, 27],
+    ] as const) {
+      const rangedPath = join(directory, `range-${String(outputFrame)}.png`);
+      const fullPath = join(directory, `full-${String(sourceFrame)}.png`);
+      extractFrame(ranged, outputFrame, rangedPath);
+      extractFrame(full, sourceFrame, fullPath);
+      const difference = compare(decodeToRgb(rangedPath), decodeToRgb(fullPath));
+      expect(difference.mean).toBeLessThan(3);
+      expect(difference.max).toBeLessThan(48);
+    }
+
+    // And it did not silently encode the whole Composition: frame 0 of the range is not frame 0.
+    const first = join(directory, 'full-0.png');
+    extractFrame(full, 0, first);
+    const whole = compare(decodeToRgb(join(directory, 'range-0.png')), decodeToRgb(first));
+    expect(whole.mean).toBeGreaterThan(3);
+  }, 180_000);
+
+  it('rejects a range outside the Composition as a violated invariant', async () => {
+    const renderer = await open();
+    const output = join(directory, 'outside.mp4');
+    for (const range of [
+      { from: 30, to: 41 },
+      { from: 5, to: 5 },
+      { from: -1, to: 5 },
+    ]) {
+      const outcome = await renderVideo({ composition: renderer, output, range });
+      expect(outcome).toMatchObject({ ok: false, error: [{ code: 'internal.unexpected' }] });
+    }
+    expect(existsSync(output)).toBe(false);
+  }, 180_000);
+
   it('probes the encoder before rendering any frame', async () => {
     let rendered = 0;
     const frames: AsyncIterable<FrameCaptureResult> = (() => {
@@ -607,6 +663,103 @@ describe('renderVideo', () => {
     expect(
       Math.abs(rmsIn(pcm, 1.6, 1.9) / (0.5 * rmsIn(pcmOf(second), 0.05, 0.45)) - 1),
     ).toBeLessThan(0.1);
+  }, 180_000);
+
+  it("renders the range's audio on its own zero, trimmed at the head", async () => {
+    mkdirSync(join(directory, 'audio'));
+    const first = join(directory, 'audio', 'clip-1.wav');
+    const second = join(directory, 'audio', 'clip-2.wav');
+    generateSine(first, 0.5, 440);
+    generateSine(second, 0.5, 880);
+    const renderer = await open('audio', './encoding/fixtures/audio.tsx');
+    const output = join(directory, 'range-audio.mp4');
+    // Frames 13..40 at 20 fps are 0.65 s to 2.0 s. Clip 1 (0.5–1.0 s) is entered 0.15 s in, so
+    // it ends 0.35 s into the output rather than 0.5 s; clip 2 (1.5–2.0 s) starts at 0.85 s.
+    const outcome = await renderVideo({
+      composition: renderer,
+      output,
+      projectRoot: directory,
+      range: { from: 13, to: 40 },
+    });
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { frameCount: 27, durationSeconds: 1.35 },
+    });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(1.35, 1);
+
+    const pcm = pcmOf(output);
+    // Clip 1 keeps playing from the range start and stops at its own natural end at 0.35 s.
+    expect(rmsIn(pcm, 0.02, 0.3)).toBeGreaterThan(0.25);
+    expect(rmsIn(pcm, 0.4, 0.8)).toBeLessThan(0.005);
+    // Clip 2 is placed 0.85 s into the output and keeps its declared gain.
+    const onsets = onsetsOf(pcm);
+    expect(onsets.length).toBeGreaterThanOrEqual(1);
+    expect(Math.abs((onsets.at(-1) ?? Number.NaN) - 0.85)).toBeLessThanOrEqual(1 / 20);
+    expect(
+      Math.abs(rmsIn(pcm, 0.9, 1.3) / (0.5 * rmsIn(pcmOf(second), 0.05, 0.45)) - 1),
+    ).toBeLessThan(0.1);
+  }, 180_000);
+
+  it('keeps a clip declared after the Composition end as an input on a whole render', async () => {
+    // Regression: dropping clips that do not overlap used to run on whole-Composition renders too,
+    // which removed the clip's input (and its src validation) and could remove the audio stream.
+    mkdirSync(join(directory, 'audio'));
+    generateSine(join(directory, 'audio', 'clip-1.wav'), 0.5, 440);
+    const renderer = await open('audio-late', './encoding/fixtures/audio.tsx');
+    const output = join(directory, 'late.mp4');
+    const outcome = await renderVideo({ composition: renderer, output, projectRoot: directory });
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { frameCount: 60, durationSeconds: 3 },
+    });
+    // The stream exists and spans the Composition, but the clip starts at 5 s and never sounds.
+    expect(probeAudio(output)).toMatchObject({ codec_name: 'aac', channels: 2 });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(3, 1);
+    expect(rmsIn(pcmOf(output), 0.05, 2.9)).toBeLessThan(0.005);
+  }, 180_000);
+
+  it('keeps one silent audio stream when no declared clip overlaps the range', async () => {
+    mkdirSync(join(directory, 'audio'));
+    generateSine(join(directory, 'audio', 'clip-1.wav'), 0.5, 440);
+    const renderer = await open('audio-late', './encoding/fixtures/audio.tsx');
+    const output = join(directory, 'late-range.mp4');
+    const outcome = await renderVideo({
+      composition: renderer,
+      output,
+      projectRoot: directory,
+      range: { from: 0, to: 10 },
+    });
+    expect(outcome).toMatchObject({ ok: true, value: { frameCount: 10, durationSeconds: 0.5 } });
+    // The Composition declares audio, so the ranged artifact keeps the stream layout of the whole
+    // render: one silent AAC stream as long as the video.
+    expect(probeAudio(output)).toMatchObject({ codec_name: 'aac', channels: 2 });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(0.5, 1);
+    expect(rmsIn(pcmOf(output), 0, 0.45)).toBeLessThan(0.005);
+  }, 180_000);
+
+  it('validates the src of a clip the range drops, like a whole render does', async () => {
+    const renderer = await open('audio-late-missing', './encoding/fixtures/audio.tsx');
+    const absent = join(directory, 'audio', 'late-absent.wav');
+    for (const range of [undefined, { from: 0, to: 10 }]) {
+      const output = join(directory, 'late-missing.mp4');
+      const outcome = await renderVideo({
+        composition: renderer,
+        output,
+        projectRoot: directory,
+        ...(range === undefined ? {} : { range }),
+      });
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: [
+          {
+            code: 'asset.load-failed',
+            location: { file: absent },
+            details: { assets: [{ kind: 'audio', source: absent, phase: 'open' }] },
+          },
+        ],
+      });
+      expect(existsSync(output)).toBe(false);
+    }
   }, 180_000);
 
   it('renders a mono clip at the level of its own file, like a stereo one', async () => {

@@ -41,6 +41,11 @@ export type RenderVideoOptions = VideoEncodingOptions & {
   readonly composition: VideoComposition;
   /** Absolute path of the MP4 to produce. */
   readonly output: string;
+  /** Global frames to render, `from` inclusive and `to` exclusive; the whole Composition when
+   * omitted. The artifact is a new zero-based video of the range, so its own frame 0 is
+   * Composition frame `from`; the two ends must lie inside the Composition and hold a frame.
+   */
+  readonly range?: { readonly from: number; readonly to: number };
   /** Directory the Composition's relative audio sources resolve against; the process working
    * directory when omitted. The CLI passes its own project root explicitly.
    */
@@ -59,9 +64,10 @@ export type RenderVideoOptions = VideoEncodingOptions & {
  */
 export const videoCapture = { type: 'jpeg', quality: 95 } as const satisfies CaptureFormat;
 
-/** Renders `composition`'s whole frame range and pipes it into the Encoder port.
+/** Renders `composition`'s requested frame range and pipes it into the Encoder port.
  * No frame file ever reaches the disk: the frames go from capture to the child's stdin.
- * Audio crosses as the descriptor's declarations: the same call, the same child.
+ * Audio crosses as the descriptor's declarations, re-expressed relative to the range: the same
+ * call, the same child.
  */
 export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOutcome> => {
   const { composition, output, projectRoot, signal, onProgress, encoder, ffmpegPath } = options;
@@ -81,7 +87,32 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
         ),
       ],
     };
-  const duration = frameToTime(BigInt(descriptor.durationInFrames), sourceRate.value);
+  const compositionFrames = descriptor.durationInFrames;
+  const from = options.range?.from ?? 0;
+  const to = options.range?.to ?? compositionFrames;
+  if (
+    ![from, to].every((frame) => Number.isSafeInteger(frame)) ||
+    from < 0 ||
+    to > compositionFrames ||
+    from >= to
+  )
+    return {
+      ok: false,
+      error: [
+        encoderInvariantDiagnostic(
+          'Invalid frame range.',
+          'Pass a nonempty half-open range inside the Composition frame count; resolve the range before calling renderVideo.',
+        ),
+      ],
+    };
+  // The artifact is the range alone, so its duration is the range's, not the Composition's.
+  const duration = frameToTime(BigInt(to - from), sourceRate.value);
+  // A range that covers the whole Composition is the whole-Composition render: nothing is
+  // clipped, so a clip declared outside it stays an input exactly as before (audio muxing ADR).
+  const audioRange =
+    options.range === undefined || (from === 0 && to === compositionFrames)
+      ? undefined
+      : { from, to };
   const count = frameCount(duration, outputRate.value);
   if (
     !count.ok ||
@@ -101,13 +132,15 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
   const total = Number(count.value);
   const sourceFrames = function* () {
     for (let i = 0; i < total; i++)
-      yield Number(timeToFrameFloor(frameToTime(BigInt(i), outputRate.value), sourceRate.value));
+      yield (
+        from + Number(timeToFrameFloor(frameToTime(BigInt(i), outputRate.value), sourceRate.value))
+      );
   };
   const frames =
     options.fps === undefined
       ? composition.renderFrames({
-          from: 0,
-          to: descriptor.durationInFrames,
+          from,
+          to,
           signal,
           format: videoCapture,
         })
@@ -154,6 +187,7 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
     ...(options.preset === undefined ? {} : { preset: options.preset }),
     output,
     ...(descriptor.audio === undefined ? {} : { audio: descriptor.audio }),
+    ...(audioRange === undefined ? {} : { audioRange }),
     ...(projectRoot === undefined ? {} : { projectRoot }),
     signal,
     onProgress,

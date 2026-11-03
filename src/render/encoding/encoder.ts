@@ -47,9 +47,16 @@ export type EncodeRequest = VideoEncodingOptions & {
   readonly output: string;
   /** Audio clips the Composition declared, in declaration order. Absent or empty is the silent
    * path: the child receives exactly the video-only arguments. Times are frame counts, converted
-   * once by the Time Module on the same rational timebase as `frames`.
+   * once by the Time Module on the same rational timebase as `frames`. Every declared `src` is
+   * validated, even when `audioRange` keeps none of them.
    */
   readonly audio?: readonly AudioTrack[];
+  /** Global frames the `frames` cover, when that is less than the whole Composition. The declared
+   * audio is re-expressed against it, and a declared audio array whose clips all fall outside the
+   * range still yields one silent AAC stream: the artifact's stream layout matches the whole
+   * render's. Omitted means the whole Composition, where every clip is an input as before.
+   */
+  readonly audioRange?: { readonly from: number; readonly to: number };
   /** Directory that a relative `audio[].src` resolves against; the process working directory
    * when omitted. Absolute sources are used as given.
    */

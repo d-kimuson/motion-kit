@@ -469,11 +469,15 @@ const encodeWithFfmpeg = async (
     };
   const sourceRate = createFrameRate(request.sourceFps ?? request.fps);
   if (!sourceRate.ok) return { ok: false, error: [sourceRate.error] };
+  // The Composition's declarations, before any range clips them: an empty array is the silent
+  // path, a nonempty one always muxes an audio stream (silence when the range keeps no clip).
+  const declaredAudio = request.audio ?? [];
   // Resolved before the sibling exists, so a missing file leaves no temporary file and no child.
   const audio = resolveAudioTracks({
-    tracks: request.audio ?? [],
+    tracks: declaredAudio,
     projectRoot: request.projectRoot ?? process.cwd(),
     rate: sourceRate.value,
+    ...(request.audioRange === undefined ? {} : { range: request.audioRange }),
   });
   if (!audio.ok) return { ok: false, error: [audio.error] };
   // The channel counts decide the mono conversion; probed before the sibling for the same reason.
@@ -521,7 +525,7 @@ const encodeWithFfmpeg = async (
     PIXEL_FORMAT,
     '-r',
     rateText,
-    ...(tracks.length === 0
+    ...(declaredAudio.length === 0
       ? []
       : audioOutputArguments(tracks, request.durationSeconds ?? timebase.seconds)),
     temporary,

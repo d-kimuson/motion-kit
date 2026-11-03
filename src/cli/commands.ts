@@ -16,6 +16,11 @@ const renderCommand = new Command('render')
   .option('--video-bitrate <kbps>')
   .option('--scale <factor-or-WxH>')
   .option('--fps <rational-or-decimal>')
+  .option(
+    '--from <frame-or-time>',
+    'first frame to render: a Global Frame, mm:ss[.fff] or <seconds>s',
+  )
+  .option('--to <frame-or-time>', 'exclusive end: a Global Frame, mm:ss[.fff] or <seconds>s')
   .option('--project-root <dir>')
   .option('--vite-config <path>')
   .option('--software-webgl')
@@ -115,7 +120,8 @@ const valueTakingLongs = (command: Command): string[] =>
  * The options that consume the following argv token as their value, derived from the declarations
  * above so that adding one cannot leave the resolver behind: `--composition`, `--out`, `--props`,
  * `--concurrency`, `--frame`, `--predecessor`, `--history`, `--channel-tolerance`, `--changed-ratio`,
- * `--preview-fps`, `--port`, `--project-root` and `--vite-config` today, while boolean flags take none.
+ * `--preview-fps`, `--port`, `--from`, `--to`, `--project-root` and `--vite-config` today, while
+ * boolean flags take none.
  *
  * Only long names are collected: `--opt <value>` is the form the resolver skips. A value-taking
  * option declared with a short alias (`-o <value>`) would slip past it, so none has one today, and

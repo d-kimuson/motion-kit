@@ -1174,6 +1174,13 @@ describe('motion-kit CLI', () => {
       height: 64,
       fps: { numerator: 30000, denominator: 1001 },
       frameCount: 6,
+      range: {
+        startFrame: 0,
+        endFrame: 6,
+        startSeconds: 0,
+        endSeconds: 6006 / 30000,
+        frameCount: 6,
+      },
       files: Array.from({ length: 6 }, (_, frame) => `frame-${String(frame).padStart(5, '0')}.png`),
     });
   }, 60_000);
@@ -1543,6 +1550,238 @@ describe('motion-kit CLI', () => {
     expect(probed).toContain('avg_frame_rate=30000/1001');
     expect(probed).toContain('duration=0.200200');
   }, 120_000);
+
+  it('renders only the requested frame range and reports the original timeline interval', async () => {
+    const output = join(outputRoot, 'range-frames');
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--from',
+      '1',
+      '--to',
+      '4',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      ok: true,
+      data: {
+        output,
+        format: 'frames',
+        frameCount: 3,
+        range: { startFrame: 1, endFrame: 4, frameCount: 3 },
+      },
+    });
+    if (envelope.command !== 'render') throw new Error('expected render envelope');
+    const data = envelope.data;
+    if (data === null) throw new Error('render data missing');
+    // The ranged artifact is zero-based on both routes: the file names start at 0 and the source
+    // timeline lives in `range` (file n is Composition frame startFrame + n).
+    expect(readdirSync(output).sort()).toEqual([
+      'frame-00000.png',
+      'frame-00001.png',
+      'frame-00002.png',
+      'manifest.json',
+    ]);
+    expect(data.range.startSeconds).toBeCloseTo(1001 / 30000, 9);
+    expect(data.durationSeconds).toBeCloseTo((3 * 1001) / 30000, 9);
+    const manifest: unknown = JSON.parse(readFileSync(join(output, 'manifest.json'), 'utf8'));
+    expect(manifest).toMatchObject({
+      frameCount: 3,
+      files: ['frame-00000.png', 'frame-00001.png', 'frame-00002.png'],
+      range: { startFrame: 1, endFrame: 4, frameCount: 3 },
+    });
+  }, 120_000);
+
+  it('encodes a time-written range as a zero-based video of exactly those frames', async () => {
+    const output = join(outputRoot, 'range.mp4');
+    // mm:ss[.fff] and seconds are both times: 0.033 s is inside frame 0, 0.133 s inside frame 3,
+    // so the range is frames 1..4 at 30000/1001 (a fractional rate, converted exactly).
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--from',
+      '0:00.033',
+      '--to',
+      '0.133s',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope).toMatchObject({
+      ok: true,
+      data: {
+        output,
+        format: 'mp4',
+        frameCount: 3,
+        durationSeconds: (3 * 1001) / 30000,
+        range: { startFrame: 1, endFrame: 4, frameCount: 3 },
+      },
+    });
+    const probed = execFileSync('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=codec_name,nb_frames,r_frame_rate,duration',
+      '-of',
+      'default=noprint_wrappers=1',
+      output,
+    ]).toString();
+    expect(probed).toContain('codec_name=h264');
+    expect(probed).toContain('nb_frames=3');
+    expect(probed).toContain('r_frame_rate=30000/1001');
+    expect(probed).toContain('duration=0.100100');
+  }, 120_000);
+
+  it('counts a reduced-rate range in the range, not in the whole Composition', async () => {
+    const output = join(outputRoot, 'range-reduced.mp4');
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--from',
+      '1',
+      '--to',
+      '4',
+      '--fps',
+      '10',
+      '--json',
+    ]);
+    expect(result.code).toBe(0);
+    const envelope = assertValidEnvelope(result);
+    // The range lasts 3 source frames (0.1001 s), so 10 fps is two output frames.
+    expect(envelope).toMatchObject({
+      ok: true,
+      data: {
+        format: 'mp4',
+        frameCount: 2,
+        durationSeconds: (3 * 1001) / 30000,
+        range: { startFrame: 1, endFrame: 4, frameCount: 3 },
+      },
+    });
+    const probed = execFileSync('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=nb_frames,r_frame_rate',
+      '-of',
+      'default=noprint_wrappers=1',
+      output,
+    ]).toString();
+    expect(probed).toContain('nb_frames=2');
+    expect(probed).toContain('r_frame_rate=10/1');
+  }, 120_000);
+
+  type InvalidRangeCase = {
+    readonly name: string;
+    readonly bounds: readonly string[];
+    readonly message: string;
+  };
+  const invalidRanges: readonly InvalidRangeCase[] = [
+    { name: 'an empty range', bounds: ['--from', '3', '--to', '3'], message: 'holds no frames' },
+    {
+      name: 'an inverted range',
+      bounds: ['--from', '4', '--to', '2'],
+      message: 'holds no frames',
+    },
+    {
+      name: 'a range past the Composition end',
+      bounds: ['--to', '7'],
+      message: 'but the Composition is 6 frames long',
+    },
+    {
+      name: 'a time bound past the Composition end',
+      bounds: ['--from', '4:20'],
+      message: 'but the Composition is 6 frames long',
+    },
+    {
+      name: 'an unreadable bound',
+      bounds: ['--from', 'four'],
+      message: 'is not a frame number or a time',
+    },
+  ];
+  it.each(invalidRanges)(
+    'rejects $name as cli.invalid-arguments before writing anything',
+    async (input) => {
+      const output = join(outputRoot, `invalid-range-${input.name.replaceAll(' ', '-')}`);
+      const result = await run([
+        'render',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--out',
+        output,
+        ...input.bounds,
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        ok: false,
+        data: null,
+        diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+      });
+      const diagnostic = envelope.diagnostics[0];
+      expect(`${diagnostic?.message} ${diagnostic?.hint ?? ''}`).toContain(input.message);
+      expect(existsSync(output)).toBe(false);
+    },
+    120_000,
+  );
+
+  it.each([
+    { name: 'frames', bounds: ['--from', '10', '--to', '5'] },
+    { name: 'times', bounds: ['--from', '4:20', '--to', '4:10'] },
+  ])(
+    'rejects an empty $name range before it starts a browser',
+    async (input) => {
+      // A missing Chromium makes an opened pool fail with render.browser-launch-failed (exit 1),
+      // so exit 2 with cli.invalid-arguments proves the argv was refused first.
+      const empty = mkdtempSync(join(tmpdir(), 'motion-kit-no-browser-'));
+      try {
+        const result = await run(
+          [
+            'render',
+            'entry.ts',
+            '--composition',
+            'one',
+            '--out',
+            join(outputRoot, `pre-order-${input.name}.mp4`),
+            ...input.bounds,
+            '--json',
+          ],
+          { PLAYWRIGHT_BROWSERS_PATH: empty },
+        );
+        expect(result.code).toBe(2);
+        const envelope = assertValidEnvelope(result);
+        expect(envelope).toMatchObject({
+          ok: false,
+          data: null,
+          diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+        });
+        const diagnostic = envelope.diagnostics[0];
+        expect(`${diagnostic?.message} ${diagnostic?.hint ?? ''}`).toContain('holds no frames');
+      } finally {
+        rmSync(empty, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
 
   it('reports the captured warnings of a successful mp4 render, like the frames route', async () => {
     const warning = { code: 'seek.uncontrolled', severity: 'warning' };

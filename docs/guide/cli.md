@@ -76,6 +76,8 @@ Only disable the sandbox when the CI environment requires that explicit security
 | `--out <path>`       | Where to write. `.mp4` encodes H.264 video; any other path is a PNG frame directory. Required.                |
 | `--props <json>`     | Props object as a JSON string, validated by the Composition's Zod schema before the first frame.              |
 | `--concurrency <n>`  | How many renderers capture frames at once; each is its own browser. Positive integer, default half the cores. |
+| `--from <bound>`     | Where to start: a Global Frame (`3600`), `mm:ss[.fff]` (`4:20`) or seconds (`260s`). Defaults to the start.   |
+| `--to <bound>`       | Exclusive end of the range, in the same notations. Defaults to the Composition end.                           |
 | `--json`             | Print the one-line summary as a JSON envelope instead.                                                        |
 
 ```bash
@@ -92,7 +94,8 @@ There is no `--format` flag: the target's extension decides, and the envelope re
   with `libx264`, probed once per invocation before the first frame; a Composition that declares
   audio also needs `ffprobe` from the same install.
 - `--out out/frames` — every frame as `frame-00000.png`, `frame-00001.png`, … plus a `manifest.json`
-  (`format`, `composition`, width, height, fps, frame count and the file list). Needs no FFmpeg.
+  (`format`, `composition`, width, height, fps, frame count, the original timeline `range` and the
+  file list). Needs no FFmpeg.
 
 `render` creates the directories its output needs, and a path that refuses a write reports
 `render.output-unwritable` (exit 1) rather than an internal failure.
@@ -100,6 +103,48 @@ There is no `--format` flag: the target's extension decides, and the envelope re
 A frame's bytes do not depend on which renderer captured it, so `--concurrency` changes speed, not
 output. It defaults to half the machine's cores; raise it for a long video, lower it when memory or
 GPU contention is the limit.
+
+### Rendering part of a Composition
+
+`--from` and `--to` write only that interval, so checking a fix near 4:20 does not re-encode the
+whole video. Both bounds are optional — an omitted `--from` starts at 0 and an omitted `--to` runs
+to the Composition end — and the notation says which unit it is:
+
+| Written          | Meaning                           |
+| ---------------- | --------------------------------- |
+| `260`            | Global Frame 260                  |
+| `260s`, `4.5s`   | seconds                           |
+| `4:20`, `4:20.5` | minutes and seconds, seconds 0–59 |
+
+A decimal without a unit (`4.5`) is rejected rather than guessed. The range is half-open and
+rounded up at both ends: the output holds exactly the frames whose presentation time lies in
+`[from, to)`, so no frame before `--from` and none at or after `--to`. The artifact is a new
+zero-based video — its frame 0 is the range's first frame — and both routes accept the range: an
+MP4 is encoded from those frames, and the frames route writes the same interval as
+`frame-00000.png`, `frame-00001.png`, … plus a manifest whose `frameCount` and `range` describe it.
+File n of either route is Composition frame `startFrame + n`, which `data.range` and the manifest's
+`range` name on the original timeline.
+
+```bash
+motion-kit render entry.tsx --out out/fix.mp4 --from 4:20 --to 4:35 --json
+```
+
+Audio comes with the range and needs no flag: a clip already playing resumes where the range enters
+it, a declared clip end is clipped to the range, and a clip outside it is not an input. A
+Composition that declares audio keeps one audio stream in the artifact — silence where no declared
+clip plays, including a range that overlaps none of them — so its stream layout matches the whole
+render. Every declared `src` is still checked: one that cannot be read is `asset.load-failed` even
+when the range drops its clip.
+
+`--fps` counts the range, not the Composition: the output frame count is the ceiling of the range's
+duration times the output rate, and `--scale`, `--video-crf` and `--video-bitrate` apply unchanged.
+`data.frameCount` and `data.durationSeconds` describe the artifact, and `data.range` reports the
+original timeline interval (below).
+
+An unreadable bound is `cli.invalid-arguments` (exit 2) before a browser opens, and so is an empty
+or reversed range whose two bounds are both frames or both times. The cases that need the
+Composition — a mixed-unit empty range, or one outside it — are the same code and exit as soon as
+the Composition's frame count is known, before any frame is captured or output written.
 
 ### MP4 size, quality and frame rate
 
@@ -401,7 +446,14 @@ human-facing logs to stderr. Every document has these fields:
   "height": 1080,
   "fps": { "numerator": 30, "denominator": 1 },
   "frameCount": 720,
-  "durationSeconds": 24
+  "durationSeconds": 24,
+  "range": {
+    "startFrame": 0,
+    "endFrame": 720,
+    "startSeconds": 0,
+    "endSeconds": 24,
+    "frameCount": 720
+  }
 }
 ```
 
@@ -413,8 +465,15 @@ human-facing logs to stderr. Every document has these fields:
   "width": 1920,
   "height": 1080,
   "fps": { "numerator": 30, "denominator": 1 },
-  "frameCount": 720,
-  "durationSeconds": 24
+  "frameCount": 450,
+  "durationSeconds": 15,
+  "range": {
+    "startFrame": 7800,
+    "endFrame": 8250,
+    "startSeconds": 260,
+    "endSeconds": 275,
+    "frameCount": 450
+  }
 }
 ```
 
@@ -460,9 +519,13 @@ reports `format: "png"`, with `output` naming the file it wrote inside that dire
 }
 ```
 
-FPS is always a rational, including integer rates. `durationSeconds` is the Composition duration
-from the Time Module, not a separately declared number. At a reduced MP4 output rate, `frameCount`
-is the ceiling of that duration times the output FPS, so `frameCount / fps` can be longer. A successful render is `ok: true` and may still
+FPS is always a rational, including integer rates. `range` is the Global Frame interval on the
+Composition's timeline that the artifact covers: `startFrame` inclusive, `endFrame` exclusive,
+`startSeconds`/`endSeconds` the Time Module's seconds for them, and `frameCount` the number of
+Composition frames. It is always present — the whole Composition when neither `--from` nor `--to`
+was given. `durationSeconds` is the artifact's duration from the Time Module, and `frameCount` is
+the artifact's own count (the range's, or the ceiling of the range's duration times the output FPS
+at a reduced rate, so `frameCount / fps` can be longer). A successful render is `ok: true` and may still
 carry warnings; `ok: true` with warnings is a success, so branch on `ok`, not on an empty
 `diagnostics`.
 

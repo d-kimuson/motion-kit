@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { previewFpsSchema } from '../preview/query.ts';
 import { checkHistories, type CheckHistory } from '../render/check/history.ts';
 import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
+import { checkRangeOrder, parseRangeBound } from './range.ts';
 
 // The argument contract is schema-first: commander only tokenizes argv, and
 // these schemas validate and normalize every command invocation. The closed
@@ -27,6 +28,19 @@ const entry = z.string().min(1);
 const composition = z.string().min(1).optional();
 const out = z.string().min(1);
 const json = z.boolean();
+
+// A render range end is a Global Frame (`260`), mm:ss[.fff] (`4:20`, `4:20.5`) or seconds with an
+// `s` suffix (`260s`); the notation decides the unit, and the Time Module converts it later.
+const rangeBound = (option: string) =>
+  z.string().transform((text, context) => {
+    const parsed = parseRangeBound(text);
+    if (parsed.ok) return parsed.value;
+    context.addIssue({
+      code: 'custom',
+      message: `${option}: ${parsed.error.message} ${parsed.error.hint ?? ''}`.trim(),
+    });
+    return z.NEVER;
+  });
 const rendererConfig = {
   projectRoot: z.string().optional(),
   viteConfig: z.string().optional(),
@@ -34,39 +48,55 @@ const rendererConfig = {
   disableSandbox: z.boolean().optional(),
 };
 
-export const RenderArgsSchema = z.strictObject({
-  command: z.literal('render'),
-  ...rendererConfig,
-  entry,
-  composition,
-  out,
-  props: propsText.optional(),
-  /** Renderers capturing at once; half the machine's parallelism when omitted. */
-  concurrency: z.coerce.number().int().positive().optional(),
-  videoCrf: z
-    .string()
-    .regex(/^(?:[0-9]|[1-4][0-9]|5[01])$/u, 'Use --video-crf with an integer from 0 to 51.')
-    .transform(Number)
-    .optional(),
-  videoBitrate: z
-    .string()
-    .regex(/^[1-9][0-9]*$/u, 'Use --video-bitrate with a positive integer in kbps.')
-    .transform(Number)
-    .pipe(z.number().int())
-    .optional(),
-  scale: z
-    .string()
-    .regex(/^(?:\d+(?:\.\d+)?|\d+x\d+)$/u, 'Use --scale with a positive factor or WxH.')
-    .optional(),
-  fps: z
-    .string()
-    .regex(
-      /^(?:\d+(?:\.\d+)?|\d+\/\d+)$/u,
-      'Use --fps with a positive decimal or numerator/denominator.',
-    )
-    .optional(),
-  json,
-});
+export const RenderArgsSchema = z
+  .strictObject({
+    command: z.literal('render'),
+    ...rendererConfig,
+    entry,
+    composition,
+    out,
+    props: propsText.optional(),
+    /** Renderers capturing at once; half the machine's parallelism when omitted. */
+    concurrency: z.coerce.number().int().positive().optional(),
+    videoCrf: z
+      .string()
+      .regex(/^(?:[0-9]|[1-4][0-9]|5[01])$/u, 'Use --video-crf with an integer from 0 to 51.')
+      .transform(Number)
+      .optional(),
+    videoBitrate: z
+      .string()
+      .regex(/^[1-9][0-9]*$/u, 'Use --video-bitrate with a positive integer in kbps.')
+      .transform(Number)
+      .pipe(z.number().int())
+      .optional(),
+    scale: z
+      .string()
+      .regex(/^(?:\d+(?:\.\d+)?|\d+x\d+)$/u, 'Use --scale with a positive factor or WxH.')
+      .optional(),
+    fps: z
+      .string()
+      .regex(
+        /^(?:\d+(?:\.\d+)?|\d+\/\d+)$/u,
+        'Use --fps with a positive decimal or numerator/denominator.',
+      )
+      .optional(),
+    /** Half-open range of the Composition to render; the whole Composition when both are omitted. */
+    from: rangeBound('--from').optional(),
+    to: rangeBound('--to').optional(),
+    json,
+  })
+  // A range written in one unit that starts at or after its end is empty whatever the Composition
+  // is, so it is rejected with the rest of the argv, before any renderer opens; the bounds that
+  // need the Composition's frame count stay in `resolveFrameRange`.
+  .superRefine((args, context) => {
+    const order = checkRangeOrder({ from: args.from, to: args.to });
+    if (!order.ok)
+      context.addIssue({
+        code: 'custom',
+        path: ['from'],
+        message: `${order.error.message} ${order.error.hint ?? ''}`.trim(),
+      });
+  });
 
 export const FrameArgsSchema = z.strictObject({
   command: z.literal('frame'),
