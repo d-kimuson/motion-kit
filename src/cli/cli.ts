@@ -541,6 +541,15 @@ const runRender = async (
     // An `.wav` target exports the Composition's declared audio alone: one FFmpeg child runs the
     // encoder's own mix graph, and no frame is captured (audio export ADR).
     if (audioOnly) {
+      // The same destination rule as the mp4 route: the directory the target needs is created
+      // first, so a destination that cannot be created is `unwritable` before any child runs.
+      try {
+        mkdirSync(dirname(outAbsolute), { recursive: true });
+      } catch {
+        return decide(
+          failure([outputInvalidDiagnostic({ output: outAbsolute, reason: 'unwritable' })]),
+        );
+      }
       const exported = await exportAudio({
         compositionId: descriptor.id,
         audio: descriptor.audio ?? [],

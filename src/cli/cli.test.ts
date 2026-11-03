@@ -1773,6 +1773,22 @@ describe('motion-kit CLI', () => {
       }
     }, 180_000);
 
+    it('creates the destination directory the WAV needs, like the mp4 route', async () => {
+      const output = join(outputRoot, 'nested-audio', 'mix.wav');
+      const result = await run([
+        'render',
+        'entry-audio.tsx',
+        '--composition',
+        'audio',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      expect(existsSync(output)).toBe(true);
+      expect(assertValidEnvelope(result)).toMatchObject({ ok: true, data: { output } });
+    }, 120_000);
+
     it('reports a Composition without audio as render.no-audio instead of writing silence', async () => {
       const output = join(outputRoot, 'silent.wav');
       const result = await run([
