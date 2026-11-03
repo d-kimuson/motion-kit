@@ -1442,11 +1442,12 @@ describe('motion-kit CLI', () => {
     if (envelope.command !== 'render') throw new Error('expected render envelope');
     const data = envelope.data;
     if (data === null) throw new Error('render data missing');
-    // Each file is named by its Global Frame, so the directory itself shows the range.
+    // The ranged artifact is zero-based on both routes: the file names start at 0 and the source
+    // timeline lives in `range` (file n is Composition frame startFrame + n).
     expect(readdirSync(output).sort()).toEqual([
+      'frame-00000.png',
       'frame-00001.png',
       'frame-00002.png',
-      'frame-00003.png',
       'manifest.json',
     ]);
     expect(data.range.startSeconds).toBeCloseTo(1001 / 30000, 9);
@@ -1454,7 +1455,7 @@ describe('motion-kit CLI', () => {
     const manifest: unknown = JSON.parse(readFileSync(join(output, 'manifest.json'), 'utf8'));
     expect(manifest).toMatchObject({
       frameCount: 3,
-      files: ['frame-00001.png', 'frame-00002.png', 'frame-00003.png'],
+      files: ['frame-00000.png', 'frame-00001.png', 'frame-00002.png'],
       range: { startFrame: 1, endFrame: 4, frameCount: 3 },
     });
   }, 120_000);
@@ -1603,6 +1604,45 @@ describe('motion-kit CLI', () => {
       expect(existsSync(output)).toBe(false);
     },
     120_000,
+  );
+
+  it.each([
+    { name: 'frames', bounds: ['--from', '10', '--to', '5'] },
+    { name: 'times', bounds: ['--from', '4:20', '--to', '4:10'] },
+  ])(
+    'rejects an empty $name range before it starts a browser',
+    async (input) => {
+      // A missing Chromium makes an opened pool fail with render.browser-launch-failed (exit 1),
+      // so exit 2 with cli.invalid-arguments proves the argv was refused first.
+      const empty = mkdtempSync(join(tmpdir(), 'motion-kit-no-browser-'));
+      try {
+        const result = await run(
+          [
+            'render',
+            'entry.ts',
+            '--composition',
+            'one',
+            '--out',
+            join(outputRoot, `pre-order-${input.name}.mp4`),
+            ...input.bounds,
+            '--json',
+          ],
+          { PLAYWRIGHT_BROWSERS_PATH: empty },
+        );
+        expect(result.code).toBe(2);
+        const envelope = assertValidEnvelope(result);
+        expect(envelope).toMatchObject({
+          ok: false,
+          data: null,
+          diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+        });
+        const diagnostic = envelope.diagnostics[0];
+        expect(`${diagnostic?.message} ${diagnostic?.hint ?? ''}`).toContain('holds no frames');
+      } finally {
+        rmSync(empty, { recursive: true, force: true });
+      }
+    },
+    60_000,
   );
 
   it('reports the captured warnings of a successful mp4 render, like the frames route', async () => {

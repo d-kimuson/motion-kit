@@ -256,6 +256,7 @@ const request = (options: {
   signal?: AbortSignal;
   onProgress?: (progress: EncodeProgress) => void;
   audio?: readonly AudioTrack[];
+  audioRange?: { readonly from: number; readonly to: number };
   projectRoot?: string;
   imageFormat?: 'png' | 'jpeg';
 }) => ({
@@ -266,6 +267,7 @@ const request = (options: {
   ...(options.signal === undefined ? {} : { signal: options.signal }),
   ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
   ...(options.audio === undefined ? {} : { audio: options.audio }),
+  ...(options.audioRange === undefined ? {} : { audioRange: options.audioRange }),
   ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
   ...(options.imageFormat === undefined ? {} : { imageFormat: options.imageFormat }),
 });
@@ -982,6 +984,74 @@ describe('declared audio', () => {
       expect.stringMatching(/\/\.out\.[0-9a-f-]{36}\.part\.mp4$/u),
     ]);
   });
+
+  it('keeps an out-of-Composition clip as an input, and emits one silent stream for a range that misses it', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    fakeFfprobe(2);
+    const { first } = audioFixture();
+    const pngs = pngFrames(2);
+
+    // Whole Composition: the clip is an input at its declared frame even though it starts after
+    // the end, exactly as before the range feature (the final atrim is what silences it).
+    const whole = await encoder.encode(
+      request({
+        frames: streamOf(pngs),
+        frameCount: 2,
+        audio: [{ src: first, startInFrames: 100 }],
+      }),
+    );
+    expect(whole).toMatchObject({ ok: true });
+    expect(encodeArgv()).toContain(first);
+    expect(encodeArgv().join(' ')).toContain('adelay=10000:all=1');
+    expect(ffprobeArgv()).toHaveLength(1);
+
+    // A range the clip does not reach: it is not an input, but the declared audio still muxes one
+    // silent stream of the range's duration instead of taking the video-only path.
+    const ranged = await encoder.encode(
+      request({
+        frames: streamOf(pngs),
+        frameCount: 2,
+        audio: [{ src: first, startInFrames: 100 }],
+        audioRange: { from: 0, to: 2 },
+      }),
+    );
+    expect(ranged).toMatchObject({ ok: true });
+    expect(encodeArgv()).not.toContain(first);
+    expect(encodeArgv()).toEqual(
+      expect.arrayContaining([
+        '-filter_complex',
+        'anullsrc=channel_layout=stereo:sample_rate=48000,atrim=end=0.200000[aout]',
+        '-map',
+        '0:v:0',
+        '-map',
+        '[aout]',
+        '-c:a',
+        'aac',
+      ]),
+    );
+    // No kept track means no channel probe.
+    expect(ffprobeArgv()).toHaveLength(1);
+  }, 60_000);
+
+  it('reports an unreadable declared src even when the range drops the clip', async () => {
+    const encoder = await openEncoder(fakeBinary());
+    const outcome = await encoder.encode(
+      request({
+        frames: streamOf(pngFrames(2)),
+        frameCount: 2,
+        audio: [{ src: 'audio/absent.wav', startInFrames: 100 }],
+        audioRange: { from: 0, to: 2 },
+        projectRoot: directory,
+      }),
+    );
+    expect(errorsOf(outcome)).toMatchObject([
+      {
+        code: 'asset.load-failed',
+        location: { file: join(directory, 'audio', 'absent.wav') },
+      },
+    ]);
+    expect(invocations()).not.toContain('encode');
+  }, 60_000);
 
   it('adds one input per track and a mix graph on the frame timebase', async () => {
     const encoder = await openEncoder(fakeBinary());

@@ -27,11 +27,11 @@ A decimal without a unit (`4.5`) is rejected instead of guessed. The Time Module
 
 **Half-open on the frame grid.** The range is `[startFrame, endFrame)` with `startFrame = ceil(from · fps)` and `endFrame = ceil(to · fps)`, so the artifact holds exactly the frames whose presentation time lies in the written interval: no frame before `from`, and no frame at or after `to`. Both ends round up for that reason, and an exact frame boundary keeps that frame. A range outside the Composition or with no frames left is `cli.invalid-arguments` (exit 2) and no output is written.
 
-**The artifact is zero-based.** Output frame 0 is Composition frame `startFrame`; the range does not re-time the Composition, it cuts it.
+**The artifact is zero-based on both routes.** Output frame 0 is Composition frame `startFrame`; the range cuts the Composition, it does not re-time it. The MP4 is encoded from the range alone, and the frames route names its PNGs `frame-00000.png`, `frame-00001.png`, … for the same reason, so a ranged sequence is the standalone artifact `ffmpeg -i frame-%05d.png` expects. File n of either route is Composition frame `startFrame + n`.
 
-**`data` reports the original timeline.** Both `render` variants carry `range: { startFrame, endFrame, startSeconds, endSeconds, frameCount }`, where `startSeconds`/`endSeconds` are the Time Module's own seconds for those Global Frames and `frameCount = endFrame - startFrame`. It is present for every render, spelled out in full when no bound was given, so a reader never has to infer the interval. `frameCount` and `durationSeconds` describe the artifact — the range — which for a whole-Composition render is what they already meant. The frames manifest carries the same `range`, its `frameCount` is the range's length, and the written files keep their Global Frame names.
+**`data` reports the original timeline.** Both `render` variants carry `range: { startFrame, endFrame, startSeconds, endSeconds, frameCount }`, where `startSeconds`/`endSeconds` are the Time Module's own seconds for those Global Frames and `frameCount = endFrame - startFrame`. It is present for every render, spelled out in full when no bound was given, so a reader never has to infer the interval. `frameCount` and `durationSeconds` describe the artifact — the range — which for a whole-Composition render is what they already meant. The frames manifest carries the same `range`, and its `frameCount` is the range's length; the zero-based files plus that `range` are the whole source-timeline mapping.
 
-**Invalid ranges.** An unreadable bound is rejected by the argument schema (the argv is wrong whatever the Composition is); an empty, inverted or out-of-Composition range is rejected as soon as the descriptor's resolved `durationInFrames` is known — before any frame is captured and before the output path is touched, which for the frames route is before its directory is created. Both are `cli.invalid-arguments` with a corrective hint. The bounds check cannot run before the browser, because the Composition's frame count is only known once it has loaded; the flag syntax is checked before it.
+**Invalid ranges.** An unreadable bound is rejected by the argument schema (the argv is wrong whatever the Composition is). An empty or reversed range whose two bounds share a unit — frame against frame, or time against time — is decided by the same schema and rejected before any renderer opens, because `ceil` is monotonic so `from >= to` gives `startFrame >= endFrame` at every rate. The remaining checks need the descriptor: a mixed-unit empty range and a range outside the Composition are rejected as soon as the resolved `durationInFrames` is known — before any frame is captured and before the output path is touched, which for the frames route is before its directory is created. Every one of them is `cli.invalid-arguments` with a corrective hint.
 
 **Interplay with the other options.**
 
@@ -40,19 +40,21 @@ A decimal without a unit (`4.5`) is rejected instead of guessed. The Time Module
 - `--concurrency`: unchanged; only the range's frames are captured.
 - `--props`, renderer configuration, cancellation, diagnostics and exit codes: unchanged.
 
-**Audio follows the range with no new flag.** Declared tracks are re-expressed in **frames** relative to `startFrame` before the encoder sees them (`clipAudioTracks`), so the encoder's existing single frame→seconds conversion is untouched:
+**Audio follows the range with no new flag.** The encoder re-expresses the declared tracks in **frames** relative to `startFrame` (`resolveAudioTracks` with `audioRange`, using `clipAudioTracks`), so its existing single frame→seconds conversion is untouched:
 
 - a clip that starts after the range start moves earlier by `startFrame`;
 - a clip already playing keeps its place and its source resumes where the range enters it (the head is cut in source frames, not seconds);
 - a declared `endInFrames` is clipped to the range;
-- a clip whose declared span does not overlap the range is dropped, so it adds no input;
+- a clip whose declared span does not overlap the range is not an input;
 - a clip without a declared end plays to its natural end, and the graph's existing final `atrim` ends it at the range.
+
+**Declaring audio always muxes one audio stream.** A Composition that declares at least one track gets one AAC stream on every render: if the range contains none of the clips, the stream is silence of exactly the artifact's duration (`anullsrc`), so a ranged artifact has the same stream layout as the whole render and a player or `ffprobe` still sees an audio track. An `audio` array that is absent or empty is the unchanged video-only path. Every declared `src` is validated — resolved and opened — whether or not the range keeps its clip, so a bad path is `asset.load-failed` on a ranged render exactly as on a whole one. A range that covers the whole Composition (`--from 0 --to <frameCount>`) is the whole-Composition render: nothing is clipped, so a clip declared at or after the end stays an input as it always did.
 
 **Reuse.** `parseRangeBound` and `resolveFrameRange` live in `src/cli/range.ts`, depend only on the Time Module and `src/lib`, and are covered by property-based tests; TASK-249 calls them instead of re-implementing the notation.
 
 ## Consequences
 
-A reviewer's `motion-kit render entry.tsx --out clip.mp4 --from 4:20 --to 4:35` renders fifteen seconds and takes seconds, with the audio of the same interval, and `--json` names the original frames and seconds the clip covers. Two renders of the same range are not byte-identical (H.264 is not deterministic across encodes); the frames are the same, so a comparison uses the existing pixel criterion rather than byte identity.
+A reviewer's `motion-kit render entry.tsx --out clip.mp4 --from 4:20 --to 4:35` renders fifteen seconds and takes seconds, with the audio of the same interval, and `--json` names the original frames and seconds the clip covers. The frames route writes the same interval as zero-based PNGs, so that sequence is also a standalone artifact. Two renders of the same range are not byte-identical (H.264 is not deterministic across encodes); the frames are the same, so a comparison uses the existing pixel criterion rather than byte identity.
 
 `range` is a new required member of both `render` data variants. Adding a field is compatible and `schemaVersion` stays `1`, but a consumer validating the committed JSON Schema now requires it; the full range is emitted when nothing was asked for, so there is no "absent means whole Composition" rule to remember.
 

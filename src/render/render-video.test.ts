@@ -700,6 +700,68 @@ describe('renderVideo', () => {
     ).toBeLessThan(0.1);
   }, 180_000);
 
+  it('keeps a clip declared after the Composition end as an input on a whole render', async () => {
+    // Regression: dropping clips that do not overlap used to run on whole-Composition renders too,
+    // which removed the clip's input (and its src validation) and could remove the audio stream.
+    mkdirSync(join(directory, 'audio'));
+    generateSine(join(directory, 'audio', 'clip-1.wav'), 0.5, 440);
+    const renderer = await open('audio-late', './encoding/fixtures/audio.tsx');
+    const output = join(directory, 'late.mp4');
+    const outcome = await renderVideo({ composition: renderer, output, projectRoot: directory });
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: { frameCount: 60, durationSeconds: 3 },
+    });
+    // The stream exists and spans the Composition, but the clip starts at 5 s and never sounds.
+    expect(probeAudio(output)).toMatchObject({ codec_name: 'aac', channels: 2 });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(3, 1);
+    expect(rmsIn(pcmOf(output), 0.05, 2.9)).toBeLessThan(0.005);
+  }, 180_000);
+
+  it('keeps one silent audio stream when no declared clip overlaps the range', async () => {
+    mkdirSync(join(directory, 'audio'));
+    generateSine(join(directory, 'audio', 'clip-1.wav'), 0.5, 440);
+    const renderer = await open('audio-late', './encoding/fixtures/audio.tsx');
+    const output = join(directory, 'late-range.mp4');
+    const outcome = await renderVideo({
+      composition: renderer,
+      output,
+      projectRoot: directory,
+      range: { from: 0, to: 10 },
+    });
+    expect(outcome).toMatchObject({ ok: true, value: { frameCount: 10, durationSeconds: 0.5 } });
+    // The Composition declares audio, so the ranged artifact keeps the stream layout of the whole
+    // render: one silent AAC stream as long as the video.
+    expect(probeAudio(output)).toMatchObject({ codec_name: 'aac', channels: 2 });
+    expect(Number(probeAudio(output)['duration'])).toBeCloseTo(0.5, 1);
+    expect(rmsIn(pcmOf(output), 0, 0.45)).toBeLessThan(0.005);
+  }, 180_000);
+
+  it('validates the src of a clip the range drops, like a whole render does', async () => {
+    const renderer = await open('audio-late-missing', './encoding/fixtures/audio.tsx');
+    const absent = join(directory, 'audio', 'late-absent.wav');
+    for (const range of [undefined, { from: 0, to: 10 }]) {
+      const output = join(directory, 'late-missing.mp4');
+      const outcome = await renderVideo({
+        composition: renderer,
+        output,
+        projectRoot: directory,
+        ...(range === undefined ? {} : { range }),
+      });
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: [
+          {
+            code: 'asset.load-failed',
+            location: { file: absent },
+            details: { assets: [{ kind: 'audio', source: absent, phase: 'open' }] },
+          },
+        ],
+      });
+      expect(existsSync(output)).toBe(false);
+    }
+  }, 180_000);
+
   it('renders a mono clip at the level of its own file, like a stereo one', async () => {
     mkdirSync(join(directory, 'audio'));
     const mono = join(directory, 'audio', 'level-mono.wav');

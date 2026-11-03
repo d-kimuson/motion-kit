@@ -647,7 +647,10 @@ const runRender = async (
       signal,
     })) {
       if (!result.ok) return decide(frameFailure(result));
-      const name = `frame-${String(result.value.frame).padStart(5, '0')}.png`;
+      // The artifact is zero-based on both routes: file n is the range's n-th frame, and the
+      // original timeline frame is `range.startFrame + n` (reported in `data.range` and the
+      // manifest's `range`). A whole-Composition render keeps `frame-00000.png` at frame 0.
+      const name = `frame-${String(result.value.frame - range.startFrame).padStart(5, '0')}.png`;
       const written = writeOutputFile(join(outAbsolute, name), result.value.image);
       if (!written.ok) return decide(failure([written.error]));
       files.push(name);

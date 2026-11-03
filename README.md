@@ -190,9 +190,11 @@ encode is lossy anyway; the directory route writes PNG.
 `--from` and `--to` render part of the Composition: each is a Global Frame (`3600`), `mm:ss[.fff]`
 (`4:20`) or seconds with an `s` suffix (`260s`), and the interval is half-open, so the output holds
 the frames whose presentation time is in it. The artifact is a new zero-based video —
-`--from 4:20 --to 4:35` is a fifteen-second check instead of a whole render — audio included, and
-`data.range` reports the original frames and seconds. A bound that cannot be read, an empty range,
-or one outside the Composition is `cli.invalid-arguments` before any frame is captured.
+`--from 4:20 --to 4:35` is a fifteen-second check instead of a whole render — and so is the frames
+route's `frame-00000.png` sequence; audio comes along, a Composition that declares audio keeps one
+audio stream (silent where no clip plays), and `data.range` reports the original frames and seconds.
+An unreadable bound and a same-unit empty range are `cli.invalid-arguments` before a browser opens;
+a range outside the Composition is the same error once its frame count is known, before any capture.
 
 Encoding needs an FFmpeg 6.0+ with `libx264` on `PATH` — and, for a Composition that declares audio,
 its companion `ffprobe`, which the same install provides: motion-kit ships and downloads no binary, so

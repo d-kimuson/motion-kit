@@ -66,6 +66,30 @@ export const compositions = defineCompositions([
       { src: 'audio/level-stereo.wav', startInFrames: 20 },
     ],
   }),
+  // A clip declared at or after the Composition end. A whole render keeps it as an input (the
+  // final atrim makes it silent); a range that overlaps none of it keeps one silent stream.
+  defineComposition({
+    id: 'audio-late',
+    component: Scene,
+    schema,
+    width: 160,
+    height: 120,
+    fps: { numerator: 20, denominator: 1 },
+    durationInFrames: 60,
+    audio: [{ src: 'audio/clip-1.wav', startInFrames: 100 }],
+  }),
+  // The same declaration with a source that does not exist: every declared src is validated, on a
+  // whole-Composition render and on a ranged one that would drop the clip.
+  defineComposition({
+    id: 'audio-late-missing',
+    component: Scene,
+    schema,
+    width: 160,
+    height: 120,
+    fps: { numerator: 20, denominator: 1 },
+    durationInFrames: 60,
+    audio: [{ src: 'audio/late-absent.wav', startInFrames: 100 }],
+  }),
   // A `src` written as a URL with a signed query: it resolves as a path and cannot exist, so the
   // report must not carry the signature it was written with.
   defineComposition({

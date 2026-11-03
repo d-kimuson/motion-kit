@@ -7,7 +7,6 @@ import {
 } from '../core/timeline/time.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
 import { type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';
-import { clipAudioTracks } from './encoding/audio.ts';
 import { encoderInvariantDiagnostic } from './encoding/diagnostics.ts';
 import {
   type EncodeOutcome,
@@ -108,6 +107,12 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
     };
   // The artifact is the range alone, so its duration is the range's, not the Composition's.
   const duration = frameToTime(BigInt(to - from), sourceRate.value);
+  // A range that covers the whole Composition is the whole-Composition render: nothing is
+  // clipped, so a clip declared outside it stays an input exactly as before (audio muxing ADR).
+  const audioRange =
+    options.range === undefined || (from === 0 && to === compositionFrames)
+      ? undefined
+      : { from, to };
   const count = frameCount(duration, outputRate.value);
   if (
     !count.ok ||
@@ -181,9 +186,8 @@ export const renderVideo = async (options: RenderVideoOptions): Promise<EncodeOu
     ...(options.resolution === undefined ? {} : { resolution: options.resolution }),
     ...(options.preset === undefined ? {} : { preset: options.preset }),
     output,
-    ...(descriptor.audio === undefined
-      ? {}
-      : { audio: clipAudioTracks(descriptor.audio, { from, to }) }),
+    ...(descriptor.audio === undefined ? {} : { audio: descriptor.audio }),
+    ...(audioRange === undefined ? {} : { audioRange }),
     ...(projectRoot === undefined ? {} : { projectRoot }),
     signal,
     onProgress,

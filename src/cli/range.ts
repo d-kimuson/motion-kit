@@ -1,4 +1,5 @@
 import {
+  compareTime,
   createTimelineTime,
   timeToFrameCeil,
   type FrameRate,
@@ -78,33 +79,39 @@ const rangeFailure = (message: string, hint: string): Result<never> => ({
 });
 
 /** The Global Frame a bound names; a time rounds up, so no frame before it is included. */
-const startOf = (bound: RangeBound | undefined, rate: FrameRate): Result<number> => {
-  if (bound === undefined) return { ok: true, value: 0 };
+const boundToFrame = (bound: RangeBound, rate: FrameRate): Result<number> => {
   if (bound.kind === 'frame') return { ok: true, value: bound.frame };
   const frame = timeToFrameCeil(bound.time, rate);
   if (frame > BigInt(Number.MAX_SAFE_INTEGER))
     return rangeFailure(
-      'The range start is too far into the timeline to be a frame.',
-      'Choose a start that converts to a safe integer frame number.',
+      'The range bound is too far into the timeline to be a frame.',
+      'Choose a bound that converts to a safe integer frame number.',
     );
   return { ok: true, value: Number(frame) };
 };
 
-/** The exclusive end as a Global Frame; a time rounds up, so the frame containing it is kept. */
-const endOf = (
-  bound: RangeBound | undefined,
-  rate: FrameRate,
-  durationInFrames: number,
-): Result<number> => {
-  if (bound === undefined) return { ok: true, value: durationInFrames };
-  if (bound.kind === 'frame') return { ok: true, value: bound.frame };
-  const frame = timeToFrameCeil(bound.time, rate);
-  if (frame > BigInt(Number.MAX_SAFE_INTEGER))
-    return rangeFailure(
-      'The range end is too far into the timeline to be a frame.',
-      'Choose an end that converts to a safe integer frame number.',
-    );
-  return { ok: true, value: Number(frame) };
+/**
+ * Rejects an empty or reversed range that the written bounds alone decide. Two bounds in one unit
+ * are comparable without the Composition: frames directly, and times by their own value, because
+ * `ceil` is monotonic, so `from >= to` gives `startFrame >= endFrame` at every rate. A mixed pair
+ * (`2s` and `30`) can only be compared once the frame rate is known, and the Composition's frame
+ * count is needed for every bound anyway; `resolveFrameRange` keeps checking those.
+ */
+export const checkRangeOrder = (options: {
+  readonly from?: RangeBound | undefined;
+  readonly to?: RangeBound | undefined;
+}): Result<undefined> => {
+  const { from, to } = options;
+  if (from === undefined || to === undefined) return { ok: true, value: undefined };
+  const reversed =
+    (from.kind === 'frame' && to.kind === 'frame' && from.frame >= to.frame) ||
+    (from.kind === 'time' && to.kind === 'time' && compareTime(from.time, to.time) >= 0);
+  return reversed
+    ? rangeFailure(
+        'The range starts at or after the point it ends, so it holds no frames.',
+        'Choose --from before --to, leaving at least one frame in the range.',
+      )
+    : { ok: true, value: undefined };
 };
 
 /**
@@ -119,24 +126,32 @@ export const resolveFrameRange = (options: {
   readonly fps: FrameRate;
   readonly durationInFrames: number;
 }): Result<FrameRange> => {
-  const start = startOf(options.from, options.fps);
-  if (!start.ok) return start;
-  const end = endOf(options.to, options.fps, options.durationInFrames);
-  if (!end.ok) return end;
-  if (end.value > options.durationInFrames)
+  let startFrame = 0;
+  if (options.from !== undefined) {
+    const start = boundToFrame(options.from, options.fps);
+    if (!start.ok) return start;
+    startFrame = start.value;
+  }
+  let endFrame = options.durationInFrames;
+  if (options.to !== undefined) {
+    const end = boundToFrame(options.to, options.fps);
+    if (!end.ok) return end;
+    endFrame = end.value;
+  }
+  if (endFrame > options.durationInFrames)
     return rangeFailure(
-      `The range ends at frame ${String(end.value)} but the Composition is ${String(options.durationInFrames)} frames long.`,
+      `The range ends at frame ${String(endFrame)} but the Composition is ${String(options.durationInFrames)} frames long.`,
       'Choose --to at or before the Composition end, or drop it to render to the end.',
     );
-  if (start.value > options.durationInFrames)
+  if (startFrame > options.durationInFrames)
     return rangeFailure(
-      `The range starts at frame ${String(start.value)} but the Composition is ${String(options.durationInFrames)} frames long.`,
+      `The range starts at frame ${String(startFrame)} but the Composition is ${String(options.durationInFrames)} frames long.`,
       'Choose --from inside the Composition, or drop it to render from the start.',
     );
-  if (start.value >= end.value)
+  if (startFrame >= endFrame)
     return rangeFailure(
-      `The range starts at frame ${String(start.value)} and ends at frame ${String(end.value)}, so it holds no frames.`,
+      `The range starts at frame ${String(startFrame)} and ends at frame ${String(endFrame)}, so it holds no frames.`,
       'Choose --from before --to, leaving at least one frame in the range.',
     );
-  return { ok: true, value: { startFrame: start.value, endFrame: end.value } };
+  return { ok: true, value: { startFrame, endFrame } };
 };

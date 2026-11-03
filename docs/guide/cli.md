@@ -120,25 +120,31 @@ A decimal without a unit (`4.5`) is rejected rather than guessed. The range is h
 rounded up at both ends: the output holds exactly the frames whose presentation time lies in
 `[from, to)`, so no frame before `--from` and none at or after `--to`. The artifact is a new
 zero-based video — its frame 0 is the range's first frame — and both routes accept the range: an
-MP4 is encoded from those frames, and the frames route writes the same `frame-<n>.png` files (named
-by their Global Frame) plus a manifest whose `frameCount` and `range` describe the interval.
+MP4 is encoded from those frames, and the frames route writes the same interval as
+`frame-00000.png`, `frame-00001.png`, … plus a manifest whose `frameCount` and `range` describe it.
+File n of either route is Composition frame `startFrame + n`, which `data.range` and the manifest's
+`range` name on the original timeline.
 
 ```bash
 motion-kit render entry.tsx --out out/fix.mp4 --from 4:20 --to 4:35 --json
 ```
 
 Audio comes with the range and needs no flag: a clip already playing resumes where the range enters
-it, a declared clip end is clipped to the range, and a clip outside it is dropped. The output is
-silent until a clip starts inside the range, exactly as the original timeline sounds there.
+it, a declared clip end is clipped to the range, and a clip outside it is not an input. A
+Composition that declares audio keeps one audio stream in the artifact — silence where no declared
+clip plays, including a range that overlaps none of them — so its stream layout matches the whole
+render. Every declared `src` is still checked: one that cannot be read is `asset.load-failed` even
+when the range drops its clip.
 
 `--fps` counts the range, not the Composition: the output frame count is the ceiling of the range's
 duration times the output rate, and `--scale`, `--video-crf` and `--video-bitrate` apply unchanged.
 `data.frameCount` and `data.durationSeconds` describe the artifact, and `data.range` reports the
 original timeline interval (below).
 
-An unreadable bound is `cli.invalid-arguments` (exit 2) before a browser opens; an empty, inverted
-or out-of-Composition range is the same code and exit as soon as the Composition's frame count is
-known, before any frame is captured or output written.
+An unreadable bound is `cli.invalid-arguments` (exit 2) before a browser opens, and so is an empty
+or reversed range whose two bounds are both frames or both times. The cases that need the
+Composition — a mixed-unit empty range, or one outside it — are the same code and exit as soon as
+the Composition's frame count is known, before any frame is captured or output written.
 
 ### MP4 size, quality and frame rate
 

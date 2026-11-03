@@ -11,7 +11,13 @@ import {
 } from '../core/timeline/time.ts';
 import { DiagnosticSchema } from '../lib/diagnostic.ts';
 import { type Result } from '../lib/result.ts';
-import { parseRangeBound, resolveFrameRange, type FrameRange, type RangeBound } from './range.ts';
+import {
+  parseRangeBound,
+  resolveFrameRange,
+  checkRangeOrder,
+  type FrameRange,
+  type RangeBound,
+} from './range.ts';
 
 const unwrap = <T>(result: Result<T>): T => {
   if (!result.ok) throw new Error(result.error.message);
@@ -92,6 +98,32 @@ describe('parseRangeBound', () => {
     expect(result.error.code).toBe('cli.invalid-arguments');
     expect(result.error.hint).toContain('4:20');
     expect(result.error.hint).toContain('260s');
+  });
+});
+
+describe('checkRangeOrder', () => {
+  it.each([
+    ['10', '5'],
+    ['5', '5'],
+    ['4:20', '4:20'],
+    ['4:20', '4:10'],
+    ['2s', '1.5s'],
+  ])('rejects the empty or reversed range %s..%s without a frame rate', (from, to) => {
+    const result = checkRangeOrder({ from: boundOf(from), to: boundOf(to) });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(DiagnosticSchema.safeParse(result.error).success).toBe(true);
+    expect(result.error.code).toBe('cli.invalid-arguments');
+    expect(result.error.hint).not.toBe('');
+  });
+
+  it('leaves increasing, mixed-unit and unbounded ranges to the Composition-aware check', () => {
+    expect(checkRangeOrder({ from: boundOf('1'), to: boundOf('2') }).ok).toBe(true);
+    expect(checkRangeOrder({ from: boundOf('4:20'), to: boundOf('4:35') }).ok).toBe(true);
+    // A frame against a time needs the frame rate, so it cannot be decided here either way.
+    expect(checkRangeOrder({ from: boundOf('2s'), to: boundOf('30') }).ok).toBe(true);
+    expect(checkRangeOrder({ from: boundOf('3') }).ok).toBe(true);
+    expect(checkRangeOrder({}).ok).toBe(true);
   });
 });
 
