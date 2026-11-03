@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { renameSync, statSync } from 'node:fs';
+import { mkdirSync, renameSync, statSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { type FrameRate } from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
@@ -118,6 +119,13 @@ export const exportAudio = async (request: AudioExportRequest): Promise<AudioExp
   const tracks = withChannelCounts(resolved.value, channels.value);
   if (cancelled()) return abortedOutcome;
 
+  // The destination directory is created only here, once there is a mix to write: a Composition
+  // with no declared audio, or one whose `src` cannot be read, leaves the file system untouched.
+  try {
+    mkdirSync(dirname(output), { recursive: true });
+  } catch {
+    return { ok: false, error: [outputInvalidDiagnostic({ output, reason: 'unwritable' })] };
+  }
   const sibling = createSibling(output);
   if (!sibling.ok) return { ok: false, error: [sibling.error] };
   const temporary = sibling.value;

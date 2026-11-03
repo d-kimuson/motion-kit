@@ -510,8 +510,6 @@ human-facing logs to stderr. Every document has these fields:
 }
 ```
 
-`frame`'s single-frame `data` is flat:
-
 The `.wav` route reports the audio alone: no `width`, `height`, `fps` or `frameCount`, because the
 artifact has no frames. `trackCount` is how many declared clips the range kept and mixed (zero means
 the file is silence), and `range` is the same interval object:
@@ -534,6 +532,8 @@ the file is silence), and `range` is the same interval object:
   }
 }
 ```
+
+`frame`'s single-frame `data` is flat:
 
 ```json
 {
@@ -634,8 +634,9 @@ accessed. `location.file` and `details.output` name the path and `details.code` 
 (`EISDIR`, `EACCES`, `ENOSPC`, …). It is exit `1`, not `3`: the output path is yours to fix.
 
 `render.no-audio` is what `--out out.wav` reports for a Composition that declares no `audio`: there
-is nothing to mix, so no file is written and `location.compositionId` names the Composition. Declare
-the clips ([audio](authoring.md#audio)), or render an `.mp4` if the silence is intended.
+is nothing to mix, so nothing is written — not the file and not the directory it would need — and
+`location.compositionId` names the Composition. Declare the clips
+([audio](authoring.md#audio)), or render an `.mp4` if the silence is intended.
 
 ## Exit codes
 

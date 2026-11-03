@@ -42,9 +42,6 @@ failure arrives in about a second and no output file is created.
 
 ### `encode.ffmpeg-unsupported`
 
-_Amended for the WAV export:_ `--out out.wav` encodes no video, so it only checks the FFmpeg version
-and does not ask for `libx264`; a build without the H.264 encoder can still export audio.
-
 ```json
 {
   "code": "encode.ffmpeg-unsupported",
@@ -62,6 +59,10 @@ ffmpeg -hide_banner -encoders | grep libx264
 
 Upgrade the package; a build without `libx264` cannot encode H.264 in motion-kit's route, and there is
 no flag to choose another encoder.
+
+`--out out.wav` is the exception: it encodes no video, so it checks only the FFmpeg version and a
+build without `libx264` still exports audio. On that route the code appears only when the version is
+below 6.0, with an empty `missing` array.
 
 ### `encode.ffmpeg-failed`
 

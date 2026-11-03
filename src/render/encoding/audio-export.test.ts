@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -323,6 +323,46 @@ describe('exportAudio', () => {
     expect(pathsLeftBehind(directory)).toEqual([]);
   }, 60_000);
 
+  it('creates the destination directory only when the mix is going to be written', async () => {
+    const ffmpeg = standInFfmpeg();
+    audioFixture();
+    // No declared audio: the failure is reported and the file system is untouched, so a caller
+    // that fixes the Composition does not find a directory its failed run left behind.
+    const silentOutput = join(directory, 'nested-silent', 'mix.wav');
+    const silent = await exportAudio(
+      exportRequest({ audio: [], output: silentOutput, ffmpegPath: ffmpeg }),
+    );
+    expect(errorsOf(silent)).toMatchObject([{ code: 'render.no-audio' }]);
+    expect(existsSync(dirname(silentOutput))).toBe(false);
+
+    // An unreadable src is the same: an export that cannot run creates nothing.
+    const missingOutput = join(directory, 'nested-missing', 'mix.wav');
+    const missing = await exportAudio(
+      exportRequest({
+        audio: [{ src: 'audio/absent.wav' }],
+        output: missingOutput,
+        ffmpegPath: ffmpeg,
+        ffprobePath: join(directory, 'ffprobe'),
+      }),
+    );
+    expect(errorsOf(missing)).toMatchObject([{ code: 'asset.load-failed' }]);
+    expect(existsSync(dirname(missingOutput))).toBe(false);
+
+    // A mix that runs creates the directory its target needs.
+    standInFfprobe(2);
+    const output = join(directory, 'nested-ok', 'mix.wav');
+    const written = await exportAudio(
+      exportRequest({
+        audio: [{ src: 'audio/clip-1.wav' }],
+        output,
+        ffmpegPath: ffmpeg,
+        ffprobePath: join(directory, 'ffprobe'),
+      }),
+    );
+    expect(written).toMatchObject({ ok: true, value: { output } });
+    expect(existsSync(output)).toBe(true);
+  }, 60_000);
+
   it('reports a missing binary as encode.ffmpeg-not-found and an old one as unsupported', async () => {
     audioFixture();
     const missing = await exportAudio(
@@ -359,14 +399,18 @@ describe('exportAudio', () => {
     expect(existsSync(outputPath())).toBe(false);
   }, 60_000);
 
-  it('reports an unwritable target as encode.output-invalid and spawns no child', async () => {
+  it('reports a destination it cannot create as encode.output-invalid and spawns no child', async () => {
     const ffmpeg = standInFfmpeg();
     standInFfprobe(2);
     audioFixture();
+    // A file where the target's directory belongs: the export cannot create the destination, so
+    // it reports that observation and no child starts.
+    const blocker = join(directory, 'blocker');
+    writeFileSync(blocker, 'not a directory');
     const outcome = await exportAudio(
       exportRequest({
         audio: [{ src: 'audio/clip-1.wav' }],
-        output: join(directory, 'absent-directory', 'out.wav'),
+        output: join(blocker, 'out.wav'),
         ffmpegPath: ffmpeg,
         ffprobePath: join(directory, 'ffprobe'),
       }),

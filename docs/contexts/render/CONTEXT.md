@@ -17,7 +17,7 @@ Frames and files. render runs a Composition in Chromium through Playwright, wait
 | Reference Capture | `reference`          | The cold capture of a sample frame whose pixels and dimensions every warm history is compared against.                                                             |
 | Check Comparison  | `CheckComparison`    | Exact PNG byte identity or a bounded comparison of decoded pixels (`channelTolerance`, `maxChangedRatio`, alpha ignored).                                          |
 | Audio Track       | `AudioTrack`         | One clip a Composition declares as data (`src`, `startInFrames`, optional `endInFrames`/`offsetInFrames`/`volume`); the encoder muxes it by frame-derived seconds. |
-| Audio Export      | `exportAudio`        | The mixed audio alone, written to a WAV by one FFmpeg child that runs the encoder's own filter graph and captures no frame; `render --out out.wav`.                |
+| Audio Export      | `exportAudio`        | The Composition's mixed audio written to a WAV file instead of a video; `render --out out.wav`. It holds the same mix the MP4's audio holds, over the same range.  |
 
 TASK-157 implements supervised loading, frame transport and PNG capture over core's shared registry/provider/coordinator. Encoding and the asset acquisition API remain separate tasks.
 

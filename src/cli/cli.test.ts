@@ -1789,6 +1789,33 @@ describe('motion-kit CLI', () => {
       expect(assertValidEnvelope(result)).toMatchObject({ ok: true, data: { output } });
     }, 120_000);
 
+    it('leaves no directory behind when the export never writes', async () => {
+      const nested = join(outputRoot, 'never-written');
+      const silent = await run([
+        'render',
+        'entry-audio.tsx',
+        '--composition',
+        'silent',
+        '--out',
+        join(nested, 'mix.wav'),
+        '--json',
+      ]);
+      expect(silent.code).toBe(1);
+      expect(existsSync(nested)).toBe(false);
+      // The same for an export that fails on an asset: nothing is written, so nothing is created.
+      const missing = await run([
+        'render',
+        'entry-audio.tsx',
+        '--composition',
+        'audio-missing',
+        '--out',
+        join(nested, 'mix.wav'),
+        '--json',
+      ]);
+      expect(missing.code).toBe(1);
+      expect(existsSync(nested)).toBe(false);
+    }, 120_000);
+
     it('reports a Composition without audio as render.no-audio instead of writing silence', async () => {
       const output = join(outputRoot, 'silent.wav');
       const result = await run([
