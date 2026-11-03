@@ -30,6 +30,11 @@ declares audio.
 
 Every entry holds more than one Composition, so `--composition <id>` is always required.
 
+One more video sits beside them: `promo` (`examples/promo/`, 1920×1080, 30 fps, 900 frames) is a
+30-second promotion video for motion-kit made with motion-kit. It is a showcase, not a fifth axis, so
+it has a `promo-ci` smoke twin and no probe. Watch it with
+`node dist/cli.js preview examples/promo/entry.tsx --composition promo`.
+
 ## Commands
 
 Run from the repository root. Each line was rendered against the built package.
@@ -94,6 +99,7 @@ They reuse the real scene components — never a simplified copy.
 | `explainer-probe` | 480×270    | 30  | 30     | determinism gate                     |
 | `chart-probe`     | 480×270    | 30  | 30     | determinism gate                     |
 | `slideshow-probe` | 480×270    | 30  | 30     | determinism gate                     |
+| `promo-ci`        | 960×540    | 30  | 60     | smoke MP4 (CI)                       |
 
 ```bash
 node dist/cli.js render examples/teaser/entry.tsx --composition teaser-ci --out out/teaser-ci.mp4 --json
@@ -116,6 +122,7 @@ drawn or synthetic, and each example says which:
 | Example     | Placeholder                                                              | Real thing                                            |
 | ----------- | ------------------------------------------------------------------------ | ----------------------------------------------------- |
 | `teaser`    | Nothing — text, CSS gradients and arithmetic                             | —                                                     |
+| `promo`     | Nothing — text, inline SVG, CSS gradients and arithmetic                 | —                                                     |
 | `chart`     | Two synthetic datasets shaped like an index                              | A real series, cited on screen and in its README      |
 | `slideshow` | Eight FFmpeg `gradients`/`noise` stills, one tone bed                    | A licensed CC0 photo per slide                        |
 | `explainer` | Badge characters, a synthesised music bed and whoosh, silent voice clips | VOICEVOX voice and the two portraits the engine ships |
@@ -179,6 +186,8 @@ Each example has a README of its own beside its entry file, in a checkout of the
   the antialiasing findings.
 - `examples/slideshow/README.md` — Ken Burns, aspect switching, the dissolve arithmetic and the
   generated placeholders.
+- `examples/promo/README.md` — the storyboard, how each scene owns its half of a `TransitionSeries`
+  handoff, and why the showcase has no probe.
 
 The layout, the CI budget and the acceptance look each example is measured against are recorded in
 the repository's design notes beside the examples guide.
