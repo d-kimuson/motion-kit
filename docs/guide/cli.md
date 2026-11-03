@@ -134,6 +134,14 @@ component's props. A non-object string is `cli.invalid-arguments` (exit 2); vali
 schema is `composition.props-invalid` (exit 1), with `details.issues` carrying the Zod issues and
 their paths, and nothing is rendered. `frame` accepts the same `--props` object.
 
+The same props also decide the metadata a Composition derives from them: a definition that declares
+`resolveMetadata` reads the length, resolution or frame rate from the props
+([metadata from props](authoring.md#metadata-from-props)), so a generated script can drive the whole
+render through `--props` without writing anything into the entry. The resolved length is what the
+commands use: `render` renders exactly that many frames, `frame` rejects a `--frame` at or past it
+with `composition.props-invalid`, and `check` rejects the same sample the same way. A resolver that
+fails is the command's failure before any output exists.
+
 ### Audio has no flag
 
 The `.mp4` route muxes whatever the Composition declares in `audio`, resolving each `src` against the

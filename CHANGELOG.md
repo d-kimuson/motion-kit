@@ -8,6 +8,19 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **Metadata from props.** `defineComposition` accepts `resolveMetadata`, a callback that derives a
+  Composition's `durationInFrames` (and optionally `width`, `height` and `fps`) from its validated
+  props, with the types `CompositionMetadataInput`, `CompositionMetadataOverride` and
+  `MetadataResolver`. It runs once per mount in the page, may be asynchronous and is bounded by the
+  loading timeout, so `render`, `frame`, `check` and `preview` read the same metadata for the same
+  props: a generated script now renders with `--props` alone instead of being imported statically.
+  A missing field keeps the declaration's value, `listCompositions()` keeps reporting the
+  declaration, and invalid, thrown or timed-out resolutions stay Diagnostics
+  (`composition.duration-invalid`, `render.page-error`) with no new code. The
+  [authoring guide](docs/guide/authoring.md#metadata-from-props) shows the usage and the
+  [decision](docs/contexts/core/adr/20261103-props-driven-metadata.accepted.md) records the
+  resolution point.
+
 - **`@kimuson/motion-kit/motion`.** The Pure Motion functions are importable from the package for the
   first time: `interpolate`, `keyframes`, `easing` (the cubic, exponential and Back families plus
   `cubicBezier`) and the stateless spring (`spring`, `springState`, `springSettleTime`, `retarget`),

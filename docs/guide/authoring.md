@@ -36,15 +36,16 @@ hint, not as a crash.
 
 ### Composition fields
 
-| Field              | Type                         | Meaning                                                               |
-| ------------------ | ---------------------------- | --------------------------------------------------------------------- |
-| `id`               | `string`                     | The id `--composition` selects. Unique in the registry, non-empty.    |
-| `component`        | React component              | Receives the schema's output as props.                                |
-| `schema`           | Zod object schema            | Validates and normalizes props. Its defaults are the only defaults.   |
-| `width`, `height`  | positive integers            | The captured viewport in pixels.                                      |
-| `fps`              | `{ numerator, denominator }` | The frame rate, as a rational. Never a number, never a rounded float. |
-| `durationInFrames` | nonnegative integer          | The length of the Composition in frames.                              |
-| `audio`            | `AudioTrack[]`, optional     | Clips the `.mp4` route muxes. See [audio](#audio).                    |
+| Field              | Type                         | Meaning                                                                           |
+| ------------------ | ---------------------------- | --------------------------------------------------------------------------------- |
+| `id`               | `string`                     | The id `--composition` selects. Unique in the registry, non-empty.                |
+| `component`        | React component              | Receives the schema's output as props.                                            |
+| `schema`           | Zod object schema            | Validates and normalizes props. Its defaults are the only defaults.               |
+| `width`, `height`  | positive integers            | The captured viewport in pixels.                                                  |
+| `fps`              | `{ numerator, denominator }` | The frame rate, as a rational. Never a number, never a rounded float.             |
+| `durationInFrames` | nonnegative integer          | The length of the Composition in frames.                                          |
+| `audio`            | `AudioTrack[]`, optional     | Clips the `.mp4` route muxes. See [audio](#audio).                                |
+| `resolveMetadata`  | function, optional           | Derives metadata from the props. See [metadata from props](#metadata-from-props). |
 
 Two declarations are rejected on purpose:
 
@@ -68,6 +69,47 @@ frame, with two restrictions that come from how they cross into the page:
 
 `--props '{"title":"Ship it"}'` on the CLI overrides them for one run; fields you omit fall back to
 their schema defaults. `frame` accepts the same `--props` object for stills.
+
+### Metadata from props
+
+A generated script — synthesized audio, a transcript, a data file — often decides how long the
+video is, so the length cannot be written into the entry. `resolveMetadata` derives the metadata
+from the props: it receives the validated props (defaults applied) and the declaration, and returns
+the fields it derives. Every field it omits keeps the declared value.
+
+```tsx
+defineComposition({
+  id: 'episode',
+  component: Episode,
+  schema: z.object({ frames: z.number().int().nonnegative(), script: z.string() }),
+  width: 1920,
+  height: 1080,
+  fps: { numerator: 30, denominator: 1 },
+  durationInFrames: 1, // the baseline a list reports; the props decide the real length
+  resolveMetadata: ({ props }) => ({ ok: true, value: { durationInFrames: props.frames } }),
+});
+```
+
+```sh
+motion-kit render entry.tsx --composition episode --props "$(cat script.json)" --out out.mp4
+```
+
+- It runs **once per mount**, in the page, after the schema and before anything renders, so `render`,
+  `frame`, `check` and `preview` all read the same descriptor for the same props, and
+  `useTimeline()` reports the resolved `durationInFrames`. A renderer pool resolves once per realm,
+  so the resolver must be deterministic: same props, same metadata.
+- It may derive `durationInFrames`, `width`, `height` and `fps`. It cannot change the `id` or the
+  `audio` declarations.
+- It may be asynchronous (`async` or a promise) and is bounded by the same loading timeout as the
+  props parse. The page can `fetch` a project file but has no filesystem: to derive a duration from an
+  audio file, probe it in your own Node script and pass the number through `--props`, or fetch the
+  file and read it in the page.
+- It returns a `Result`: `{ ok: true, value: { durationInFrames: 900 } }` or
+  `{ ok: false, error: <Diagnostic> }`. An invalid duration is `composition.duration-invalid`, an
+  invalid width, height or FPS is `render.page-error`, and a resolver that throws, returns something
+  else or does not settle in time is `render.page-error` too. Nothing renders on failure.
+- `listCompositions()` keeps reporting the declared metadata, because a list has no props to resolve
+  against; treat `durationInFrames` there as the baseline.
 
 ## Time
 
