@@ -20,10 +20,13 @@
       "$ref": "#/$defs/__schema24"
     },
     {
-      "$ref": "#/$defs/__schema27"
+      "$ref": "#/$defs/__schema25"
     },
     {
       "$ref": "#/$defs/__schema28"
+    },
+    {
+      "$ref": "#/$defs/__schema29"
     }
   ],
   "allOf": [
@@ -1090,12 +1093,93 @@
         },
         "command": {
           "type": "string",
-          "const": "inspect"
+          "const": "contact-sheet"
         },
         "data": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema25"
+              "type": "object",
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "const": "contact-sheet"
+                },
+                "composition": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "output": {
+                  "$ref": "#/$defs/__schema10"
+                },
+                "width": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "height": {
+                  "$ref": "#/$defs/__schema12"
+                },
+                "columns": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "rows": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "tileWidth": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "tileHeight": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "frames": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "frame": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "timeSeconds": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "column": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "row": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": ["frame", "timeSeconds", "column", "row"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "format",
+                "composition",
+                "output",
+                "width",
+                "height",
+                "columns",
+                "rows",
+                "tileWidth",
+                "tileHeight",
+                "frames"
+              ],
+              "additionalProperties": false
             },
             {
               "type": "null"
@@ -1108,14 +1192,47 @@
     },
     "__schema25": {
       "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "ok": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "command": {
+          "type": "string",
+          "const": "inspect"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema26"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
+      "additionalProperties": false
+    },
+    "__schema26": {
+      "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/__schema26"
+        "$ref": "#/$defs/__schema27"
       }
     },
-    "__schema26": {
+    "__schema27": {
       "anyOf": [
         {
           "type": "string"
@@ -1132,7 +1249,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema26"
+            "$ref": "#/$defs/__schema27"
           }
         },
         {
@@ -1141,12 +1258,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema26"
+            "$ref": "#/$defs/__schema27"
           }
         }
       ]
     },
-    "__schema27": {
+    "__schema28": {
       "type": "object",
       "properties": {
         "schemaVersion": {
@@ -1168,7 +1285,7 @@
         "data": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema25"
+              "$ref": "#/$defs/__schema26"
             },
             {
               "type": "null"
@@ -1179,7 +1296,7 @@
       "required": ["schemaVersion", "ok", "diagnostics", "durationMs", "command", "data"],
       "additionalProperties": false
     },
-    "__schema28": {
+    "__schema29": {
       "type": "object",
       "properties": {
         "schemaVersion": {

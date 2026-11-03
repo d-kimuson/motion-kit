@@ -9,7 +9,7 @@
 | presets | Reusable scene components with Zod schemas and agent-facing metadata (typography, backgrounds, transitions, three)                                                                            | `src/presets`, `/presets`                     |
 | render  | Turning a Composition into frames and a file: browser capture, readiness barrier, media, encoding                                                                                             | `src/render`, `/render` (Node only)           |
 | preview | A human's authoring loop: the browser host page that plays, scrubs and steps a Composition with its declared audio and a Sequence/audio timeline                                              | `src/preview`, served by `motion-kit preview` |
-| agent   | What a coding agent operates: the CLI (`render`, `frame`, `docs`, `check`, `preview`; `inspect`/`validate` later), diagnostics, layout checks                                                 | `src/agent`, `src/cli`, `/agent` (Node only)  |
+| agent   | What a coding agent operates: the CLI (`render`, `frame`, `contact-sheet`, `docs`, `check`, `preview`; `inspect`/`validate` later), diagnostics, layout checks                                | `src/agent`, `src/cli`, `/agent` (Node only)  |
 
 `src/lib` holds utilities with no domain meaning (`Result`, clock abstractions) that any context may import.
 

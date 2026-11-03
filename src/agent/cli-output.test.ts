@@ -1,6 +1,7 @@
 // Exercise the package export, rather than making the contract a private deep import.
 import {
   CheckDataSchema,
+  ContactSheetDataSchema,
   DocsDataSchema,
   EnvelopeCommandSchema,
   EnvelopeSchema,
@@ -60,6 +61,21 @@ const sequenceData = {
       width: 1920,
       height: 1080,
     },
+  ],
+};
+const contactSheetData = {
+  format: 'contact-sheet',
+  composition: 'intro',
+  output: '/tmp/sheet.png',
+  width: 1320,
+  height: 360,
+  columns: 4,
+  rows: 1,
+  tileWidth: 320,
+  tileHeight: 320,
+  frames: [
+    { frame: 0, timeSeconds: 0, column: 0, row: 0 },
+    { frame: 150, timeSeconds: 5, column: 1, row: 0 },
   ],
 };
 const docsData = {
@@ -148,6 +164,7 @@ describe('CLI output v1', () => {
     ['render', wavData],
     ['frame', frameData],
     ['frame', sequenceData],
+    ['contact-sheet', contactSheetData],
     ['docs', docsData],
     ['docs', docsList],
     ['check', checkData],
@@ -179,6 +196,7 @@ describe('CLI output v1', () => {
     expect(DocsDataSchema.parse(docsData)).toEqual(docsData);
     expect(DocsDataSchema.parse(docsList)).toEqual(docsList);
     expect(CheckDataSchema.parse(checkData)).toEqual(checkData);
+    expect(ContactSheetDataSchema.parse(contactSheetData)).toEqual(contactSheetData);
   });
 
   it('requires ok to agree with every generated diagnostic list', () => {
@@ -225,6 +243,10 @@ describe('CLI output v1', () => {
     { ...base, data: frameData },
     { ...base, command: 'frame' },
     { ...base, command: 'inspect', data: [] },
+    { ...base, command: 'contact-sheet' },
+    { ...base, command: 'contact-sheet', data: { ...contactSheetData, frames: [], width: 0 } },
+    { ...base, command: 'contact-sheet', data: { ...contactSheetData, columns: 0 } },
+    { ...base, command: 'contact-sheet', data: { ...contactSheetData, tileHeight: 1.5 } },
     { ...base, data: { ...renderData, fps: 30 } },
     { ...base, data: { ...renderData, fps: { numerator: 30, denominator: 0 } } },
     { ...base, data: { ...renderData, fps: { numerator: 29.97, denominator: 1 } } },

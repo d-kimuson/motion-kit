@@ -115,6 +115,14 @@ pnpm exec motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/you/hello-video/out/still.png (1920x1080) in 962.6ms
 ```
 
+To see the whole flow without watching the video, sample it into one labelled grid — every 150th
+frame plus the last, in a single PNG an agent can read at a glance:
+
+```bash
+pnpm exec motion-kit contact-sheet entry.tsx --every 150 --out out/sheet.png
+# wrote 5 frames to /Users/you/hello-video/out/sheet.png (1320x220)
+```
+
 Add `--json` to any command to get one versioned envelope on stdout instead of its text output:
 
 ```bash
@@ -160,8 +168,8 @@ the directory you run the command in, and `render` creates the directories its o
 
 - [Getting started](guide/getting-started.md) — requirements, install, a first entry and render,
   props overrides, and the frames output.
-- [CLI](guide/cli.md) — `render`, `frame`, `check`, `preview` and `docs`, every flag, the `--json` envelope,
-  diagnostic codes, exit codes and cancellation.
+- [CLI](guide/cli.md) — `render`, `frame`, `contact-sheet`, `check`, `preview` and `docs`, every flag, the
+  `--json` envelope, diagnostic codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
 - [Three.js](guide/three.md) — `ThreeCanvas` and `CameraRig`, the peer dependencies, software WebGL,

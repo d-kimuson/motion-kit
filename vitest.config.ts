@@ -81,6 +81,8 @@ export default defineConfig({
             'src/render/render-video.test.ts',
             'src/render/capture/**/*.test.ts',
             'src/render/check/**/*.test.ts',
+            // The Contact Sheet composites captured frames in its own browser page.
+            'src/render/contact-sheet/**/*.test.ts',
             // Later contexts register reference Compositions as *.determinism.test.ts.
             'src/**/*.determinism.test.ts',
           ],

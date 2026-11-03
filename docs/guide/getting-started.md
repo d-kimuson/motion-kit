@@ -143,6 +143,28 @@ captured frame 60 to /Users/kaito/hello-video/still.png (1920x1080) in 962.6ms
 and a batch mean the same thing by `--out`. Both forms create the directories they need, as `render`
 does.
 
+## Look at the whole video at once
+
+One still proves a frame; the video's pacing and how the layout moves between scenes need more than
+that. `contact-sheet` samples the Composition into one labelled grid, so a reviewer — a person or a
+coding agent reading the image once — sees the whole flow without paying for an MP4:
+
+```bash
+pnpm exec motion-kit contact-sheet entry.tsx --every 30 --out sheet.png
+```
+
+```text
+wrote 6 frames to /Users/kaito/hello-video/sheet.png (1320x220)
+```
+
+`--every 30` takes the Composition's first frame and every 30th after it, always ending on its last
+frame; `--frame 0,60,149` names the tiles instead, and `--from`/`--to` bound the section the same way
+they do for `render`. Each tile carries its frame number and time, `--columns` and `--tile-width`
+shape the grid, and one sheet is at most 64 tiles. The image is a pure function of the Composition
+and those options: rendering it twice writes the same bytes. This is the middle of the three ways to
+check a render — a `frame` for one picture, a `contact-sheet` for the flow, the `.mp4` for the
+result itself. See [the `contact-sheet` command](cli.md#contact-sheet).
+
 ## Preview in the browser
 
 ```bash

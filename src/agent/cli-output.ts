@@ -160,6 +160,31 @@ export const PreviewDataSchema = z.strictObject({
   url: z.string().min(1),
 });
 
+/**
+ * `motion-kit contact-sheet` writes one PNG of representative frames and reports where it went, the
+ * frames it shows with their cell, and the grid those tiles were drawn into.
+ */
+export const ContactSheetDataSchema = z.strictObject({
+  format: z.literal('contact-sheet'),
+  composition: z.string().min(1),
+  output: outputPath,
+  // The whole artifact, then one tile inside it: an agent can crop a cell without decoding the PNG.
+  ...dimensions,
+  columns: z.int().positive(),
+  rows: z.int().positive(),
+  tileWidth: z.int().positive(),
+  tileHeight: z.int().positive(),
+  frames: z.array(
+    z.strictObject({
+      frame: z.int().nonnegative(),
+      timeSeconds: z.number().nonnegative(),
+      /** 0-based cell of this tile in the grid. */
+      column: z.int().nonnegative(),
+      row: z.int().nonnegative(),
+    }),
+  ),
+});
+
 const common = {
   schemaVersion: z.literal(1),
   ok: z.boolean(),
@@ -174,6 +199,7 @@ const deferredData = z.record(z.string(), z.json());
 export const CommandSchema = z.enum([
   'render',
   'frame',
+  'contact-sheet',
   'docs',
   'check',
   'preview',
@@ -195,6 +221,11 @@ export const EnvelopeSchema = z
       ...common,
       command: z.literal('preview'),
       data: PreviewDataSchema.nullable(),
+    }),
+    z.strictObject({
+      ...common,
+      command: z.literal('contact-sheet'),
+      data: ContactSheetDataSchema.nullable(),
     }),
     z.strictObject({ ...common, command: z.literal('inspect'), data: deferredData.nullable() }),
     z.strictObject({ ...common, command: z.literal('validate'), data: deferredData.nullable() }),
@@ -228,4 +259,5 @@ export type FrameData = z.infer<typeof FrameDataSchema>;
 export type DocsData = z.infer<typeof DocsDataSchema>;
 export type CheckData = z.infer<typeof CheckDataSchema>;
 export type PreviewData = z.infer<typeof PreviewDataSchema>;
+export type ContactSheetData = z.infer<typeof ContactSheetDataSchema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;

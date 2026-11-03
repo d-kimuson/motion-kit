@@ -174,8 +174,8 @@ files stay in the stylesheet:
 
 ## `render.output-unwritable`
 
-The output path refused a file the command had to access: a PNG frame, the frames `manifest`, the
-previous run's manifest, or the directory the run creates for any of them. `location.file` and
+The output path refused a file the command had to access: a PNG frame, a contact sheet, the frames
+`manifest`, the previous run's manifest, or the directory the run creates for any of them. `location.file` and
 `details.output` name the path and `details.code` carries the errno. It is exit `1`: nothing about the
 Composition is wrong, so read the code and fix the path.
 

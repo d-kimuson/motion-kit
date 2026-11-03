@@ -1,14 +1,15 @@
 # CLI
 
-`motion-kit` renders Compositions out of an entry file. It ships five commands today, `render`,
-`frame`, `check`, `preview` and `docs`, and all speak the same output contract: without `--json` they print their
+`motion-kit` renders Compositions out of an entry file. It ships six commands today, `render`,
+`frame`, `contact-sheet`, `check`, `preview` and `docs`, and all speak the same output contract:
+without `--json` they print their
 result as text, and with it exactly one versioned JSON envelope on stdout.
 
 ```text
 motion-kit <command> [args]
 ```
 
-For `render`, `frame`, `check` and `preview`, the first argument is an entry file relative to the project root
+For `render`, `frame`, `contact-sheet`, `check` and `preview`, the first argument is an entry file relative to the project root
 (the directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions`
 (see [authoring](authoring.md#the-registry)).
 
@@ -22,6 +23,11 @@ motion-kit render <entry> [--composition <id>] --out <file.mp4 | file.wav | dir>
 
 # One frame as a PNG, or several stills in a directory.
 motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> \
+  [--props <json>] [--verbose | --quiet] [--json]
+
+# One PNG holding a grid of representative frames, each labelled with its frame and time.
+motion-kit contact-sheet <entry> [--composition <id>] (--every <n> | --frame <n[,n...]>) \
+  --out <file.png> [--columns <n>] [--tile-width <px>] [--from <bound>] [--to <bound>] \
   [--props <json>] [--verbose | --quiet] [--json]
 
 # Sample frames after different capture histories and compare them.
@@ -51,7 +57,7 @@ directory of the repository are written.
 
 ## Renderer configuration
 
-`render`, `frame` and `check` accept these options. `preview` accepts only `--project-root` and `--vite-config` of them (see [`preview`](#preview)).
+`render`, `frame`, `contact-sheet` and `check` accept these options. `preview` accepts only `--project-root` and `--vite-config` of them (see [`preview`](#preview)).
 
 | Flag                   | Environment override         | Meaning                                                                                           |
 | ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -72,10 +78,12 @@ Only disable the sandbox when the CI environment requires that explicit security
 
 ## Progress and logs
 
-`render`, `frame` and `check` run a Composition in a browser, and everything those processes print is
+`render`, `frame`, `contact-sheet` and `check` run a Composition in a browser, and everything those
+processes print is
 stderr's business — stdout carries only your result. A run therefore reports three separate things
 there: its Diagnostics, the progress of a long `render`, and — only when something goes wrong — the
-last lines the page and the loading service said.
+last lines the page and the loading service said. (The Progress column is `render`'s alone: the
+sheet's captures are few enough to need no count.)
 
 | Flag        | While the command runs                | After a failure                         | Progress |
 | ----------- | ------------------------------------- | --------------------------------------- | -------- |
@@ -307,6 +315,88 @@ negative, or non-integer indices are `cli.invalid-arguments` (exit 2). A frame i
 Composition is `composition.props-invalid` (exit 1, `location.frame` naming the request). Capture
 stops at the first failure; PNGs already written remain.
 
+## `contact-sheet`
+
+`contact-sheet` writes one PNG holding a grid of representative frames, each labelled with its frame
+number and presentation time. It is the middle of the three ways to look at a Composition: one
+`frame` proves a single still, the sheet shows the whole flow — pacing, and how the layout changes
+from scene to scene — in one image, and an MP4 costs the full render.
+
+| Option               | Meaning                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `--every <n>`        | One tile every `n` frames, from the region's first frame, always ending on its last frame. Positive integer.      |
+| `--frame <n>`        | Explicit tile frames, repeatable or comma-separated; taken as written. Use this or `--every`, not both.           |
+| `--out <file.png>`   | The PNG file to write. Required, and must end in `.png`: a sheet is one image, never a directory.                 |
+| `--columns <n>`      | Tiles per row. Positive integer, default `4`, capped at the number of tiles.                                      |
+| `--tile-width <px>`  | One tile's width in sheet pixels. Positive integer, default `320`; the tile keeps the Composition's aspect ratio. |
+| `--from <bound>`     | First frame the sheet draws from, in the notation below. Defaults to the Composition start.                       |
+| `--to <bound>`       | Exclusive end of the frames the sheet draws from. Defaults to the Composition end.                                |
+| `--composition <id>` | Which Composition to sample. Required when the registry holds more than one.                                      |
+| `--props <json>`     | JSON object validated by the Composition's schema, exactly as `frame` takes it.                                   |
+| `--verbose`          | Stream the Composition's page console and the loading service's output as it arrives.                             |
+| `--quiet`            | Print no renderer log, including the one a failure would show.                                                    |
+| `--json`             | Print the envelope instead of the one-line summary.                                                               |
+
+```bash
+motion-kit contact-sheet entry.tsx --composition teaser --every 60 --out out/sheet.png --json
+# wrote 13 frames to /abs/out/sheet.png (1320x856)
+```
+
+`--every` walks the region from its first frame in steps of `n` and always ends on the region's last
+frame, so the sheet shows where the Composition starts and where it finishes; the last frame is not
+drawn twice when the walk already landed on it. `--from`/`--to` take the same notations and mean the
+same half-open interval as they do for `render`, so a section can be reviewed on its own:
+`--from 4:20 --to 4:35 --every 30`.
+
+One sheet holds at most 64 tiles and at most 16384 pixels on a side — the second is what one
+screenshot can rasterise. Both limits are `cli.invalid-arguments` (exit 2) with a hint naming the
+option that fixes them, decided once the Composition's length is known and before a frame is
+captured. Neither `--every` nor `--frame`, both of them, a step or column count that is not a
+positive integer, an `--out` that is not a `.png` path, and an empty or reversed `--from`/`--to` are
+the same code and exit before a browser opens. A `--frame` outside the Composition is
+`composition.props-invalid` (exit 1, `location.frame`), as it is for `frame` and `check`; one inside
+the Composition but outside the written `--from`/`--to` region is `cli.invalid-arguments`.
+
+The image is written once, at the end: a failed or cancelled run leaves no partial sheet, and an
+output path that refuses the write is `render.output-unwritable` (exit 1), like every other PNG the
+CLI writes. The tiles are captured in ascending frame order through one renderer, so a sheet is a
+pure function of the Composition, the frames it selected, the grid options and the Chromium build:
+run it twice and the two files are byte-identical ([the contact-sheet ADR](../contexts/agent/adr/20261104-contact-sheet.accepted.md)
+records how the grid is composited and why).
+
+`data` is a strict `format: "contact-sheet"` object: the Composition id, the absolute `output` path,
+the sheet's `width` and `height`, the grid (`columns`, `rows`), one tile's image area outside its
+label strip (`tileWidth`, `tileHeight`), and `frames` — the tile list, ascending, each with its
+`frame`, `timeSeconds` and 0-based `column`/`row`:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "contact-sheet",
+  "ok": true,
+  "data": {
+    "format": "contact-sheet",
+    "composition": "teaser",
+    "output": "/abs/out/sheet.png",
+    "width": 1320,
+    "height": 220,
+    "columns": 4,
+    "rows": 1,
+    "tileWidth": 320,
+    "tileHeight": 180,
+    "frames": [
+      { "frame": 0, "timeSeconds": 0, "column": 0, "row": 0 },
+      { "frame": 60, "timeSeconds": 2, "column": 1, "row": 0 }
+    ]
+  },
+  "diagnostics": [],
+  "durationMs": 5680.8
+}
+```
+
+A capture warning (`seek.uncontrolled`, `layout.*`) is forwarded in `diagnostics` for the frame that
+emitted it, exactly as `frame` reports it.
+
 ## `check`
 
 `check` captures sampled frames after different capture histories and compares each warm capture
@@ -514,14 +604,14 @@ the line `serving <url> (Ctrl-C to stop); ready` is. Then the process serves unt
 `--json` writes exactly one JSON document to stdout, for successes and failures alike, and moves
 human-facing logs to stderr. Every document has these fields:
 
-| Field           | Type             | Meaning                                                                                                                          |
-| --------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                              |
-| `command`       | string, nullable | `render`, `frame`, `check`, `preview`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
-| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                                          |
-| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                                        |
-| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                               |
-| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                                        |
+| Field           | Type             | Meaning                                                                                                                                           |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                                               |
+| `command`       | string, nullable | `render`, `frame`, `contact-sheet`, `check`, `preview`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
+| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                                                           |
+| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                                                         |
+| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                                                |
+| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                                                         |
 
 `render`'s `data` is a union on `format`:
 
@@ -683,8 +773,8 @@ report today:
 in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes they do not know.
 
 `render.output-unwritable` is the one domain code about your disk rather than your Composition: a PNG
-frame, the frames `manifest`, the previous run's manifest, or an output directory could not be
-accessed. `location.file` and `details.output` name the path and `details.code` carries the errno
+frame, the frames `manifest`, the previous run's manifest, a contact sheet, or an output directory
+could not be accessed. `location.file` and `details.output` name the path and `details.code` carries the errno
 (`EISDIR`, `EACCES`, `ENOSPC`, …). It is exit `1`, not `3`: the output path is yours to fix.
 
 `render.no-audio` is what `--out out.wav` reports for a Composition that declares no `audio`: there
@@ -732,7 +822,8 @@ report that, not "unknown command".
 emits **no envelope** — `--json` prints nothing at all — writes one line to stderr, and exits `128`
 plus the signal number (`130`, `143`, `129`). The `.mp4` route kills its FFmpeg child and removes the
 temporary file, leaving no target; the frames route stops before writing `manifest.json`, so any PNG
-frames already written stay and no manifest claims the sequence is complete. A second `Ctrl-C` ends
+frames already written stay and no manifest claims the sequence is complete; `contact-sheet` writes
+its image once, at the end, so a cancelled sheet leaves no partial file. A second `Ctrl-C` ends
 the process immediately with the same guarantees. `preview` is the exception after it was ready: a stop
 then is its normal end (exit `0`); see [readiness is the result](#readiness-is-the-result).
 
