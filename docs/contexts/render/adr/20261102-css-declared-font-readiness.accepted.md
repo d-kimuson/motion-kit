@@ -52,9 +52,9 @@ declare function useAsset(descriptor: FontFamilyAssetDescriptor): readonly FontF
   kinds produce.
 - Cache identity is kind, family, weight, style **and** text. Two owners in one frame may render
   different characters, and one load cannot satisfy both.
-- The requirement reports its **family** as the source. Redaction is chosen by kind: `image` and
-  `font` sources are URLs and are redacted, a `font-family` source is authored CSS and is reported
-  unchanged. `FontFace` exposes no source, so the failing subset's URL stays in the stylesheet.
+- The requirement reports its **family** as the source. Redaction is chosen by kind, and only
+  `font-family` is exempt: that source is authored CSS with nothing to strip, and every other kind,
+  including one a later version adds, is treated as a URL and redacted, so a new kind fails closed. `FontFace` exposes no source, so the failing subset's URL stays in the stylesheet.
 - The Readiness Barrier is unchanged. The registry entry is pending until the load settles, its
   attempt is a resource version, and the host re-settles or reports `asset.not-ready` as for every
   other asset. No capture path is added.
@@ -83,6 +83,13 @@ const Title = () => {
 Only the subsets the text needs are fetched, the first capture waits for them, and `useAsset` for
 every frame that shows the text is a cache hit.
 
+- A subset file that failed stays failed for the **life of the page**. A stylesheet's `@font-face` is
+  connected to the CSSOM, so a script can neither replace nor delete it, and Chromium keeps the
+  failed face in `error` after the server starts answering. The registry still starts a new attempt
+  per `retry`, and that attempt reports the same failure: the `load`-phase hint says to reload the
+  preview or start a new renderer, and that is the only recovery. A retry inside a long-lived realm
+  is therefore not a repair, which the [asset readiness
+  contract](../../core/adr/20261024-asset-readiness.accepted.md) now records.
 - A family no rule declares, or whose declared faces do not cover the text at all, fails the frame
   instead of silently capturing the fallback. A text that mixes covered and uncovered characters
   still falls back for the uncovered ones; glyph coverage is the parked Phase 2 qualification, as
@@ -98,8 +105,12 @@ load, the unicode-range selection, the returned faces and both failure phases;
 `src/render/capture/asset-readiness.test.ts` gates the Japanese subset over HTTP and asserts the
 capture happens only after it is fulfilled, that the Latin subset is never fetched, and that the next
 capture of the same frame is byte-identical; `css-font-split` in the determinism suite captures the
-same Japanese text identically across the eight traversal modes plus a sustained session.
-`node scripts/mutate-asset-readiness.ts` includes `font-family-ready-without-waiting`.
+same Japanese text identically across the eight traversal modes plus a sustained session. The
+browser test also pins the retry limit: a failed stylesheet face stays in `error`, a `retry` starts a
+second attempt (`1:failed` then `2:failed`) that reports the same `load` failure and the reload hint,
+and `registry.test.ts` pins the fail-closed redaction (an unknown kind keeps nothing) and the
+per-phase hints. `node scripts/mutate-asset-readiness.ts` includes
+`font-family-ready-without-waiting`.
 
 ## Alternatives
 
@@ -116,4 +127,5 @@ same Japanese text identically across the eight traversal modes plus a sustained
   unreadable, it duplicates font matching, and it turns a CSS-authored URL into a Diagnostic source
   the author never wrote.
 - **Report the family in a new `family` field of the asset record.** The record's `source` is already
-  the reported identity, and a kind-based redaction rule keeps the transport schema unchanged.
+  the reported identity, and a redaction rule that exempts only `font-family` keeps the transport
+  schema unchanged.

@@ -237,6 +237,9 @@ const Title = () => {
   entry is; a `<style>` element rendered inside the suspending subtree is not.
 - The returned faces are the ones that were loaded, so `faces[0].family` is the CSS family. Most
   scenes only need the wait and ignore the return value.
+- A subset file that fails to load stays failed for the life of the page: a script cannot replace a
+  stylesheet’s `@font-face`. The frame reports `asset.load-failed` (phase `load`) and the hint says
+  to reload the preview or start a new renderer; a retry in the same page fails the same way.
 
 ## Audio
 
