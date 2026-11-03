@@ -53,7 +53,8 @@ summary. The topics and their order are `index`, `getting-started`, `cli`, `auth
 command is `pnpm exec motion-kit …`, with npm `npx motion-kit …`, and with yarn `yarn motion-kit …`.
 Both that form and `node dist/cli.js …` appear below: the second is the same CLI run out of a
 checkout of this repository, after `pnpm build`, which is how the commands in the `examples/`
-directory of the repository are written.
+directory of the repository are written. The usage text the CLI prints (`--help`) names `npx @kimuson/motion-kit …`,
+which runs the same bin whether or not the package is installed.
 
 ## Renderer configuration
 

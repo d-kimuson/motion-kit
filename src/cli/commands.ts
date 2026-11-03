@@ -6,7 +6,20 @@ import { Command } from 'commander';
 // `motion-kit --out /tmp/a.png render entry.tsx --json` names `render` (agent ADR: `command` comes
 // from the first positional argument), not the path.
 
-const renderCommand = new Command('render')
+/**
+ * How the help tells a reader to run the CLI. The reader may not have the package installed, and
+ * `npx` runs its one bin (`motion-kit`) either way, so every usage line names this rather than the
+ * bare bin.
+ */
+export const cliInvocation = 'npx @kimuson/motion-kit';
+
+/** A subcommand whose `--help` usage line starts with `cliInvocation` instead of its bare name. */
+const cliCommand = (name: string): Command =>
+  new Command(name).configureHelp({
+    commandUsage: (command) => `${cliInvocation} ${command.name()} ${command.usage()}`,
+  });
+
+const renderCommand = cliCommand('render')
   .argument('<entry>')
   .option('--composition <id>')
   .requiredOption('--out <file-or-dir>')
@@ -31,7 +44,7 @@ const renderCommand = new Command('render')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-const frameCommand = new Command('frame')
+const frameCommand = cliCommand('frame')
   .argument('<entry>')
   .option('--composition <id>')
   .requiredOption(
@@ -52,7 +65,7 @@ const frameCommand = new Command('frame')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-const contactSheetCommand = new Command('contact-sheet')
+const contactSheetCommand = cliCommand('contact-sheet')
   .argument('<entry>')
   .option('--composition <id>')
   .option('--every <n>', 'a tile every n frames, from the range start, ending on its last frame')
@@ -81,7 +94,7 @@ const contactSheetCommand = new Command('contact-sheet')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-const checkCommand = new Command('check')
+const checkCommand = cliCommand('check')
   .argument('<entry>')
   .option('--composition <id>')
   .requiredOption(
@@ -116,7 +129,7 @@ const checkCommand = new Command('check')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-const previewCommand = new Command('preview')
+const previewCommand = cliCommand('preview')
   .argument('<entry>')
   .option('--composition <id>')
   .option('--props <json>')
@@ -128,7 +141,7 @@ const previewCommand = new Command('preview')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
-const docsCommand = new Command('docs')
+const docsCommand = cliCommand('docs')
   .argument('[topic]')
   .option('--list')
   .option('--json')
