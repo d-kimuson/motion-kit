@@ -6,7 +6,7 @@ import { useTimeline } from '../../timeline/hooks.ts';
 /** Props stand in for a generated script: the duration is data the entry no longer imports. */
 const schema = z.object({
   frames: z.number().int().nonnegative().default(6),
-  fail: z.enum(['reported', 'thrown']).optional(),
+  fail: z.enum(['reported', 'thrown', 'hang']).optional(),
 });
 
 const Scene = (_props: z.infer<typeof schema>) => {
@@ -42,6 +42,8 @@ export const compositions = defineCompositions([
           },
         };
       if (props.fail === 'thrown') throw new Error('generated script unavailable');
+      // A resolver that never settles, for the loading deadline of a real host.
+      if (props.fail === 'hang') return new Promise(() => {});
       return { ok: true, value: { durationInFrames: props.frames } };
     },
   }),

@@ -124,4 +124,26 @@ describe('props-derived Composition metadata', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
     expect(JSON.stringify(result)).not.toContain('generated script unavailable');
   }, 120_000);
+
+  it('reports a never-settling resolver as the metadata Diagnostic, not the host deadline', async () => {
+    const started = process.hrtime.bigint();
+    // Two phases (props, resolution) get the budget, so the page's own timer answers first.
+    const result = await createRenderer({
+      projectRoot: directory,
+      entry: 'entry.ts',
+      compositionId: 'derived',
+      props: { fail: 'hang' },
+      loadingTimeoutMs: 15_000,
+    });
+    const elapsedSeconds = Number(process.hrtime.bigint() - started) / 1e9;
+    expect(result).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    if (result.ok || !('error' in result)) throw new Error('a hung resolver must fail the mount');
+    // The page's Diagnostic names the phase; the host's backstop does not (`Loading props parse
+    // and mount timed out.`), and would have expired first before the budget accounted for it.
+    expect(result.error.message).toContain('metadata resolution');
+    expect(result.error.message).not.toContain('props parse and mount');
+    expect(result.error.hint).toContain('resolveMetadata');
+    expect(result.error.location?.compositionId).toBe('derived');
+    expect(elapsedSeconds).toBeLessThan(30);
+  }, 120_000);
 });

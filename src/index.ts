@@ -11,7 +11,6 @@ export {
   type CompositionMetadataInput,
   type CompositionMetadataOverride,
   type MetadataResolver,
-  type ResolvedCompositionMetadata,
 } from './core/composition/metadata.ts';
 /** An audio clip a Composition declares; the render muxes it onto the frame timeline. */
 export type { AudioTrack, SequenceSpan } from './lib/loading-protocol.ts';

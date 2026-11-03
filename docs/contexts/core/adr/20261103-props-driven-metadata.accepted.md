@@ -46,6 +46,8 @@ A resolver returns a **partial** override: every field it omits keeps the declar
 
 The resolver may be asynchronous. It has the mount's loading budget: a fresh, configurable timeout per mount, exactly like the props parse, and a result that lands after the deadline is ignored. A resolver promise that does not settle, a callback that throws or rejects, a return that is not a `Result`, and a failure that is not a valid `Diagnostic` are all `render.page-error`, with the message naming metadata resolution and the hint naming `resolveMetadata`; the exception text never reaches the Diagnostic.
 
+The host's own mount deadline (`src/render/loading/session.ts`) allows the mount's phases on top of that budget, because it starts before the page parses props. A host timer with the same budget would expire first and replace the page's Diagnostic with a generic `Loading props parse and mount timed out.` that names neither the phase nor the composition. The host deadline therefore stays a backstop for a page that cannot answer at all, and a hung resolver surfaces as the page's metadata Diagnostic.
+
 Validity and code mapping are the declaration's, not a new namespace:
 
 | Invalid…                                                     | Code                           |

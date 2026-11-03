@@ -99,11 +99,14 @@ motion-kit render entry.tsx --composition episode --props "$(cat script.json)" -
   `useTimeline()` reports the resolved `durationInFrames`. A renderer pool resolves once per realm,
   so the resolver must be deterministic: same props, same metadata.
 - It may derive `durationInFrames`, `width`, `height` and `fps`. It cannot change the `id` or the
-  `audio` declarations.
-- It may be asynchronous (`async` or a promise) and is bounded by the same loading timeout as the
-  props parse. The page can `fetch` a project file but has no filesystem: to derive a duration from an
-  audio file, probe it in your own Node script and pass the number through `--props`, or fetch the
-  file and read it in the page.
+  `audio` declarations. Audio clip times are **frame counts** (`startInFrames`, `endInFrames`,
+  `offsetInFrames`), so an `fps` override keeps those clips on the same frames and moves them in
+  seconds: deriving the frame rate shifts every declared clip in time, and a clip that then outlasts
+  the video is trimmed. See [audio](#audio).
+- It may be asynchronous (`async` or a promise) and gets a fresh loading timeout of its own. The page
+  can `fetch` a project file but has no filesystem: to derive a duration from an audio file, probe it
+  in your own Node script and pass the number through `--props`, or fetch the file and read it in the
+  page.
 - It returns a `Result`: `{ ok: true, value: { durationInFrames: 900 } }` or
   `{ ok: false, error: <Diagnostic> }`. An invalid duration is `composition.duration-invalid`, an
   invalid width, height or FPS is `render.page-error`, and a resolver that throws, returns something
@@ -357,7 +360,8 @@ Everything worth naming is exported from the package root: `CompositionDefinitio
 `CompositionDescriptor`, `CompositionRegistry`, `SequenceProps`, `TransitionSeriesProps`,
 `TransitionSceneProps`, `TransitionProps`, `SequenceContext`, `TimelineContext`, `AssetDescriptor`,
 `FontAssetDescriptor`, `ImageAssetDescriptor`, `AudioTrack`, `SequenceSpan`, `Diagnostic`, `DiagnosticCode`,
-`Result`, `FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`.
+`Result`, `FrameRate`, `TimelineTime`, `RationalInput`, `Seekability`, `CompositionMetadataInput`,
+`CompositionMetadataOverride`, `MetadataResolver`.
 
 `/three` names its own: `ThreeCanvas`, `ThreeCanvasProps`, `CameraRig`, `CameraRigProps`,
 `CameraPose`, `Vector3Tuple`.

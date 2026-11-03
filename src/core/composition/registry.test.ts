@@ -430,6 +430,27 @@ describe('Composition registry', () => {
     expect(prepared.frameRate.denominator).toBe(1001n);
   });
 
+  it('keeps a resolver from mutating the props the component and the receipt share', async () => {
+    const derived = unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        resolveMetadata: ({ props }) => {
+          // A resolver reads a frozen copy, so a write is a mistake it cannot make silently.
+          expect(Object.isFrozen(props)).toBe(true);
+          expect(() => Object.assign(props, { title: 'mutated' })).toThrow(/read only/i);
+          return { ok: true, value: { durationInFrames: props.title.length } };
+        },
+      }),
+    );
+    const prepared = unwrap(await derived.prepare({ title: 'Measured' }, 'v1', 1_000));
+    expect(prepared.props).toEqual({ title: 'Measured' });
+    // The component receives the schema's values, not whatever the resolver tried to write.
+    const element: unknown = prepared.render();
+    expect(isValidElement(element) ? element.props : undefined).toEqual({ title: 'Measured' });
+  });
+
   it('returns a resolver failure or an invalid override instead of mounting', async () => {
     const render = vi.fn(component);
     const failing = unwrap(

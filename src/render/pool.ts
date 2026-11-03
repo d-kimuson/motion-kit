@@ -57,6 +57,35 @@ const invalidConcurrency: Diagnostic = {
   hint: 'Use a positive integer concurrency.',
 };
 
+/** The resolved metadata every realm of one pool must agree on; audio is declared, not resolved. */
+const descriptorFields = (descriptor: LoadingDescriptor): readonly unknown[] => [
+  descriptor.id,
+  descriptor.width,
+  descriptor.height,
+  descriptor.durationInFrames,
+  descriptor.fps.numerator,
+  descriptor.fps.denominator,
+];
+
+/**
+ * Why two realms of the same props resolved different metadata, if they did. A resolver must be
+ * deterministic (core ADR: metadata from props), so a difference is a contract violation that has
+ * to fail at mount: mixing the realms would render frames of two different Compositions.
+ */
+const metadataMismatchDiagnostic = (
+  first: LoadingDescriptor,
+  other: LoadingDescriptor,
+): Diagnostic | undefined =>
+  descriptorFields(first).every((field, index) => field === descriptorFields(other)[index])
+    ? undefined
+    : {
+        code: 'render.page-error',
+        severity: 'error',
+        message: `Composition "${first.id}" resolved different metadata in two realms, so the frames would come from two different Compositions.`,
+        hint: 'Make resolveMetadata deterministic: the same props must resolve the same durationInFrames, width, height and fps in every realm.',
+        location: { compositionId: first.id },
+      };
+
 /**
  * Deals frames round-robin and yields them in frame order. Each renderer serialises its own
  * requests, so at most two frames per renderer are in flight when there are multiple renderers.
@@ -142,6 +171,16 @@ export const createRendererPool = async (
   if (failed !== undefined) {
     await Promise.all(renderers.map((renderer) => renderer.dispose()));
     return failed;
+  }
+  // A resolver that varies between realms would mix two Compositions, so fail before any capture.
+  const resolved = first.descriptor();
+  const mismatch = renderers
+    .slice(1)
+    .map((renderer) => metadataMismatchDiagnostic(resolved, renderer.descriptor()))
+    .find((diagnostic) => diagnostic !== undefined);
+  if (mismatch !== undefined) {
+    await Promise.all(renderers.map((renderer) => renderer.dispose()));
+    return { ok: false, error: mismatch };
   }
   const dispose = async (): Promise<Result<undefined>> => {
     const results = await Promise.all(renderers.map((renderer) => renderer.dispose()));

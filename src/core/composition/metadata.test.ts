@@ -5,6 +5,7 @@ import { type Result } from '../../lib/result.ts';
 import { createFrameRate, type FrameRate } from '../timeline/time.ts';
 import {
   resolveCompositionMetadata,
+  type CompositionMetadataInput,
   type CompositionMetadataOverride,
   type MetadataResolver,
 } from './metadata.ts';
@@ -77,6 +78,30 @@ describe('Composition metadata resolution', () => {
     };
     await resolve(resolver);
     expect(seen).toEqual([{ declared, props }]);
+  });
+
+  it('hands the resolver an immutable copy, not the props the component renders', async () => {
+    const input = { voice: 'audio/voice.wav', seconds: 12, nested: { value: 1 } };
+    let seen: CompositionMetadataInput<typeof input> | undefined;
+    const result = await resolveCompositionMetadata({
+      id: declared.id,
+      descriptor: declared,
+      frameRate,
+      props: input,
+      resolveMetadata: (received) => {
+        seen = received;
+        return { ok: true, value: { durationInFrames: 1 } };
+      },
+      timeoutMs: 1_000,
+    });
+    expect(result.ok).toBe(true);
+    expect(seen?.props).toEqual(input);
+    expect(seen?.props).not.toBe(input);
+    // Frozen at every level, so a write throws instead of changing the receipt's tree.
+    expect(Object.isFrozen(seen?.props)).toBe(true);
+    expect(Object.isFrozen(seen?.props.nested)).toBe(true);
+    expect(() => Object.assign(seen?.props ?? {}, { seconds: 99 })).toThrow(/read only/i);
+    expect(input).toEqual({ voice: 'audio/voice.wav', seconds: 12, nested: { value: 1 } });
   });
 
   it('awaits an asynchronous resolver and keeps no reference to its override', async () => {

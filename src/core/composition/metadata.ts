@@ -15,10 +15,12 @@ export type CompositionMetadataOverride = Readonly<{
   fps?: RationalInput;
 }>;
 
-/** What a resolver reads: the declaration's static metadata and the validated props. */
+/** What a resolver reads: the declaration's static metadata and a frozen copy of the validated props.
+ * It reads the same values the component receives, and cannot change what the component renders.
+ */
 export type CompositionMetadataInput<TProps extends object> = Readonly<{
   declared: CompositionDescriptor;
-  props: TProps;
+  props: Readonly<TProps>;
 }>;
 
 /**
@@ -79,6 +81,33 @@ const malformedFailure = (id: string) =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** A JSON value a resolver may read: the copy is frozen at every level. */
+type FrozenJson = null | boolean | number | string | readonly FrozenJson[] | FrozenJsonObject;
+type FrozenJsonObject = { readonly [key: string]: FrozenJson };
+
+/**
+ * A deep-frozen copy of a JSON value, so a resolver that mutates its props cannot change what the
+ * component renders or what the MountReceipt reports. The receipt's tree is the component's tree;
+ * parsing it once and sharing it is the point, so the resolver gets its own frozen copy instead.
+ */
+const frozenCopy = (value: unknown): FrozenJson => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value;
+  if (Array.isArray(value)) return Object.freeze(value.map((item) => frozenCopy(item)));
+  // The props were validated as JSON before this point, so a non-object here has no JSON value.
+  if (typeof value !== 'object') return null;
+  const copy: Record<string, FrozenJson> = {};
+  for (const [key, item] of Object.entries(value))
+    Object.defineProperty(copy, key, {
+      value: frozenCopy(item),
+      enumerable: true,
+      // Non-writable, so a resolver's write throws instead of silently diverging from the receipt.
+      writable: false,
+      configurable: false,
+    });
+  return Object.freeze(copy);
+};
 const isFrameCount = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const isPositiveInteger = (value: unknown): value is number =>
@@ -219,7 +248,13 @@ export const resolveCompositionMetadata = async <TProps extends object>(
   });
   const run = async (): Promise<Result<ResolvedCompositionMetadata>> => {
     try {
-      const returned: unknown = await resolveMetadata({ declared: descriptor, props });
+      // The resolver reads the values the component receives, as an immutable copy.
+      // SAFETY: the registry already validated `props` as a JSON object tree (`rebuildJson`), and
+      // `frozenCopy` rebuilds that same shape with the same values; it only removes mutability,
+      // which TypeScript cannot express on a generic parameter.
+      // oxlint-disable-next-line no-unsafe-type-assertion
+      const input = frozenCopy(props) as unknown as Readonly<TProps>;
+      const returned: unknown = await resolveMetadata({ declared: descriptor, props: input });
       return applyResult({ id, descriptor, frameRate, returned });
     } catch {
       // A thrown or rejected callback is a programmer error; its text can carry secrets.
