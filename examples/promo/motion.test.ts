@@ -1,9 +1,23 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { ease, phase, pop, revealed } from './motion.ts';
+import { ease, phase, pop, revealed, steps } from './motion.ts';
 
 const seconds = fc.double({ min: -10, max: 60, noNaN: true });
+const frame = fc.integer({ min: 0, max: 2000 });
+const rate = fc.record({
+  numerator: fc.bigInt({ min: 1n, max: 120_000n }),
+  denominator: fc.bigInt({ min: 1n, max: 1001n }),
+});
+const thirty = { numerator: 30n, denominator: 1n };
+
+// The reference: BigInt floor division (BigInt `/` truncates toward zero).
+const floorDivide = (numerator: bigint, denominator: bigint): bigint => {
+  const quotient = numerator / denominator;
+  return numerator % denominator !== 0n && numerator < 0n !== denominator < 0n
+    ? quotient - 1n
+    : quotient;
+};
 
 describe('promo motion', () => {
   it('eases between the stops and holds the end values outside them', () => {
@@ -23,20 +37,49 @@ describe('promo motion', () => {
     expect(peak).toBeLessThan(1.25);
   });
 
-  it('reveals a whole, growing number of characters that never exceeds the text', () => {
+  it('counts whole steps exactly as integer floor division does, at any rate', () => {
     fc.assert(
-      fc.property(seconds, seconds, fc.integer({ min: 0, max: 400 }), (a, b, total) => {
-        const [earlier, later] = a <= b ? [a, b] : [b, a];
-        const first = revealed(earlier, 1, 40, total);
-        const second = revealed(later, 1, 40, total);
-        expect(Number.isInteger(first)).toBe(true);
-        expect(first).toBeGreaterThanOrEqual(0);
-        expect(second).toBeLessThanOrEqual(total);
-        expect(second).toBeGreaterThanOrEqual(first);
-      }),
+      fc.property(
+        frame,
+        rate,
+        fc.integer({ min: 0, max: 10_000 }),
+        fc.integer({ min: 1, max: 5000 }),
+        (at, fps, startMs, everyMs) => {
+          const expected = floorDivide(
+            BigInt(at) * fps.denominator * 1000n - BigInt(startMs) * fps.numerator,
+            BigInt(everyMs) * fps.numerator,
+          );
+          expect(steps(at, fps, startMs, everyMs)).toBe(Number(expected));
+        },
+      ),
     );
-    expect(revealed(1, 1, 40, 100)).toBe(0);
-    expect(revealed(1.5, 1, 40, 100)).toBe(20);
+    // In seconds, `Math.floor((1.4 - 0.8) / 0.3)` is 1: the step at frame 42 would land a frame late.
+    expect(steps(42, thirty, 800, 300)).toBe(2);
+    expect(steps(41, thirty, 800, 300)).toBe(1);
+    expect(steps(0, thirty, 800, 300)).toBe(-3);
+  });
+
+  it('reveals the exact number of characters, never more than the text and never fewer than none', () => {
+    fc.assert(
+      fc.property(
+        frame,
+        rate,
+        fc.integer({ min: 0, max: 10_000 }),
+        fc.integer({ min: 1, max: 200 }),
+        fc.integer({ min: 0, max: 400 }),
+        (at, fps, startMs, perSecond, total) => {
+          const exact = floorDivide(
+            (BigInt(at) * fps.denominator * 1000n - BigInt(startMs) * fps.numerator) *
+              BigInt(perSecond),
+            1000n * fps.numerator,
+          );
+          const clamped = Math.min(total, Math.max(0, Number(exact)));
+          expect(revealed(at, fps, startMs, perSecond, total)).toBe(clamped);
+        },
+      ),
+    );
+    expect(revealed(15, thirty, 500, 40, 100)).toBe(0);
+    expect(revealed(30, thirty, 500, 40, 100)).toBe(20);
   });
 
   it('wraps time into one period', () => {

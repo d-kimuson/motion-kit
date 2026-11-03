@@ -22,7 +22,7 @@ import {
   TOKEN_COLOURS,
   VIOLET,
 } from './look.ts';
-import { ease, phase, pop } from './motion.ts';
+import { ease, phase, pop, type Rate } from './motion.ts';
 
 /** The 1920x1080 design grid, scaled to the Composition's own size so `promo-ci` draws the same
  * tree at half resolution. */
@@ -57,6 +57,14 @@ export const Stage = ({ children }: { readonly children: ReactNode }) => {
       </div>
     </div>
   );
+};
+
+/** The current Sequence's local frame as a whole number and the Composition's exact rate, for
+ * motion that steps on frame boundaries (typewriters, capture steps) rather than easing through them. */
+export const useLocalFrame = (): { readonly frame: number; readonly rate: Rate } => {
+  const { localFramePosition } = useSequence();
+  const { frameRate } = useTimeline();
+  return { frame: Math.floor(localFramePosition), rate: frameRate };
 };
 
 const formatTimecode = (seconds: number): string => {
@@ -159,18 +167,24 @@ export const Mark = ({
 );
 
 type SceneShellProps = {
-  readonly enterSeconds: number;
-  readonly exitSeconds: number;
+  /** The scene's own length and its two overlaps, in frames, as `placeScenes` gives them. */
+  readonly frames: number;
+  readonly enterFrames: number;
+  readonly exitFrames: number;
   readonly children: ReactNode;
 };
 
 /** Fades a scene in over the overlap it shares with the previous one and out over the next one.
  * `TransitionSeries` keeps both scenes mounted during an overlap, so each scene owns its half of
- * the handoff and the `Transition` itself only draws the wipe. */
-export const SceneShell = ({ enterSeconds, exitSeconds, children }: SceneShellProps) => {
-  const { time, remaining } = useSequence();
-  const enter = enterSeconds > 0 ? ease(time, [0, enterSeconds], [0, 1]) : 1;
-  const exit = exitSeconds > 0 ? ease(remaining, [0, exitSeconds], [0, 1], easing.easeInCubic) : 1;
+ * the handoff and the `Transition` itself only draws the wipe. Both fades are measured in frames, the
+ * unit the `Transition` is placed in, so they end on the same frame as the wipe at any rate. */
+export const SceneShell = ({ frames, enterFrames, exitFrames, children }: SceneShellProps) => {
+  const { localFramePosition } = useSequence();
+  const enter = enterFrames > 0 ? ease(localFramePosition, [0, enterFrames], [0, 1]) : 1;
+  const exit =
+    exitFrames > 0
+      ? ease(frames - localFramePosition, [0, exitFrames], [0, 1], easing.easeInCubic)
+      : 1;
   return (
     <div
       style={{

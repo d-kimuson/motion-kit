@@ -8,10 +8,10 @@ but no determinism probe (see [Why there is no probe](#why-there-is-no-probe)).
 
 ## Compositions
 
-| id         | Resolution | fps | Frames | Rendered by                |
-| ---------- | ---------- | --- | ------ | -------------------------- |
-| `promo`    | 1920×1080  | 30  | 900    | a local QA Check, never CI |
-| `promo-ci` | 960×540    | 30  | 60     | `promo.smoke.test.ts` (CI) |
+| id         | Resolution | fps | Frames | Rendered by                        |
+| ---------- | ---------- | --- | ------ | ---------------------------------- |
+| `promo`    | 1920×1080  | 30  | 900    | a local QA Check; six stills in CI |
+| `promo-ci` | 960×540    | 30  | 60     | `promo.smoke.test.ts` (CI)         |
 
 - Both Compositions render the **same** `PromoScene` from a storyboard in `plan.ts`. `promo` uses
   `promoStoryboard` (six scenes); `promo-ci` uses `promoCiStoryboard`, the opening scene, one handoff
@@ -98,6 +98,9 @@ pnpm test --project cli examples/promo/promo.smoke.test.ts
 The smoke test renders `promo-ci` to `out/examples/promo-ci.mp4` through `node dist/cli.js render …
 --json` and asserts the envelope and the file with `ffprobe`: 60 frames, `30/1`, 960×540, a 2.000 s
 duration and a clean FFmpeg decode.
+Because `promo-ci` reaches only the first two scenes, the same file also renders one 1920×1080 still
+of each of the six scenes of `promo` (frames 60, 170, 340, 510, 650 and 830) through `node dist/cli.js
+frame … --json`, so a scene that throws or fails to mount fails CI.
 
 ## Why there is no probe
 

@@ -30,8 +30,8 @@ import {
   PINK,
   VIOLET,
 } from './look.ts';
-import { ease, phase, pop, revealed } from './motion.ts';
-import { CodeView, codeLength, Heading, Mark, Window } from './parts.tsx';
+import { ease, phase, pop, revealed, steps } from './motion.ts';
+import { CodeView, codeLength, Heading, Mark, useLocalFrame, Window } from './parts.tsx';
 
 const Wordmark = ({ start, fontSize }: { readonly start: number; readonly fontSize: number }) => {
   const { time } = useSequence();
@@ -176,7 +176,8 @@ const BallTrack = ({
 
 export const CodeScene = () => {
   const { time } = useSequence();
-  const shown = revealed(time, 0.6, 70, codeLength(sceneCode));
+  const { frame, rate } = useLocalFrame();
+  const shown = revealed(frame, rate, 600, 70, codeLength(sceneCode));
   const editor = pop(time, 0.25);
   const preview = pop(time, 0.45);
   const looped = phase(time, 1.6) * 1.6;
@@ -244,15 +245,17 @@ const thumbLeft = (index: number): number =>
 
 export const TimeScene = () => {
   const { time } = useSequence();
-  const stepSeconds = 0.3;
-  const firstCapture = 0.8;
-  const step = Math.floor((time - firstCapture) / stepSeconds);
+  const { frame, rate } = useLocalFrame();
+  // Whole milliseconds, so the capture step is counted in integers (see `steps`).
+  const stepMs = 300;
+  const firstCaptureMs = 800;
+  const step = steps(frame, rate, firstCaptureMs, stepMs);
   const captured = new Set(CAPTURE_ORDER.slice(0, Math.max(0, Math.min(8, step + 1))));
   const current = CAPTURE_ORDER[Math.max(0, Math.min(7, step))] ?? 0;
   const previous = CAPTURE_ORDER[Math.max(0, Math.min(7, step - 1))] ?? current;
-  const jump = pop(time, firstCapture + Math.max(0, step) * stepSeconds, 420, 32);
+  const jump = pop(time, (firstCaptureMs + Math.max(0, step) * stepMs) / 1000, 420, 32);
   const cursor = thumbLeft(previous) + (thumbLeft(current) - thumbLeft(previous)) * jump;
-  const cursorShown = ease(time, [firstCapture - 0.2, firstCapture], [0, 1]);
+  const cursorShown = ease(time, [(firstCaptureMs - 200) / 1000, firstCaptureMs / 1000], [0, 1]);
   const claim = pop(time, 3.2);
   return (
     <>
@@ -515,10 +518,11 @@ export const PipelineScene = () => {
 export const AgentScene = () => {
   const { time } = useSequence();
   const terminal = pop(time, 0.2);
-  const typed = revealed(time, 0.5, 64, renderCommand.length);
+  const { frame, rate } = useLocalFrame();
+  const typed = revealed(frame, rate, 500, 64, renderCommand.length);
   const progress = ease(time, [2.0, 3.1], [0, 1], easing.linear);
   const bars = Math.round(progress * 24);
-  const envelopeLines = revealed(time, 3.25, 9, renderEnvelope.length);
+  const envelopeLines = revealed(frame, rate, 3250, 9, renderEnvelope.length);
   const envelopeShown = codeLength(renderEnvelope.slice(0, envelopeLines));
   return (
     <>

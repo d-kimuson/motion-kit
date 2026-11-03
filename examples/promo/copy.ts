@@ -70,7 +70,7 @@ export const sceneCode: readonly CodeLine[] = [
 ];
 
 export const timeFormula = 'frame(t) → pixels';
-export const timeClaim = 'Seek anywhere. Capture in any order. Same bytes.';
+export const timeClaim = 'Seek anywhere. Capture in any order. Same frame.';
 
 /** The eight traversal modes the determinism suite compares exact PNG bytes across. */
 export const determinismModes = [
@@ -87,7 +87,7 @@ export const determinismModes = [
 export const pipelineStages = [
   { title: 'React / TSX', detail: 'your scenes' },
   { title: 'Chromium', detail: 'Playwright capture' },
-  { title: 'FFmpeg', detail: 'H.264 + AAC' },
+  { title: 'FFmpeg', detail: 'H.264 encode' },
   { title: 'promo.mp4', detail: '1920×1080 · 30 fps' },
 ] as const;
 

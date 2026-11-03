@@ -33,14 +33,17 @@ export const PromoScene = ({ board }: PromoSceneProps) => {
     numerator: frames * Number(frameRate.denominator),
     denominator: Number(frameRate.numerator),
   });
-  const fps = Number(frameRate.numerator) / Number(frameRate.denominator);
 
   const children: ReactNode[] = [];
   for (const [index, scene] of placed.entries()) {
     const Scene = sceneComponents[scene.kind];
     children.push(
       <TransitionScene key={`scene-${String(index)}`} name={scene.kind} duration={at(scene.frames)}>
-        <SceneShell enterSeconds={scene.enterFrames / fps} exitSeconds={scene.exitFrames / fps}>
+        <SceneShell
+          frames={scene.frames}
+          enterFrames={scene.enterFrames}
+          exitFrames={scene.exitFrames}
+        >
           <Scene />
         </SceneShell>
       </TransitionScene>,

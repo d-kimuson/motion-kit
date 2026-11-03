@@ -1,3 +1,9 @@
+import {
+  createFrameRate,
+  createTransitionSeries,
+  frameToTime,
+  timeToFrameFloor,
+} from '@kimuson/motion-kit';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
@@ -59,6 +65,36 @@ describe('promo storyboard', () => {
           expect(scene.exitFrames).toBe(index === placed.length - 1 ? 0 : board.overlapFrames);
         }
       }),
+    );
+  });
+  it('declares the same length the core lays a TransitionSeries out to, at any rate', () => {
+    fc.assert(
+      fc.property(
+        storyboard,
+        fc.constantFrom(
+          { numerator: 30, denominator: 1 },
+          { numerator: 30000, denominator: 1001 },
+          { numerator: 24, denominator: 1 },
+          { numerator: 60, denominator: 1 },
+        ),
+        (board, input) => {
+          const rate = createFrameRate(input);
+          if (!rate.ok) throw new Error(rate.error.message);
+          // `PromoScene` places every scene and every overlap at a whole number of frames.
+          const at = (frames: number) => frameToTime(BigInt(frames), rate.value);
+          const series = createTransitionSeries(
+            board.scenes.map((scene) => at(scene.frames)),
+            board.scenes.slice(1).map(() => at(board.overlapFrames)),
+          );
+          if (!series.ok) throw new Error(series.error.message);
+          expect(timeToFrameFloor(series.value.duration, rate.value)).toBe(
+            BigInt(storyboardFrames(board)),
+          );
+          expect(
+            series.value.scenes.map((scene) => timeToFrameFloor(scene.start, rate.value)),
+          ).toEqual(placeScenes(board).map((scene) => BigInt(scene.startFrame)));
+        },
+      ),
     );
   });
 });

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { compositions as promoCompositions } from './entry.tsx';
+import { placeScenes, promoStoryboard } from './plan.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,6 +31,20 @@ const renderEnvelopeSchema = z.object({
       frameCount: z.number(),
       fps: z.object({ numerator: z.number(), denominator: z.number() }),
       durationSeconds: z.number(),
+    })
+    .nullable(),
+});
+
+const frameEnvelopeSchema = z.object({
+  schemaVersion: z.literal(1),
+  command: z.literal('frame'),
+  ok: z.boolean(),
+  diagnostics: z.array(z.unknown()),
+  data: z
+    .object({
+      frames: z.array(
+        z.object({ output: z.string(), frame: z.number(), width: z.number(), height: z.number() }),
+      ),
     })
     .nullable(),
 });
@@ -108,5 +123,50 @@ describe('promo example', () => {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(decoded).toBe('');
+  }, 120_000);
+
+  // `promo-ci` reaches only the first two scenes, so one still from each of the six scenes of the
+  // full promo proves every scene mounts and draws (the frames the README's contact sheet uses).
+  it('draws a still of every scene of the full promo', async () => {
+    const scenes = placeScenes(promoStoryboard);
+    const frames = [60, 170, 340, 510, 650, 830];
+    expect(
+      frames.map(
+        (frame) => scenes.findLast((scene) => scene.startFrame + scene.enterFrames <= frame)?.kind,
+      ),
+    ).toEqual(scenes.map((scene) => scene.kind));
+
+    const output = join(repositoryRoot, 'out', 'examples', 'promo-stills');
+    mkdirSync(output, { recursive: true });
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        cli,
+        'frame',
+        'examples/promo/entry.tsx',
+        '--composition',
+        'promo',
+        '--frame',
+        frames.join(','),
+        '--out',
+        output,
+        '--json',
+      ],
+      { cwd: repositoryRoot, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
+    );
+    const parsed: unknown = JSON.parse(stdout);
+    const envelope = frameEnvelopeSchema.parse(parsed);
+    expect(envelope).toMatchObject({ schemaVersion: 1, command: 'frame', ok: true });
+    expect(envelope.diagnostics).toEqual([]);
+    expect(envelope.data?.frames).toEqual(
+      frames.map((frame) => ({
+        output: join(output, `frame-${String(frame).padStart(5, '0')}.png`),
+        frame,
+        width: 1920,
+        height: 1080,
+      })),
+    );
+    for (const frame of envelope.data?.frames ?? [])
+      expect(statSync(frame.output).size).toBeGreaterThan(0);
   }, 120_000);
 });
