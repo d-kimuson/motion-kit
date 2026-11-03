@@ -357,6 +357,161 @@ describe('Composition registry', () => {
     expect(render).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [{ durationInFrames: -1 }, 'composition.duration-invalid'],
+    [{ fps: { numerator: 30, denominator: 0 } }, 'render.page-error'],
+    [{ width: 0 }, 'render.page-error'],
+  ] as const)('maps a malformed resolved override %j to %s', async (override, code) => {
+    const prepared = await unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        resolveMetadata: () => ({ ok: true, value: override }),
+      }),
+    ).prepare({}, 'v1', 1_000);
+    expect(prepared).toMatchObject({ ok: false, error: { code } });
+  });
+
+  it('resolves the metadata from the props for every mount without touching the declaration', async () => {
+    const values: unknown[] = [];
+    const derived = unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        resolveMetadata: ({ declared, props }) => {
+          values.push(props);
+          return {
+            ok: true,
+            value: {
+              durationInFrames:
+                Math.round(
+                  props.title.length * (declared.fps.numerator / declared.fps.denominator),
+                ) + declared.durationInFrames,
+            },
+          };
+        },
+      }),
+    );
+    // The declaration stays the props-independent metadata a list reports.
+    expect(derived.descriptor).toEqual({
+      ...metadata,
+      fps: { numerator: 30000, denominator: 1001 },
+    });
+    const short = unwrap(await derived.prepare({ title: 'Hi' }, 'v1', 1_000));
+    const long = unwrap(await derived.prepare({ title: 'Longer' }, 'v1', 1_000));
+    expect(short.descriptor.durationInFrames).toBe(210);
+    expect(long.descriptor.durationInFrames).toBe(330);
+    expect(short.descriptor).toMatchObject({ width: 1920, height: 1080, id: 'Title' });
+    expect(short.frameRate).toBe(derived.frameRate);
+    expect(values).toEqual([{ title: 'Hi' }, { title: 'Longer' }]);
+  });
+
+  it('resolves the frame rate exactly and gives the resolver the schema defaults', async () => {
+    const derived = unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        resolveMetadata: ({ props }) => ({
+          ok: true,
+          value: { fps: { numerator: 24000, denominator: 1001 }, width: props.title.length },
+        }),
+      }),
+    );
+    const prepared = unwrap(await derived.prepare({}, 'v1', 1_000));
+    expect(prepared.descriptor).toEqual({
+      ...metadata,
+      width: 5,
+      fps: { numerator: 24000, denominator: 1001 },
+    });
+    expect(prepared.frameRate.numerator).toBe(24000n);
+    expect(prepared.frameRate.denominator).toBe(1001n);
+  });
+
+  it('returns a resolver failure or an invalid override instead of mounting', async () => {
+    const render = vi.fn(component);
+    const failing = unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component: render,
+        resolveMetadata: () => ({
+          ok: false,
+          error: {
+            code: 'asset.load-failed',
+            severity: 'error',
+            message: 'The voice track could not be read.',
+            hint: 'Check the voice track path.',
+          },
+        }),
+      }),
+    );
+    expect(await failing.prepare({}, 'v1', 1_000)).toMatchObject({
+      ok: false,
+      error: { code: 'asset.load-failed', location: { compositionId: 'Title' } },
+    });
+    const invalid = unwrap(
+      defineComposition({
+        ...metadata,
+        schema,
+        component: render,
+        resolveMetadata: () => ({ ok: true, value: { durationInFrames: 1.5 } }),
+      }),
+    );
+    expect(await invalid.prepare({}, 'v1', 1_000)).toMatchObject({
+      ok: false,
+      error: { code: 'composition.duration-invalid', location: { compositionId: 'Title' } },
+    });
+    expect(render).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-function resolver at declaration', () => {
+    expect(
+      defineComposition({
+        ...metadata,
+        schema,
+        component,
+        // @ts-expect-error A resolver is a function, not a metadata object.
+        resolveMetadata: { durationInFrames: 10 },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+    // A resolver reads its own schema's output, like the component does.
+    defineComposition({
+      ...metadata,
+      schema,
+      component,
+      // @ts-expect-error Each resolver reads its own schema output.
+      resolveMetadata: ({ props }: { props: { count: number } }) => ({ ok: true, value: props }),
+    });
+  });
+
+  it('bounds the resolver with the mount loading timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const registry = unwrap(
+        defineCompositions([
+          defineComposition({
+            ...metadata,
+            schema,
+            component,
+            resolveMetadata: () => new Promise(() => {}),
+          }),
+        ]),
+      );
+      const pending = registry.mount({ revision: 'v1', loadingTimeoutMs: 20 });
+      await vi.advanceTimersByTimeAsync(20);
+      const mounted = await pending;
+      expect(mounted).toMatchObject({ ok: false, error: { code: 'render.page-error' } });
+      if (mounted.ok) throw new Error('mounted a stalled resolver');
+      expect(mounted.error.message).toContain('metadata');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lists zero duration without mounting and selects exact case-sensitive ids', async () => {
     const render = vi.fn(component);
     const registry = unwrap(

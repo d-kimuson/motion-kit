@@ -71,6 +71,27 @@ export const compositions = defineCompositions([
   defineComposition({ id: 'long', schema: z.object({}), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 120 }),
 ]);`,
   );
+  // A Composition whose frame count is data: the entry imports nothing generated, so `--props`
+  // alone decides the length (TASK-236).
+  writeFileSync(
+    join(projectRoot, 'entry-derived.tsx'),
+    `import { z } from 'zod';
+import { defineComposition, defineCompositions } from ${JSON.stringify(
+      new URL('../core/composition/registry.ts', import.meta.url).pathname,
+    )};
+const Scene = () => <div style={{ width: 32, height: 32, background: '#224488' }} />;
+const schema = z.object({ frames: z.number().int().nonnegative().default(2), fail: z.enum(['reported', 'thrown']).optional() });
+export const compositions = defineCompositions([
+  defineComposition({
+    id: 'derived', schema, component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 1,
+    resolveMetadata: ({ props }) => {
+      if (props.fail === 'reported') return { ok: false, error: { code: 'render.page-error', severity: 'error', message: 'The generated script could not be read.', hint: 'Check the generated script path.' } };
+      if (props.fail === 'thrown') throw new Error('generated script unavailable');
+      return { ok: true, value: { durationInFrames: props.frames } };
+    },
+  }),
+]);`,
+  );
   writeFileSync(
     join(projectRoot, 'entry-references.tsx'),
     `export {compositions} from ${JSON.stringify(
@@ -431,6 +452,123 @@ describe('motion-kit CLI', () => {
     });
     expect(readdirSync(directory)).toEqual(['frame-00000.png']);
   }, 60_000);
+
+  it('renders a props-derived frame count and rejects every command past it the same way', async () => {
+    // The entry imports no generated data: --props alone decides the length.
+    const directory = join(outputRoot, 'derived');
+    const rendered = await run([
+      'render',
+      'entry-derived.tsx',
+      '--composition',
+      'derived',
+      '--props',
+      '{"frames":4}',
+      '--out',
+      directory,
+      '--json',
+    ]);
+    expect(rendered.code).toBe(0);
+    const renderedEnvelope = assertValidEnvelope(rendered);
+    expect(renderedEnvelope).toMatchObject({
+      command: 'render',
+      ok: true,
+      data: { format: 'frames', frameCount: 4, durationSeconds: 4 / 30 },
+    });
+    expect(readdirSync(directory).filter((name) => name.endsWith('.png'))).toHaveLength(4);
+    const manifest: unknown = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8'));
+    expect(manifest).toMatchObject({ format: 'frames', frameCount: 4 });
+    // The same out-of-range request is the same Diagnostic from frame and check.
+    const frame = await run([
+      'frame',
+      'entry-derived.tsx',
+      '--composition',
+      'derived',
+      '--props',
+      '{"frames":4}',
+      '--frame',
+      '4',
+      '--out',
+      join(outputRoot, 'derived-past.png'),
+      '--json',
+    ]);
+    expect(frame.code).toBe(1);
+    expect(assertValidEnvelope(frame)).toMatchObject({
+      command: 'frame',
+      data: null,
+      diagnostics: [{ code: 'composition.props-invalid', location: { frame: 4 } }],
+    });
+    expect(existsSync(join(outputRoot, 'derived-past.png'))).toBe(false);
+    const check = await run([
+      'check',
+      'entry-derived.tsx',
+      '--composition',
+      'derived',
+      '--props',
+      '{"frames":4}',
+      '--frame',
+      '4',
+      '--json',
+    ]);
+    expect(check.code).toBe(1);
+    expect(assertValidEnvelope(check)).toMatchObject({
+      command: 'check',
+      data: null,
+      diagnostics: [{ code: 'composition.props-invalid', location: { frame: 4 } }],
+    });
+    // A shorter derived Composition really is shorter: the same frame is now out of range.
+    const shorter = await run([
+      'frame',
+      'entry-derived.tsx',
+      '--composition',
+      'derived',
+      '--props',
+      '{"frames":2}',
+      '--frame',
+      '2',
+      '--out',
+      join(outputRoot, 'derived-short.png'),
+      '--json',
+    ]);
+    expect(shorter.code).toBe(1);
+    expect(assertValidEnvelope(shorter).diagnostics[0]).toMatchObject({
+      code: 'composition.props-invalid',
+      location: { frame: 2 },
+    });
+  }, 120_000);
+
+  it.each(['reported', 'thrown'] as const)(
+    'exits 1 when the metadata resolver fails (%s)',
+    async (fail) => {
+      const result = await run([
+        'frame',
+        'entry-derived.tsx',
+        '--composition',
+        'derived',
+        '--props',
+        `{"fail":"${fail}"}`,
+        '--frame',
+        '0',
+        '--out',
+        join(outputRoot, `derived-${fail}.png`),
+        '--json',
+      ]);
+      expect(result.code).toBe(1);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        ok: false,
+        data: null,
+        diagnostics: [{ code: 'render.page-error', location: { compositionId: 'derived' } }],
+      });
+      expect(envelope.diagnostics[0]?.message).toBe(
+        fail === 'reported'
+          ? 'The generated script could not be read.'
+          : 'Composition metadata resolution failed.',
+      );
+      expect(result.stdout).not.toContain('generated script unavailable');
+      expect(existsSync(join(outputRoot, `derived-${fail}.png`))).toBe(false);
+    },
+    60_000,
+  );
 
   it('checks sampled frames through runCli and emits the v1 check envelope', async () => {
     const result = await runDirect([
