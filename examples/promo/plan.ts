@@ -1,7 +1,15 @@
 // The storyboard: which scene plays for how many frames, as data. Every layer reads its timing from
 // here, so the full promo and its CI twin differ only in the board they pass to `PromoScene`.
 
-export type SceneKind = 'intro' | 'code' | 'time' | 'three' | 'pipeline' | 'agent' | 'outro';
+export type SceneKind =
+  | 'intro'
+  | 'code'
+  | 'time'
+  | 'three'
+  | 'pipeline'
+  | 'agent'
+  | 'review'
+  | 'outro';
 
 export type SceneSlot = { readonly kind: SceneKind; readonly frames: number };
 
@@ -40,7 +48,7 @@ export const storyboardFrames = (board: Storyboard): number =>
   board.scenes.reduce((total, scene) => total + scene.frames, 0) -
   Math.max(0, board.scenes.length - 1) * board.overlapFrames;
 
-/** 35.6 s at 30 fps: seven scenes, six 0.4 s handoffs. */
+/** 45.7 s at 30 fps: eight scenes, seven 0.4 s handoffs. */
 export const promoStoryboard: Storyboard = {
   overlapFrames: 12,
   scenes: [
@@ -50,6 +58,7 @@ export const promoStoryboard: Storyboard = {
     { kind: 'three', frames: 180 },
     { kind: 'pipeline', frames: 150 },
     { kind: 'agent', frames: 180 },
+    { kind: 'review', frames: 315 },
     { kind: 'outro', frames: 150 },
   ],
 };

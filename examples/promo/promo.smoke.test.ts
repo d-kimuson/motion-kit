@@ -69,8 +69,8 @@ describe('promo example', () => {
     const descriptors = promoCompositions.value.listCompositions();
     expect(descriptors.map((item) => item.id)).toEqual(['promo', 'promo-ci']);
     const [full, ci] = descriptors;
-    // 1920x1080 at 30 fps for 1068 frames (35.6 s): a local QA Check, never rendered in CI.
-    expect(full).toMatchObject({ width: 1920, height: 1080, durationInFrames: 1068 });
+    // 1920x1080 at 30 fps for 1371 frames (45.7 s): a local QA Check, never rendered in CI.
+    expect(full).toMatchObject({ width: 1920, height: 1080, durationInFrames: 1371 });
     expect(full?.fps).toEqual({ numerator: 30, denominator: 1 });
     // The CI twin is half linear resolution and exactly 60 frames, per the CI policy.
     expect(ci).toMatchObject({ width: 960, height: 540, durationInFrames: 60 });
@@ -125,12 +125,12 @@ describe('promo example', () => {
     expect(decoded).toBe('');
   }, 120_000);
 
-  // `promo-ci` reaches only the first two scenes, so one still from each of the seven scenes of
+  // `promo-ci` reaches only the first two scenes, so one still from each of the eight scenes of
   // the full promo proves every scene mounts and draws (the frames the README's stills loop uses).
   // The `three` scene draws WebGL, so the CLI gets `--software-webgl`: CI's Linux runner has no GPU.
   it('draws a still of every scene of the full promo', async () => {
     const scenes = placeScenes(promoStoryboard);
-    const frames = [60, 170, 340, 520, 678, 818, 998];
+    const frames = [60, 170, 340, 520, 678, 818, 1185, 1301];
     expect(
       frames.map(
         (frame) => scenes.findLast((scene) => scene.startFrame + scene.enterFrames <= frame)?.kind,
