@@ -579,7 +579,6 @@ export const AgentScene = () => {
               borderRadius: 22,
               background: `${PANEL}e6`,
               border: `1.5px solid ${PANEL_EDGE}`,
-              borderLeft: `6px solid ${index === 1 ? PINK : index === 2 ? AMBER : CYAN}`,
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
