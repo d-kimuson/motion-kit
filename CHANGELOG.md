@@ -8,6 +8,16 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **Render part of a Composition.** `render` takes `--from` and `--to`, each a Global Frame (`3600`),
+  `mm:ss[.fff]` (`4:20`) or seconds with an `s` suffix (`260s`), and writes only that half-open
+  interval as a new zero-based video — audio included, with the declared clips trimmed and placed
+  against the range's start. The frames route accepts the same range, and the frame files keep their
+  Global Frame names. `--json` adds `data.range` (the original timeline frames and seconds) and
+  reports `frameCount`/`durationSeconds` for the artifact; the frames `manifest` carries the same
+  `range`. A bound that cannot be read, an empty or inverted range, and a range outside the
+  Composition are `cli.invalid-arguments` (exit 2) before any frame is captured. The
+  [render frame range ADR](docs/contexts/agent/adr/20261103-render-frame-range.accepted.md) records
+  the notation, the rounding and how the range combines with `--fps`, `--scale` and `--concurrency`.
 - **`@kimuson/motion-kit/motion`.** The Pure Motion functions are importable from the package for the
   first time: `interpolate`, `keyframes`, `easing` (the cubic, exponential and Back families plus
   `cubicBezier`) and the stateless spring (`spring`, `springState`, `springSettleTime`, `retarget`),

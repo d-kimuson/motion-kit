@@ -164,8 +164,9 @@ versioned envelope (`schemaVersion: 1`) to stdout; without it, each command prin
 # Capture one frame as a PNG: a `.png` target is one file, any other target a directory.
 motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
 
-# Render a whole Composition: an .mp4 target is encoded video, any other target is PNG frames.
-motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--concurrency <n>] [--json]
+# Render a Composition, or one interval of it: an .mp4 target is encoded video, any other target is PNG frames.
+motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--from <bound>] [--to <bound>] \
+  [--props <json>] [--concurrency <n>] [--json]
 
 # Sample frames after different capture histories and compare them; writes no artifact.
 motion-kit check <entry> [--composition <id>] --frame <n[,n...]> [--history <name[,name...]>] [--json]
@@ -185,6 +186,13 @@ flag.
 to half the machine's cores and must be a positive integer. A frame's bytes do not depend on which
 renderer captured it. The `.mp4` route captures JPEG (quality 95) rather than PNG, since the H.264
 encode is lossy anyway; the directory route writes PNG.
+
+`--from` and `--to` render part of the Composition: each is a Global Frame (`3600`), `mm:ss[.fff]`
+(`4:20`) or seconds with an `s` suffix (`260s`), and the interval is half-open, so the output holds
+the frames whose presentation time is in it. The artifact is a new zero-based video —
+`--from 4:20 --to 4:35` is a fifteen-second check instead of a whole render — audio included, and
+`data.range` reports the original frames and seconds. A bound that cannot be read, an empty range,
+or one outside the Composition is `cli.invalid-arguments` before any frame is captured.
 
 Encoding needs an FFmpeg 6.0+ with `libx264` on `PATH` — and, for a Composition that declares audio,
 its companion `ffprobe`, which the same install provides: motion-kit ships and downloads no binary, so

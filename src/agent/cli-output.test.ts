@@ -28,6 +28,8 @@ const renderData = {
   fps: { numerator: 30, denominator: 1 },
   frameCount: 300,
   durationSeconds: 10,
+  // The whole Composition, spelled out: a render always reports the timeline range it covers.
+  range: { startFrame: 0, endFrame: 300, startSeconds: 0, endSeconds: 10, frameCount: 300 },
 };
 const frameData = {
   output: '/tmp/intro.png',
@@ -214,6 +216,10 @@ describe('CLI output v1', () => {
     { ...base, data: { ...renderData, fps: { numerator: 29.97, denominator: 1 } } },
     { ...base, data: { ...renderData, width: 0 } },
     { ...base, data: { ...renderData, frameCount: 1.5 } },
+    { ...base, data: { ...renderData, range: undefined } },
+    { ...base, data: { ...renderData, range: { ...renderData.range, frameCount: 0 } } },
+    { ...base, data: { ...renderData, range: { ...renderData.range, startFrame: -1 } } },
+    { ...base, data: { ...renderData, range: { ...renderData.range, endSeconds: '10' } } },
     { ...base, data: { ...renderData, output: './intro.mp4' } },
     { ...base, data: { ...renderData, output: 'C:relative.mp4' } },
     { ...base, command: 'frame', data: { ...frameData, frame: 1.5 } },

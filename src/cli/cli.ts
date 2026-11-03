@@ -13,7 +13,7 @@ import {
   type PreviewData,
   type RenderData,
 } from '../agent/cli-output.ts';
-import { createFrameRate, frameToTime, toSeconds } from '../core/timeline/time.ts';
+import { createFrameRate, frameToTime, toSeconds, type FrameRate } from '../core/timeline/time.ts';
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
 import { type Result } from '../lib/result.ts';
@@ -44,6 +44,7 @@ import {
   removeOutputFile,
   writeOutputFile,
 } from './output.ts';
+import { resolveFrameRange, type FrameRange } from './range.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
 // `internal.unexpected` (exit 3); `cli.*` diagnostics are invocation errors
@@ -165,6 +166,8 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         videoBitrate: options['videoBitrate'],
         scale: options['scale'],
         fps: options['fps'],
+        from: options['from'],
+        to: options['to'],
         json,
       },
     };
@@ -472,6 +475,15 @@ const openPool = async (args: RenderArgs, config: RendererConfig, signal: AbortS
   return { ok: true as const, renderer: pool.value };
 };
 
+/** The envelope's reading of a range: its original timeline frames and their exact seconds. */
+const describeRange = (range: FrameRange, fps: FrameRate) => ({
+  startFrame: range.startFrame,
+  endFrame: range.endFrame,
+  startSeconds: toSeconds(frameToTime(BigInt(range.startFrame), fps)),
+  endSeconds: toSeconds(frameToTime(BigInt(range.endFrame), fps)),
+  frameCount: range.endFrame - range.startFrame,
+});
+
 const runRender = async (
   args: RenderArgs,
   config: RendererConfig,
@@ -494,6 +506,18 @@ const runRender = async (
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
     if (!rate.ok) return decide(failure([rate.error]));
+    // The range is resolved against the descriptor's own frame count, as soon as the Composition
+    // is known and before any frame is captured or any output touched: a range outside it is an
+    // invocation error, not a render failure (render range ADR).
+    const resolvedRange = resolveFrameRange({
+      fps: rate.value,
+      durationInFrames: descriptor.durationInFrames,
+      ...(args.from === undefined ? {} : { from: args.from }),
+      ...(args.to === undefined ? {} : { to: args.to }),
+    });
+    if (!resolvedRange.ok) return decide(failure([resolvedRange.error]));
+    const range = resolvedRange.value;
+    const rangeData = describeRange(range, rate.value);
     const outAbsolute = resolve(process.cwd(), args.out);
     // The target's extension selects the format: an `.mp4` file is encoded video, and any
     // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
@@ -561,6 +585,7 @@ const runRender = async (
         composition: renderer,
         output: outAbsolute,
         projectRoot: config.projectRoot,
+        range: { from: range.startFrame, to: range.endFrame },
         ...(fps === undefined ? {} : { fps }),
         ...(resolution === undefined ? {} : { resolution }),
         ...(args.videoCrf === undefined ? {} : { crf: args.videoCrf }),
@@ -591,6 +616,7 @@ const runRender = async (
           },
           frameCount: encoded.value.frameCount,
           durationSeconds: encoded.value.durationSeconds,
+          range: rangeData,
         },
       });
     }
@@ -616,8 +642,8 @@ const runRender = async (
     let width = descriptor.width;
     let height = descriptor.height;
     for await (const result of renderer.renderFrames({
-      from: 0,
-      to: descriptor.durationInFrames,
+      from: range.startFrame,
+      to: range.endFrame,
       signal,
     })) {
       if (!result.ok) return decide(frameFailure(result));
@@ -640,7 +666,8 @@ const runRender = async (
           width,
           height,
           fps: descriptor.fps,
-          frameCount: descriptor.durationInFrames,
+          frameCount: rangeData.frameCount,
+          range: rangeData,
           files,
         },
         null,
@@ -658,8 +685,9 @@ const runRender = async (
         width,
         height,
         fps: { numerator: descriptor.fps.numerator, denominator: descriptor.fps.denominator },
-        frameCount: descriptor.durationInFrames,
-        durationSeconds: toSeconds(frameToTime(BigInt(descriptor.durationInFrames), rate.value)),
+        frameCount: rangeData.frameCount,
+        durationSeconds: toSeconds(frameToTime(BigInt(rangeData.frameCount), rate.value)),
+        range: rangeData,
       },
     });
   } finally {

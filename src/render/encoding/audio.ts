@@ -124,6 +124,38 @@ export const resolveAudioTracks = (options: {
   return { ok: true, value: resolved };
 };
 
+/**
+ * Re-expresses the Composition's declared tracks relative to a render range, so the encoder keeps
+ * placing and trimming by frame counts and the Time Module stays the only frame→second converter.
+ *
+ * The range is `from` (inclusive) to `to` (exclusive) in Global Frames. A kept clip starts at its
+ * own timeline start minus `from`, reads its source from where the range enters it, and ends where
+ * the range leaves it; a clip with no declared end keeps playing to the source's natural end and
+ * the graph's final `atrim` ends it at the range. A clip whose declared span does not overlap the
+ * range is dropped, so the range keeps only the clips that can be heard in it.
+ */
+export const clipAudioTracks = (
+  tracks: readonly AudioTrack[],
+  range: { readonly from: number; readonly to: number },
+): readonly AudioTrack[] => {
+  const kept: AudioTrack[] = [];
+  for (const track of tracks) {
+    const start = track.startInFrames ?? 0;
+    const offset = track.offsetInFrames ?? 0;
+    const end = track.endInFrames;
+    if (start >= range.to || (end !== undefined && end <= range.from)) continue;
+    // Frames of this clip the range cut off its head; the source resumes after exactly those.
+    const headCut = Math.max(0, range.from - start);
+    kept.push({
+      ...track,
+      startInFrames: Math.max(start, range.from) - range.from,
+      offsetInFrames: offset + headCut,
+      ...(end === undefined ? {} : { endInFrames: Math.min(end, range.to) - range.from }),
+    });
+  }
+  return kept;
+};
+
 /** One `-i` per declared track, in declaration order; input index `i + 1` is track `i`. */
 export const audioInputArguments = (tracks: readonly ResolvedAudioTrack[]): string[] =>
   tracks.flatMap((track) => ['-i', track.source]);

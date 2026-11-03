@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { previewFpsSchema } from '../preview/query.ts';
 import { checkHistories, type CheckHistory } from '../render/check/history.ts';
 import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
+import { parseRangeBound } from './range.ts';
 
 // The argument contract is schema-first: commander only tokenizes argv, and
 // these schemas validate and normalize every command invocation. The closed
@@ -27,6 +28,19 @@ const entry = z.string().min(1);
 const composition = z.string().min(1).optional();
 const out = z.string().min(1);
 const json = z.boolean();
+
+// A render range end is a Global Frame (`260`), mm:ss[.fff] (`4:20`, `4:20.5`) or seconds with an
+// `s` suffix (`260s`); the notation decides the unit, and the Time Module converts it later.
+const rangeBound = (option: string) =>
+  z.string().transform((text, context) => {
+    const parsed = parseRangeBound(text);
+    if (parsed.ok) return parsed.value;
+    context.addIssue({
+      code: 'custom',
+      message: `${option}: ${parsed.error.message} ${parsed.error.hint ?? ''}`.trim(),
+    });
+    return z.NEVER;
+  });
 const rendererConfig = {
   projectRoot: z.string().optional(),
   viteConfig: z.string().optional(),
@@ -65,6 +79,9 @@ export const RenderArgsSchema = z.strictObject({
       'Use --fps with a positive decimal or numerator/denominator.',
     )
     .optional(),
+  /** Half-open range of the Composition to render; the whole Composition when both are omitted. */
+  from: rangeBound('--from').optional(),
+  to: rangeBound('--to').optional(),
   json,
 });
 
