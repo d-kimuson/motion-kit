@@ -1225,6 +1225,362 @@ describe('motion-kit CLI', () => {
     }
   }, 60_000);
 
+  describe('contact-sheet', () => {
+    /** The PNG's own dimensions, read from the IHDR chunk of the file it wrote. */
+    const pngSize = (path: string) => {
+      const header = readFileSync(path).subarray(16, 24);
+      const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+      return { width: view.getUint32(0), height: view.getUint32(4) };
+    };
+
+    it('writes one labelled grid of representative frames with the v1 envelope', async () => {
+      const output = join(outputRoot, 'contact-sheet.png');
+      const result = await run([
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--every',
+        '2',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        schemaVersion: 1,
+        command: 'contact-sheet',
+        ok: true,
+        diagnostics: [],
+        data: {
+          format: 'contact-sheet',
+          composition: 'one',
+          output,
+          width: 1320,
+          height: 360,
+          columns: 4,
+          rows: 1,
+          tileWidth: 320,
+          tileHeight: 320,
+        },
+      });
+      if (envelope.command !== 'contact-sheet') throw new Error('expected a contact-sheet');
+      const data = envelope.data;
+      if (data === null) throw new Error('contact-sheet data missing');
+      // Every second frame, plus the Composition's last frame, in one row: the numbers an agent
+      // reads to know which tile is which frame without opening the picture.
+      expect(data.frames.map(({ frame, column, row }) => [frame, column, row])).toEqual([
+        [0, 0, 0],
+        [2, 1, 0],
+        [4, 2, 0],
+        [5, 3, 0],
+      ]);
+      for (const item of data.frames)
+        expect(item.timeSeconds).toBeCloseTo((item.frame * 1001) / 30000, 9);
+      expect(pngSize(output)).toEqual({ width: 1320, height: 360 });
+    }, 120_000);
+
+    it('produces the same bytes for the same frames on a second run', async () => {
+      // The frames are a pure function of time and the sheet page is a pure function of them, so a
+      // second invocation of the same argv has to write the same PNG, not merely a similar one.
+      const output = join(outputRoot, 'contact-sheet-determinism.png');
+      const argv = [
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--every',
+        '3',
+        '--tile-width',
+        '128',
+        '--out',
+        output,
+        '--json',
+      ];
+      expect((await run(argv)).code).toBe(0);
+      const first = readFileSync(output);
+      expect((await run(argv)).code).toBe(0);
+      const second = readFileSync(output);
+      expect(first.equals(second)).toBe(true);
+      expect(pngSize(output)).toEqual({ width: 396, height: 146 });
+    }, 180_000);
+
+    it('takes an explicit frame list and the range it is bounded to', async () => {
+      const output = join(outputRoot, 'contact-sheet-frames.png');
+      const result = await run([
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '1,3',
+        '--from',
+        '1',
+        '--to',
+        '4',
+        '--columns',
+        '2',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      const envelope = assertValidEnvelope(result);
+      if (envelope.command !== 'contact-sheet') throw new Error('expected a contact-sheet');
+      const data = envelope.data;
+      if (data === null) throw new Error('contact-sheet data missing');
+      expect(data.frames.map(({ frame, column, row }) => [frame, column, row])).toEqual([
+        [1, 0, 0],
+        [3, 1, 0],
+      ]);
+      expect(data).toMatchObject({ columns: 2, rows: 1, tileWidth: 320, tileHeight: 320 });
+    }, 120_000);
+
+    it.each([
+      ['no frame choice at all', []],
+      ['--every with --frame', ['--every', '2', '--frame', '1']],
+      ['a zero step', ['--every', '0']],
+      ['a zero column count', ['--every', '2', '--columns', '0']],
+      ['a fractional tile width', ['--every', '2', '--tile-width', '10.5']],
+    ])(
+      'rejects %s as cli.invalid-arguments before it opens a browser',
+      async (_case, argv) => {
+        const empty = mkdtempSync(join(tmpdir(), 'motion-kit-no-browser-'));
+        try {
+          const result = await run(
+            [
+              'contact-sheet',
+              'entry.ts',
+              '--composition',
+              'one',
+              '--out',
+              join(outputRoot, 'contact-sheet-invalid.png'),
+              ...argv,
+              '--json',
+            ],
+            { PLAYWRIGHT_BROWSERS_PATH: empty },
+          );
+          expect(result.code).toBe(2);
+          expect(assertValidEnvelope(result)).toMatchObject({
+            command: 'contact-sheet',
+            ok: false,
+            data: null,
+            diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+          });
+        } finally {
+          rmSync(empty, { recursive: true, force: true });
+        }
+      },
+      60_000,
+    );
+
+    it('refuses a --out that is not a .png path, and a frame the range leaves out', async () => {
+      const notPng = await run([
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--every',
+        '2',
+        '--out',
+        join(outputRoot, 'contact-sheet.jpg'),
+        '--json',
+      ]);
+      expect(notPng.code).toBe(2);
+      expect(assertValidEnvelope(notPng)).toMatchObject({
+        command: 'contact-sheet',
+        diagnostics: [{ code: 'cli.invalid-arguments' }],
+      });
+      expect(notPng.envelope?.diagnostics[0]?.hint).toContain('.png');
+
+      const outsideRange = await run([
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '5',
+        '--from',
+        '0',
+        '--to',
+        '4',
+        '--out',
+        join(outputRoot, 'contact-sheet-outside-range.png'),
+        '--json',
+      ]);
+      expect(outsideRange.code).toBe(2);
+      expect(assertValidEnvelope(outsideRange)).toMatchObject({
+        command: 'contact-sheet',
+        diagnostics: [{ code: 'cli.invalid-arguments' }],
+      });
+    }, 60_000);
+
+    it('reports a frame past the Composition the same way frame and check do', async () => {
+      const result = await run([
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--frame',
+        '6',
+        '--out',
+        join(outputRoot, 'contact-sheet-past-end.png'),
+        '--json',
+      ]);
+      expect(result.code).toBe(1);
+      expect(assertValidEnvelope(result)).toMatchObject({
+        command: 'contact-sheet',
+        ok: false,
+        data: null,
+        diagnostics: [
+          { code: 'composition.props-invalid', severity: 'error', location: { frame: 6 } },
+        ],
+      });
+    }, 60_000);
+
+    it('leaves no output directory behind when the invocation is refused', async () => {
+      // A registry of two without --composition, and a frame past the Composition: the first is
+      // refused as soon as the registry mounts, the second once the descriptor is known. Neither
+      // may leave the directory a successful run would write into.
+      for (const { argv, code } of [
+        { argv: ['--every', '2'], code: 2 },
+        { argv: ['--composition', 'one', '--frame', '6'], code: 1 },
+      ]) {
+        const directory = join(outputRoot, 'contact-sheet-refused-directory');
+        const output = join(directory, 'sheet.png');
+        const result = await run(['contact-sheet', 'entry.ts', ...argv, '--out', output, '--json']);
+        expect(result.code).toBe(code);
+        expect(assertValidEnvelope(result).ok).toBe(false);
+        expect(existsSync(directory)).toBe(false);
+      }
+    }, 90_000);
+
+    it('refuses a sheet with more tiles than one sheet holds, naming --every', async () => {
+      const directory = join(outputRoot, 'contact-sheet-too-many-tiles');
+      const output = join(directory, 'sheet.png');
+      // 120 frames with a tile each: more than the 64 tiles one sheet holds, decided from the
+      // descriptor and before any capture.
+      const result = await run([
+        'contact-sheet',
+        'entry-long.tsx',
+        '--composition',
+        'long',
+        '--every',
+        '1',
+        '--out',
+        output,
+        '--json',
+      ]);
+      expect(result.code).toBe(2);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        command: 'contact-sheet',
+        ok: false,
+        data: null,
+        diagnostics: [{ code: 'cli.invalid-arguments', severity: 'error' }],
+      });
+      expect(envelope.diagnostics[0]?.message).toContain('64');
+      expect(envelope.diagnostics[0]?.hint).toContain('--every');
+      expect(existsSync(directory)).toBe(false);
+    }, 90_000);
+
+    it('leaves neither a partial image nor a directory when the run is cancelled', async () => {
+      const directory = join(outputRoot, 'contact-sheet-cancelled');
+      const output = join(directory, 'sheet.png');
+      // 41 tiles of a 480 px grid: seconds of captures, so the signal lands mid-run on any machine.
+      const child = spawnRun(
+        [
+          'contact-sheet',
+          'entry-long.tsx',
+          '--composition',
+          'long',
+          '--every',
+          '3',
+          '--tile-width',
+          '480',
+          '--out',
+          output,
+          '--json',
+        ],
+        {},
+      );
+      const pid = child.child.pid ?? -1;
+      try {
+        // The loading service is the first process the run owns, so waiting for it proves the CLI
+        // is past startup — its signal handlers are installed before any renderer opens — and the
+        // captures are what the stop interrupts.
+        await waitFor(() => childrenOf(pid).length > 0, 60_000, 'the loading service');
+        expectStillRunning(pid, 'the SIGINT is sent');
+        child.child.kill('SIGINT');
+        expect(await child.exit).toEqual({ code: 130, signal: null });
+        expect(child.stdout()).toBe('');
+        expect(abortedLines(child.stderr())).toEqual([
+          'contact-sheet aborted; no output was produced',
+        ]);
+        expect(existsSync(output)).toBe(false);
+        expect(existsSync(directory)).toBe(false);
+      } finally {
+        if (child.child.exitCode === null && child.child.signalCode === null)
+          child.child.kill('SIGKILL');
+      }
+    }, 120_000);
+
+    it('reports an output the sheet cannot be written to as render.output-unwritable', async () => {
+      const directory = join(outputRoot, 'contact-sheet-read-only');
+      mkdirSync(directory, { recursive: true });
+      chmodSync(directory, 0o500);
+      const output = join(directory, 'sheet.png');
+      try {
+        const result = await run([
+          'contact-sheet',
+          'entry.ts',
+          '--composition',
+          'one',
+          '--every',
+          '2',
+          '--out',
+          output,
+          '--json',
+        ]);
+        expect(result.code).toBe(1);
+        expect(assertValidEnvelope(result)).toMatchObject({
+          command: 'contact-sheet',
+          ok: false,
+          data: null,
+          diagnostics: [
+            {
+              code: 'render.output-unwritable',
+              severity: 'error',
+              location: { file: output },
+              details: { output, code: 'EACCES' },
+            },
+          ],
+        });
+        expect(readdirSync(directory)).toEqual([]);
+      } finally {
+        chmodSync(directory, 0o700);
+      }
+    }, 120_000);
+
+    it('prints a one-line summary without --json', async () => {
+      const output = join(outputRoot, 'contact-sheet-human.png');
+      const result = await run([
+        'contact-sheet',
+        'entry.ts',
+        '--composition',
+        'one',
+        '--every',
+        '3',
+        '--out',
+        output,
+      ]);
+      expect(result.code).toBe(0);
+      expect(result.envelope).toBeUndefined();
+      expect(result.stdout).toContain(`wrote 3 frames to ${output} (992x360)`);
+    }, 120_000);
+  });
+
   it('renders a frame sequence and manifest with the v1 render envelope', async () => {
     const output = join(outputRoot, 'frames');
     const result = await run([
@@ -2789,25 +3145,25 @@ export const compositions = defineCompositions([
       argv: ['--json'],
       command: null,
       message: 'Command-line arguments are invalid.',
-      hint: 'Pass one of the known subcommands: render, frame, docs, check, preview, inspect, validate.',
+      hint: 'Pass one of the known subcommands: render, frame, contact-sheet, docs, check, preview, inspect, validate.',
     },
     {
       argv: ['unknown', '--json'],
       command: null,
       message: 'Command-line arguments are invalid.',
-      hint: 'Pass one of the known subcommands: render, frame, docs, check, preview, inspect, validate.',
+      hint: 'Pass one of the known subcommands: render, frame, contact-sheet, docs, check, preview, inspect, validate.',
     },
     {
       argv: ['inspect', '--json'],
       command: 'inspect',
       message: 'The inspect subcommand is not implemented yet.',
-      hint: 'inspect is not implemented yet; use render, frame, docs, check or preview.',
+      hint: 'inspect is not implemented yet; use render, frame, contact-sheet, docs, check or preview.',
     },
     {
       argv: ['validate', '--json'],
       command: 'validate',
       message: 'The validate subcommand is not implemented yet.',
-      hint: 'validate is not implemented yet; use render, frame, docs, check or preview.',
+      hint: 'validate is not implemented yet; use render, frame, contact-sheet, docs, check or preview.',
     },
     {
       argv: ['render', '--bogus', '--json'],

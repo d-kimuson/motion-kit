@@ -11,11 +11,30 @@ const concat = (parts: readonly Uint8Array[]): Uint8Array => {
   return result;
 };
 
+/** The CRC-32 table the PNG chunk trailer needs; a browser refuses a chunk without it. */
+const crcTable = Array.from({ length: 256 }, (_unused, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+
+const crc32 = (bytes: Uint8Array): number => {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = (crc >>> 8) ^ (crcTable[(crc ^ byte) & 0xff] ?? 0);
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
 const chunk = (type: string, data: Uint8Array): Uint8Array => {
+  // length, type, data and the CRC of the type and data: a decoder that checks it, such as a
+  // browser handed this PNG in a data URL, rejects anything shorter.
   const result = new Uint8Array(12 + data.length);
   new DataView(result.buffer).setUint32(0, data.length);
   for (let index = 0; index < 4; index += 1) result[4 + index] = type.charCodeAt(index);
   result.set(data, 8);
+  new DataView(result.buffer).setUint32(
+    8 + data.length,
+    crc32(result.subarray(4, 8 + data.length)),
+  );
   return result;
 };
 

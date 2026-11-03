@@ -227,6 +227,69 @@ const changedRatio = z
   .pipe(z.number().min(0).max(1))
   .optional();
 
+export const ContactSheetArgsSchema = z
+  .strictObject({
+    command: z.literal('contact-sheet'),
+    ...rendererConfig,
+    ...log,
+    entry,
+    composition,
+    /** One PNG file: a grid is never a directory of images. */
+    out,
+    /** A tile every `every` frames from the range start, always ending on its last frame. */
+    every: z
+      .string()
+      .regex(/^\d+$/u, 'Use --every with a positive integer, for example 150.')
+      .transform(Number)
+      .pipe(z.int().positive())
+      .optional(),
+    /** Explicit tiles, sorted ascending by argv; one of `--every` or `--frame` is required. */
+    frame: optionalFrameList,
+    columns: z
+      .string()
+      .regex(/^\d+$/u, 'Use --columns with a positive integer, for example 4.')
+      .transform(Number)
+      .pipe(z.int().positive())
+      .optional(),
+    tileWidth: z
+      .string()
+      .regex(/^\d+$/u, 'Use --tile-width with a positive integer, for example 320.')
+      .transform(Number)
+      .pipe(z.int().positive())
+      .optional(),
+    from: rangeBound('--from').optional(),
+    to: rangeBound('--to').optional(),
+    props: propsText.optional(),
+    json,
+  })
+  .superRefine((args, context) => {
+    if (args.every === undefined && args.frame === undefined)
+      context.addIssue({
+        code: 'custom',
+        path: ['every'],
+        message: 'Choose the frames the sheet shows with --every <n> or --frame <n>[,<n>...].',
+      });
+    if (args.every !== undefined && args.frame !== undefined)
+      context.addIssue({
+        code: 'custom',
+        path: ['frame'],
+        message: 'Use --every or --frame, not both.',
+      });
+    if (!args.out.toLowerCase().endsWith('.png'))
+      context.addIssue({
+        code: 'custom',
+        path: ['out'],
+        message: 'Use --out with a .png path; a contact sheet is one PNG file.',
+      });
+    const order = checkRangeOrder({ from: args.from, to: args.to });
+    if (!order.ok)
+      context.addIssue({
+        code: 'custom',
+        path: ['from'],
+        message: `${order.error.message} ${order.error.hint ?? ''}`.trim(),
+      });
+  });
+
 export const CheckArgsSchema = z
   .strictObject({
     command: z.literal('check'),
@@ -302,6 +365,7 @@ export const PreviewArgsSchema = z.strictObject({
 export const CliArgsSchema = z.discriminatedUnion('command', [
   RenderArgsSchema,
   FrameArgsSchema,
+  ContactSheetArgsSchema,
   DocsArgsSchema,
   CheckArgsSchema,
   PreviewArgsSchema,
@@ -309,6 +373,7 @@ export const CliArgsSchema = z.discriminatedUnion('command', [
 
 export type RenderArgs = z.infer<typeof RenderArgsSchema>;
 export type FrameArgs = z.infer<typeof FrameArgsSchema>;
+export type ContactSheetArgs = z.infer<typeof ContactSheetArgsSchema>;
 export type DocsArgs = z.infer<typeof DocsArgsSchema>;
 export type CheckArgs = z.infer<typeof CheckArgsSchema>;
 export type PreviewArgs = z.infer<typeof PreviewArgsSchema>;

@@ -7,6 +7,7 @@ import {
   EnvelopeSchema,
   type CheckData,
   type Command as EnvelopeCommand,
+  type ContactSheetData,
   type DocsData,
   type Envelope,
   type FrameData,
@@ -23,6 +24,7 @@ import { defaultPreviewFps, previewQueryString } from '../preview/query.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { checkComposition, checkReportPassed } from '../render/check/check.ts';
 import { defaultCheckComparison, type CheckComparison } from '../render/check/compare.ts';
+import { renderContactSheet } from '../render/contact-sheet/sheet.ts';
 import { exportAudio } from '../render/encoding/audio-export.ts';
 import { audioRangeFor } from '../render/encoding/audio.ts';
 import { outputInvalidDiagnostic } from '../render/encoding/diagnostics.ts';
@@ -33,6 +35,7 @@ import { createRenderer, type RenderOutcome } from '../render/renderer.ts';
 import {
   CliArgsSchema,
   type CheckArgs,
+  type ContactSheetArgs,
   type DocsArgs,
   type FrameArgs,
   type PreviewArgs,
@@ -95,10 +98,11 @@ type ParseOutcome =
     }
   | { readonly kind: 'args'; readonly value: Record<string, unknown> };
 
-type CommandName = 'render' | 'frame' | 'docs' | 'check' | 'preview';
+type CommandName = 'render' | 'frame' | 'contact-sheet' | 'docs' | 'check' | 'preview';
 const isCommandName = (value: unknown): value is CommandName =>
   value === 'render' ||
   value === 'frame' ||
+  value === 'contact-sheet' ||
   value === 'docs' ||
   value === 'check' ||
   value === 'preview';
@@ -122,7 +126,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
     return diagnostic(
       'cli.invalid-arguments',
       `The ${command} subcommand is not implemented yet.`,
-      `${command} is not implemented yet; use render, frame, docs, check or preview.`,
+      `${command} is not implemented yet; use render, frame, contact-sheet, docs, check or preview.`,
     );
   return invalidArguments(`Put the subcommand first: motion-kit ${command} [options].`);
 };
@@ -218,6 +222,29 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         json,
       },
     };
+  if (command === 'contact-sheet')
+    return {
+      kind: 'args',
+      value: {
+        command,
+        entry: parsable.processedArgs[0],
+        composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
+        log: logFlagsOf(options),
+        out: options['out'],
+        every: options['every'],
+        frame: options['frame'],
+        columns: options['columns'],
+        tileWidth: options['tileWidth'],
+        from: options['from'],
+        to: options['to'],
+        props: options['props'],
+        json,
+      },
+    };
   if (command === 'preview')
     return {
       kind: 'args',
@@ -245,7 +272,7 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
 };
 
 /** Every outcome that becomes an envelope: a result, or a failure carrying Diagnostics. */
-type EnvelopeData = RenderData | FrameData | DocsData | CheckData | PreviewData;
+type EnvelopeData = RenderData | FrameData | ContactSheetData | DocsData | CheckData | PreviewData;
 type EnvelopeOutcome =
   | {
       readonly ok: true;
@@ -389,7 +416,7 @@ const prepareFramesManifest = (outAbsolute: string): Result<boolean> => {
  * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
  * as it arrived, while the mp4 and wav routes remove their temporary sibling and leave no target.
  */
-const abortedLine = (args: RenderArgs | FrameArgs | CheckArgs): string =>
+const abortedLine = (args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs): string =>
   args.command === 'check'
     ? 'check aborted; no evidence was produced'
     : args.command === 'render' && !isVideoOutput(args.out) && !isAudioOutput(args.out)
@@ -451,7 +478,7 @@ const frameTarget = (outAbsolute: string, frameCount: number): Result<FrameTarge
 };
 
 const rendererOptions = (
-  args: RenderArgs | FrameArgs | CheckArgs,
+  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs,
   config: RendererConfig,
   signal: AbortSignal,
 ) => {
@@ -468,7 +495,7 @@ const rendererOptions = (
 
 /** One frame needs one realm; a whole range is dealt across `--concurrency` of them. */
 const openRenderer = async (
-  args: RenderArgs | FrameArgs,
+  args: RenderArgs | FrameArgs | ContactSheetArgs,
   config: RendererConfig,
   signal: AbortSignal,
 ) => {
@@ -869,6 +896,81 @@ const runFrame = async (
   }
 };
 
+/**
+ * The Contact Sheet route: one PNG of representative frames (agent ADR: contact-sheet). Everything
+ * that can be refused before a renderer exists is refused here — the target's extension with the
+ * rest of argv — so a bad invocation costs no browser. The sheet's own grid, frame choice and range
+ * are decided against the mounted descriptor, which is the only place the resolved length lives, and
+ * the output path is touched only at the write, so a refused or cancelled run leaves nothing on disk.
+ */
+const runContactSheet = async (
+  args: ContactSheetArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
+  if (signal.aborted) return abortedOutcome;
+  const outAbsolute = resolve(process.cwd(), args.out);
+  const opened = await openRenderer(args, config, signal);
+  if (!opened.ok) return opened.outcome;
+  const renderer = opened.renderer;
+  try {
+    const descriptor = renderer.descriptor();
+    const rate = createFrameRate(descriptor.fps);
+    if (!rate.ok) return decide(failure([rate.error]));
+    // The region is resolved against the descriptor's frame count, as `render` resolves its range,
+    // so `--from`/`--to` mean the same interval in both commands.
+    const resolved = resolveFrameRange({
+      fps: rate.value,
+      durationInFrames: descriptor.durationInFrames,
+      ...(args.from === undefined ? {} : { from: args.from }),
+      ...(args.to === undefined ? {} : { to: args.to }),
+    });
+    if (!resolved.ok) return decide(failure([resolved.error]));
+    const sheet = await renderContactSheet({
+      renderer,
+      spec:
+        args.every === undefined
+          ? { kind: 'frames', frames: args.frame ?? [] }
+          : { kind: 'every', every: args.every },
+      region: resolved.value,
+      rate: rate.value,
+      columns: args.columns,
+      tileWidth: args.tileWidth,
+      browser: { disableSandbox: config.disableSandbox, softwareWebGL: config.softwareWebGL },
+      signal,
+    });
+    if (!sheet.ok) return decide('aborted' in sheet ? abortedOutcome : failure([...sheet.error]));
+    // The file system is touched only once the image exists: the directory is created and the PNG
+    // written here, after selection, layout, every capture and the composite, so a refused,
+    // failed or cancelled run leaves no directory and no partial image behind (agent CONTEXT.md).
+    const created = createOutputDirectory(dirname(outAbsolute));
+    if (!created.ok) return decide(failure([created.error]));
+    const written = writeOutputFile(outAbsolute, sheet.value.image);
+    if (!written.ok) return decide(failure([written.error]));
+    const data: ContactSheetData = {
+      output: outAbsolute,
+      format: 'contact-sheet',
+      composition: sheet.value.composition.id,
+      width: sheet.value.layout.width,
+      height: sheet.value.layout.height,
+      columns: sheet.value.layout.columns,
+      rows: sheet.value.layout.rows,
+      tileWidth: sheet.value.layout.tileWidth,
+      tileHeight: sheet.value.layout.tileHeight,
+      frames: sheet.value.frames.map(({ frame, timeSeconds, column, row }) => ({
+        frame,
+        timeSeconds,
+        column,
+        row,
+      })),
+    };
+    return decide({ ok: true, diagnostics: [...sheet.value.diagnostics], data });
+  } finally {
+    await renderer.dispose();
+  }
+};
+
 const defaultPixels = (): Extract<CheckComparison, { mode: 'pixels' }> => {
   if (defaultCheckComparison.mode !== 'pixels')
     throw new Error('The default check comparison must compare pixels.');
@@ -994,6 +1096,10 @@ const summarize = (envelope: Envelope): string => {
     }
     if (envelope.command === 'preview')
       return `serving ${envelope.data.url} (Ctrl-C to stop); ready`;
+    if (envelope.command === 'contact-sheet') {
+      const data = envelope.data;
+      return `wrote ${String(data.frames.length)} frames to ${data.output} (${String(data.width)}x${String(data.height)})`;
+    }
     if (envelope.command === 'frame') {
       const data = envelope.data;
       return data.format === 'png'
@@ -1139,20 +1245,49 @@ export type RunCliOptions = {
   readonly signal?: AbortSignal;
 };
 
+/**
+ * The routes a parsed invocation picks between once the renderer configuration is resolved. `docs`
+ * and `preview` ended before this point, so the switch covers every remaining command: each one
+ * owns its own refusal order and its own envelope data.
+ */
+const runDecided = async (
+  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
+  switch (args.command) {
+    case 'render':
+      return runRender(args, config, signal, decide);
+    case 'frame':
+      return runFrame(args, config, signal, decide);
+    case 'contact-sheet':
+      return runContactSheet(args, config, signal, decide);
+    case 'check':
+      return runCheck(args, config, signal, decide);
+    default:
+      // Unreachable: `docs` and `preview` return before this point and the union has no other
+      // member, so a route missing here is a programmer error rather than a caller's failure.
+      throw new Error('The command has no route.');
+  }
+};
+
 const usageText = `${[
   'Usage: motion-kit <command> [args]',
   '',
   'Commands:',
-  '  check         sample frames for determinism (requires --frame <n>)',
-  '  docs [topic]  print a shipped guide; --list names the topics',
-  '  frame         capture one or more frames to PNG',
-  "  preview       serve a browser preview with playback, scrubbing and the clips' audio",
-  '  render        render a Composition to an MP4 (--out file.mp4), PNG frames (--out dir) or',
-  '                the mixed audio alone (--out audio.wav), with --concurrency <n> renderers',
-  '                capturing at once (default: half the cores)',
+  '  check          sample frames for determinism (requires --frame <n>)',
+  '  contact-sheet  one PNG grid of representative frames (--every <n> or --frame <n>)',
+  '  docs [topic]   print a shipped guide; --list names the topics',
+  '  frame          capture one or more frames to PNG',
+  "  preview        serve a browser preview with playback, scrubbing and the clips' audio",
+  '  render         render a Composition to an MP4 (--out file.mp4), PNG frames (--out dir) or',
+  '                 the mixed audio alone (--out audio.wav), with --concurrency <n> renderers',
+  '                 capturing at once (default: half the cores)',
   '',
   'Examples:',
   '  motion-kit render entry.tsx --out out.mp4',
+  '  motion-kit contact-sheet entry.tsx --every 150 --out sheet.png --json',
   '  motion-kit check entry.tsx --frame 1,4 --history pool --json',
   '  motion-kit preview entry.tsx --composition intro',
   '  motion-kit docs getting-started',
@@ -1252,12 +1387,7 @@ export const runCli = async (
   };
   try {
     try {
-      outcome =
-        args.command === 'render'
-          ? await runRender(args, config.value, signal, decide)
-          : args.command === 'frame'
-            ? await runFrame(args, config.value, signal, decide)
-            : await runCheck(args, config.value, signal, decide);
+      outcome = await runDecided(args, config.value, signal, decide);
     } catch (error) {
       if (error instanceof Error && error.stack !== undefined)
         process.stderr.write(`${error.stack}\n`);

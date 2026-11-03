@@ -52,6 +52,35 @@ const frameCommand = new Command('frame')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
+const contactSheetCommand = new Command('contact-sheet')
+  .argument('<entry>')
+  .option('--composition <id>')
+  .option('--every <n>', 'a tile every n frames, from the range start, ending on its last frame')
+  .option(
+    '--frame <n>',
+    'explicit frame indices, repeatable or comma-separated',
+    (value: string, previous: string[]) => [...previous, value],
+    [],
+  )
+  .requiredOption('--out <file.png>', 'the PNG file the grid of tiles is written to')
+  .option('--columns <n>', 'tiles per row (default: 4, capped at the tile count)')
+  .option('--tile-width <px>', 'one tile\u2019s width in sheet pixels (default: 320)')
+  .option(
+    '--from <frame-or-time>',
+    'first frame the sheet draws from: a Global Frame, mm:ss[.fff] or <seconds>s',
+  )
+  .option('--to <frame-or-time>', 'exclusive end of the frames the sheet draws from')
+  .option('--props <json>')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--software-webgl')
+  .option('--disable-sandbox')
+  .option('--verbose', 'stream the page and loading-service output instead of holding it back')
+  .option('--quiet', 'hide the renderer log')
+  .option('--json')
+  .exitOverride()
+  .configureOutput({ outputError: () => {} });
+
 const checkCommand = new Command('check')
   .argument('<entry>')
   .option('--composition <id>')
@@ -107,10 +136,11 @@ const docsCommand = new Command('docs')
   .configureOutput({ outputError: () => {} });
 
 export const commands: Readonly<
-  Record<'render' | 'frame' | 'docs' | 'check' | 'preview', Command>
+  Record<'render' | 'frame' | 'contact-sheet' | 'docs' | 'check' | 'preview', Command>
 > = {
   render: renderCommand,
   frame: frameCommand,
+  'contact-sheet': contactSheetCommand,
   docs: docsCommand,
   check: checkCommand,
   preview: previewCommand,
