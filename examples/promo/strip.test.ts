@@ -8,6 +8,7 @@ import {
   cardArrival,
   cardLift,
   cardRest,
+  playheadShown,
   playheadX,
 } from './strip.ts';
 
@@ -60,8 +61,14 @@ describe('promo strip', () => {
     );
   });
 
-  it('lands every card before the playhead starts to move', () => {
-    for (const index of cards) expect(cardArrival(index)).toBeLessThan(1.1 - 0.3);
+  it("starts every card's drop before the playhead shows, and lifts nothing until it does", () => {
+    for (const index of cards) expect(cardArrival(index)).toBeLessThan(0.8);
+    fc.assert(
+      fc.property(card, fc.double({ min: -10, max: 0.8, noNaN: true }), (index, time) => {
+        expect(playheadShown(time)).toBe(0);
+        expect(cardLift(index, time)).toBe(0);
+      }),
+    );
   });
 
   it('keeps the camera above the strip and in front of it, looking at the playhead side', () => {
@@ -70,7 +77,7 @@ describe('promo strip', () => {
         const { position, lookAt } = cameraPose(time);
         expect(position[1]).toBeGreaterThan(1);
         expect(position[2]).toBeGreaterThan(0);
-        expect(lookAt[0]).toBeCloseTo(playheadX(time) * 0.8, 9);
+        expect(lookAt[0]).toBeCloseTo(playheadX(time), 9);
         expect(cameraPose(time)).toEqual(cameraPose(time));
       }),
     );

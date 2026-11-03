@@ -16,6 +16,7 @@ import {
   cardArrival,
   cardLift,
   cardRest,
+  playheadShown,
   playheadX,
 } from './strip.ts';
 
@@ -99,7 +100,7 @@ const Card = ({ index, time }: { readonly index: number; readonly time: number }
 
 /** The playhead: a glowing upright that sweeps the strip, on a rail under the cards. */
 const Playhead = ({ time }: { readonly time: number }) => {
-  const shown = ease(time, [0.8, 1.1], [0, 1]);
+  const shown = playheadShown(time);
   const first = cardRest(0)[0];
   const last = cardRest(CARD_COUNT - 1)[0];
   return (

@@ -24,7 +24,7 @@ export const headings = {
 } as const;
 
 /** The chips under the 3D scene: what draws it, and what it promises. */
-export const threeCaption = ['<ThreeCanvas>', '<CameraRig>', 'seekable like the DOM'] as const;
+export const threeCaption = ['<ThreeCanvas>', '<CameraRig>', 'no useFrame'] as const;
 
 /** The scene the code panel types, and the preview next to it runs. */
 export const sceneCode: readonly CodeLine[] = [

@@ -23,18 +23,22 @@ export const cardRest = (index: number): Vector3 => {
   return [offset * SPACING, 0, -BEND * offset * offset];
 };
 
+/** How visible the playhead is, 0 to 1: it fades in over the first card just before it moves. */
+export const playheadShown = (time: number): number => ease(time, [0.8, 1.1], [0, 1]);
+
 /** The playhead's x: it waits, sweeps the strip from the first card to the last, then holds. */
 export const playheadX = (time: number): number =>
   ease(time, [1.1, 5.1], [cardRest(0)[0], cardRest(CARD_COUNT - 1)[0]], easing.linear);
 
 /** How lifted card `index` is, 0 to 1: a card rises as the playhead nears it and settles as it
- * passes, so one card at a time is pulled out of the strip. */
+ * passes, so one card at a time is pulled out of the strip. Nothing lifts before the playhead shows. */
 export const cardLift = (index: number, time: number): number => {
   const distance = Math.abs(playheadX(time) - cardRest(index)[0]) / SPACING;
-  return Math.max(0, 1 - distance) ** 2;
+  return Math.max(0, 1 - distance) ** 2 * playheadShown(time);
 };
 
-/** Every card arrives before the playhead starts: card `index` drops in at `0.25 + index * 0.06` s. */
+/** Card `index` starts to drop in at `0.25 + index * 0.06` s, so every drop starts before the
+ * playhead shows; the last ones settle while the playhead is still at the far end. */
 export const cardArrival = (index: number): number => 0.25 + index * 0.06;
 
 export type Pose = { readonly position: Vector3; readonly lookAt: Vector3; readonly fov: number };
@@ -46,7 +50,7 @@ export const cameraPose = (time: number): Pose => {
   const angle = -0.58 + travel * 0.9;
   const radius = 6.4 - travel * 0.9;
   const height = 1.2 + travel * 1.0;
-  const target = playheadX(time) * 0.8;
+  const target = playheadX(time);
   return {
     position: [target + Math.sin(angle) * radius, height, Math.cos(angle) * radius],
     lookAt: [target, -0.2, 0],
