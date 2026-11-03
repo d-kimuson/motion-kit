@@ -31,6 +31,16 @@ const renderData = {
   // The whole Composition, spelled out: a render always reports the timeline range it covers.
   range: { startFrame: 0, endFrame: 300, startSeconds: 0, endSeconds: 10, frameCount: 300 },
 };
+const wavData = {
+  output: '/tmp/intro.wav',
+  format: 'wav',
+  sampleRate: 48_000,
+  channels: 2,
+  bitDepth: 16,
+  durationSeconds: 10,
+  trackCount: 2,
+  range: { startFrame: 0, endFrame: 300, startSeconds: 0, endSeconds: 10, frameCount: 300 },
+};
 const frameData = {
   output: '/tmp/intro.png',
   format: 'png',
@@ -135,6 +145,7 @@ describe('CLI output v1', () => {
 
   it.each([
     ['render', renderData],
+    ['render', wavData],
     ['frame', frameData],
     ['frame', sequenceData],
     ['docs', docsData],
@@ -156,10 +167,13 @@ describe('CLI output v1', () => {
 
   it('infers command-specific data from the envelope', () => {
     const parsed: Envelope = EnvelopeSchema.parse(base);
-    expect(parsed.command === 'render' && parsed.data?.fps).toEqual({
-      numerator: 30,
-      denominator: 1,
-    });
+    expect(parsed.command === 'render' && parsed.data?.format === 'mp4' && parsed.data.fps).toEqual(
+      {
+        numerator: 30,
+        denominator: 1,
+      },
+    );
+    expect(RenderDataSchema.parse(wavData)).toEqual(wavData);
     expect(RenderDataSchema.parse(renderData)).toEqual(renderData);
     expect(FrameDataSchema.parse(frameData)).toEqual(frameData);
     expect(DocsDataSchema.parse(docsData)).toEqual(docsData);

@@ -6,20 +6,22 @@ const outputPath = z
   .string()
   .regex(/^(?:\/|[a-zA-Z]:[\\/]|\\\\[^\\]+\\[^\\]+(?:\\|$))/, 'Expected an absolute output path');
 const dimensions = { width: z.int().positive(), height: z.int().positive() };
+const range = z.strictObject({
+  /** Global Frames on the Composition's timeline: `startFrame` inclusive, `endFrame` exclusive. */
+  startFrame: z.int().nonnegative(),
+  endFrame: z.int().positive(),
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().nonnegative(),
+  /** `endFrame - startFrame`: the Composition frames the artifact covers. */
+  frameCount: z.int().positive(),
+});
+
 const videoShape = {
   ...dimensions,
   fps: z.strictObject({ numerator: z.int().positive(), denominator: z.int().positive() }),
   frameCount: z.int().nonnegative(),
   durationSeconds: z.number().nonnegative(),
-  range: z.strictObject({
-    /** Global Frames on the Composition's timeline: `startFrame` inclusive, `endFrame` exclusive. */
-    startFrame: z.int().nonnegative(),
-    endFrame: z.int().positive(),
-    startSeconds: z.number().nonnegative(),
-    endSeconds: z.number().nonnegative(),
-    /** `endFrame - startFrame`: the Composition frames the artifact covers. */
-    frameCount: z.int().positive(),
-  }),
+  range,
 };
 
 // Encoding is TASK-150/159; until it lands, `render` honestly produces a frame
@@ -36,6 +38,19 @@ export const RenderDataSchema = z.discriminatedUnion('format', [
     format: z.literal('frames'),
     manifest: outputPath,
     ...videoShape,
+  }),
+  // The mixed audio alone: an `.wav` target exports the Composition's declared tracks without
+  // capturing a frame, so it reports the PCM shape and the artifact's range rather than frames.
+  z.strictObject({
+    output: outputPath,
+    format: z.literal('wav'),
+    sampleRate: z.int().positive(),
+    channels: z.int().positive(),
+    bitDepth: z.int().positive(),
+    durationSeconds: z.number().nonnegative(),
+    /** Clips the range kept and mixed; zero means the artifact is silence. */
+    trackCount: z.int().nonnegative(),
+    range,
   }),
 ]);
 

@@ -21,6 +21,8 @@ import { defaultPreviewFps, previewQueryString } from '../preview/query.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { checkComposition, checkReportPassed } from '../render/check/check.ts';
 import { defaultCheckComparison, type CheckComparison } from '../render/check/compare.ts';
+import { exportAudio } from '../render/encoding/audio-export.ts';
+import { audioRangeFor } from '../render/encoding/audio.ts';
 import { outputInvalidDiagnostic } from '../render/encoding/diagnostics.ts';
 import { openPreviewSession } from '../render/loading/preview-session.ts';
 import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
@@ -334,8 +336,10 @@ const frameFailure = (result: Extract<FrameCaptureResult, { ok: false }>): Comma
       ? failure([...result.error])
       : failure([internalUnexpected()]);
 
-/** The one format rule: an .mp4 target is encoded video; every other target is a PNG directory. */
+/** The one format rule: an .mp4 target is encoded video, a .wav target the mixed audio alone, and
+ * every other target is a PNG directory. */
 const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() === '.mp4';
+const isAudioOutput = (path: string): boolean => extname(path).toLowerCase() === '.wav';
 
 /**
  * Invalidates the previous completion receipt before this run can write its first PNG. The
@@ -374,12 +378,12 @@ const prepareFramesManifest = (outAbsolute: string): Result<boolean> => {
 /**
  * The aborted line is the caller's only signal, so it says what the route actually left behind
  * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
- * as it arrived, while the mp4 route removes its temporary sibling and leaves no target.
+ * as it arrived, while the mp4 and wav routes remove their temporary sibling and leave no target.
  */
 const abortedLine = (args: RenderArgs | FrameArgs | CheckArgs): string =>
   args.command === 'check'
     ? 'check aborted; no evidence was produced'
-    : args.command === 'render' && !isVideoOutput(args.out)
+    : args.command === 'render' && !isVideoOutput(args.out) && !isAudioOutput(args.out)
       ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
       : args.command === 'frame' && args.frame.length > 1
         ? `frame aborted; any PNG frames already written remain in ${args.out}`
@@ -454,7 +458,11 @@ const rendererOptions = (
 };
 
 /** One frame needs one realm; a whole range is dealt across `--concurrency` of them. */
-const openRenderer = async (args: FrameArgs, config: RendererConfig, signal: AbortSignal) => {
+const openRenderer = async (
+  args: RenderArgs | FrameArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+) => {
   const options = rendererOptions(args, config, signal);
   if (options === undefined)
     return { ok: false as const, outcome: failure([entryNotFound(args.entry)]) };
@@ -499,7 +507,19 @@ const runRender = async (
     [args.videoCrf, args.videoBitrate, args.scale, args.fps].some((value) => value !== undefined)
   )
     return failure([invalidArguments('Video options require an .mp4 output path.')]);
-  const opened = await openPool(args, config, signal);
+  const outAbsolute = resolve(process.cwd(), args.out);
+  // The extension selects the format before anything opens, so an audio export spends no frame
+  // capture and needs one realm instead of the pool the video and frames routes capture with.
+  const audioOnly = isAudioOutput(outAbsolute);
+  if (audioOnly && args.concurrency !== undefined)
+    return failure([
+      invalidArguments(
+        'Use --concurrency with video or frame output; an audio export mounts one renderer and captures no frame.',
+      ),
+    ]);
+  const opened = audioOnly
+    ? await openRenderer(args, config, signal)
+    : await openPool(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
   try {
@@ -518,7 +538,43 @@ const runRender = async (
     if (!resolvedRange.ok) return decide(failure([resolvedRange.error]));
     const range = resolvedRange.value;
     const rangeData = describeRange(range, rate.value);
-    const outAbsolute = resolve(process.cwd(), args.out);
+    // An `.wav` target exports the Composition's declared audio alone: one FFmpeg child runs the
+    // encoder's own mix graph, and no frame is captured (audio export ADR).
+    if (audioOnly) {
+      const exported = await exportAudio({
+        compositionId: descriptor.id,
+        audio: descriptor.audio ?? [],
+        projectRoot: config.projectRoot,
+        rate: rate.value,
+        // The same range rule the MP4's audio reads, so both artifacts hold the same mix.
+        range: audioRangeFor({
+          range: { from: range.startFrame, to: range.endFrame },
+          durationInFrames: descriptor.durationInFrames,
+        }),
+        durationSeconds: toSeconds(
+          frameToTime(BigInt(range.endFrame - range.startFrame), rate.value),
+        ),
+        output: outAbsolute,
+        signal,
+      });
+      if (!exported.ok)
+        return decide('aborted' in exported ? abortedOutcome : failure([...exported.error]));
+      return decide({
+        ok: true,
+        // No frame is captured, so there is no per-frame warning to forward.
+        diagnostics: [],
+        data: {
+          output: exported.value.output,
+          format: 'wav',
+          sampleRate: exported.value.sampleRate,
+          channels: exported.value.channels,
+          bitDepth: exported.value.bitDepth,
+          durationSeconds: exported.value.durationSeconds,
+          trackCount: exported.value.trackCount,
+          range: rangeData,
+        },
+      });
+    }
     // The target's extension selects the format: an `.mp4` file is encoded video, and any
     // other `--out` stays the PNG frame sequence in that directory (agent CONTEXT.md).
     if (isVideoOutput(outAbsolute)) {
@@ -879,6 +935,9 @@ const summarize = (envelope: Envelope): string => {
   if (envelope.ok && envelope.data !== null) {
     if (envelope.command === 'render') {
       const data = envelope.data;
+      // The audio route writes one file and reports no frame count or resolution.
+      if (data.format === 'wav')
+        return `exported ${data.durationSeconds.toFixed(3)}s of audio (${String(data.trackCount)} clips) to ${data.output}`;
       const verb = data.format === 'mp4' ? 'encoded' : 'rendered';
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
       return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
@@ -1038,8 +1097,9 @@ const usageText = `${[
   '  docs [topic]  print a shipped guide; --list names the topics',
   '  frame         capture one or more frames to PNG',
   "  preview       serve a browser preview with playback, scrubbing and the clips' audio",
-  '  render        render a Composition to an MP4 (--out file.mp4) or to PNG frames (--out dir),',
-  '                with --concurrency <n> renderers capturing at once (default: half the cores)',
+  '  render        render a Composition to an MP4 (--out file.mp4), PNG frames (--out dir) or',
+  '                the mixed audio alone (--out audio.wav), with --concurrency <n> renderers',
+  '                capturing at once (default: half the cores)',
   '',
   'Examples:',
   '  motion-kit render entry.tsx --out out.mp4',

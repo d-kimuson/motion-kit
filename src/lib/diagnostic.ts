@@ -15,6 +15,7 @@ export const DiagnosticCodeSchema = z.enum([
   'render.frame-timeout',
   'render.page-error',
   'render.output-unwritable',
+  'render.no-audio',
   'encode.ffmpeg-not-found',
   'encode.ffmpeg-unsupported',
   'encode.ffmpeg-failed',
