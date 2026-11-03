@@ -20,8 +20,9 @@ Nothing here is shipped in the npm package (`package.json#files` is `dist` only)
 
 ## Beyond the four targets
 
-`promo` (`examples/promo/`) is a 30-second promotion video for motion-kit itself, made with
-motion-kit: six scenes in one `TransitionSeries`, 1920×1080 at 30 fps for 900 frames. It adds no new
+`promo` (`examples/promo/`) is a 36-second promotion video for motion-kit itself, made with
+motion-kit: seven scenes in one `TransitionSeries`, one of them a Three.js scene on `/three`, 1920×1080
+at 30 fps for 1068 frames. It adds no new
 axis, so it carries a `promo-ci` smoke Composition but no determinism probe; its README says why.
 
 ## The short Compositions

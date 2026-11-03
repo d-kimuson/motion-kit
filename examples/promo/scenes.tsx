@@ -32,6 +32,7 @@ import {
 } from './look.ts';
 import { ease, phase, pop, revealed, steps } from './motion.ts';
 import { CodeView, codeLength, Heading, Mark, useLocalFrame, Window } from './parts.tsx';
+import { promoFrames } from './plan.ts';
 
 const Wordmark = ({ start, fontSize }: { readonly start: number; readonly fontSize: number }) => {
   const { time } = useSequence();
@@ -400,7 +401,7 @@ const nodeLeft = (index: number): number =>
 
 export const PipelineScene = () => {
   const { time } = useSequence();
-  const encoded = Math.round(ease(time, [1.4, 4.2], [0, 900], easing.easeInOutCubic));
+  const encoded = Math.round(ease(time, [1.4, 4.2], [0, promoFrames], easing.easeInOutCubic));
   const footer = ease(time, [1.4, 1.9], [0, 1]);
   return (
     <>
@@ -494,7 +495,8 @@ export const PipelineScene = () => {
         >
           <span>{pipelineSteps}</span>
           <span>
-            <span style={{ color: CHALK }}>{String(encoded).padStart(3, ' ')}</span> / 900 frames
+            <span style={{ color: CHALK }}>{String(encoded).padStart(4, ' ')}</span> / {promoFrames}{' '}
+            frames
           </span>
         </div>
         <div
@@ -507,7 +509,11 @@ export const PipelineScene = () => {
           }}
         >
           <div
-            style={{ width: `${(encoded / 900) * 100}%`, height: 12, background: ACCENT_GRADIENT }}
+            style={{
+              width: `${(encoded / promoFrames) * 100}%`,
+              height: 12,
+              background: ACCENT_GRADIENT,
+            }}
           />
         </div>
       </div>
@@ -556,7 +562,8 @@ export const AgentScene = () => {
           </div>
           <div style={{ color: MUTED, marginTop: 14, opacity: time >= 2.0 ? 1 : 0 }}>
             rendering <span style={{ color: CYAN }}>{'█'.repeat(bars)}</span>
-            {'░'.repeat(24 - bars)} {String(Math.round(progress * 900)).padStart(3, ' ')}/900
+            {'░'.repeat(24 - bars)} {String(Math.round(progress * promoFrames)).padStart(4, ' ')}/
+            {promoFrames}
           </div>
           <div style={{ marginTop: 16 }}>
             <CodeView lines={renderEnvelope} shown={envelopeShown} fontSize={23} caret={false} />

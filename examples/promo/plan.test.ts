@@ -15,7 +15,15 @@ import {
   storyboardFrames,
 } from './plan.ts';
 
-const kinds: readonly SceneKind[] = ['intro', 'code', 'time', 'pipeline', 'agent', 'outro'];
+const kinds: readonly SceneKind[] = [
+  'intro',
+  'code',
+  'time',
+  'three',
+  'pipeline',
+  'agent',
+  'outro',
+];
 
 const storyboard = fc.integer({ min: 1, max: 12 }).chain((overlapFrames) =>
   fc.record({
@@ -31,8 +39,8 @@ const storyboard = fc.integer({ min: 1, max: 12 }).chain((overlapFrames) =>
 );
 
 describe('promo storyboard', () => {
-  it('fills the full promo with 900 frames and the CI twin with 60', () => {
-    expect(storyboardFrames(promoStoryboard)).toBe(900);
+  it('fills the full promo with 1068 frames and the CI twin with 60', () => {
+    expect(storyboardFrames(promoStoryboard)).toBe(1068);
     expect(storyboardFrames(promoCiStoryboard)).toBe(60);
   });
 

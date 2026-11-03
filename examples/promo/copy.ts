@@ -4,6 +4,8 @@
 
 import type { TOKEN_COLOURS } from './look.ts';
 
+import { promoFrames } from './plan.ts';
+
 export type TokenKind = keyof typeof TOKEN_COLOURS;
 export type Token = readonly [TokenKind, string];
 export type CodeLine = readonly Token[];
@@ -16,9 +18,13 @@ export const repositoryUrl = 'github.com/d-kimuson/motion-kit';
 export const headings = {
   code: { kicker: '01 · Author', title: 'Scenes are React components.' },
   time: { kicker: '02 · Determinism', title: 'Every frame is a pure function of time.' },
-  pipeline: { kicker: '03 · Render', title: 'Chromium captures. FFmpeg encodes.' },
-  agent: { kicker: '04 · Automate', title: 'A CLI your coding agent can read.' },
+  three: { kicker: '03 · 3D', title: 'Three.js runs on the same clock.' },
+  pipeline: { kicker: '04 · Render', title: 'Chromium captures. FFmpeg encodes.' },
+  agent: { kicker: '05 · Automate', title: 'A CLI your coding agent can read.' },
 } as const;
+
+/** The chips under the 3D scene: what draws it, and what it promises. */
+export const threeCaption = ['<ThreeCanvas>', '<CameraRig>', 'seekable like the DOM'] as const;
 
 /** The scene the code panel types, and the preview next to it runs. */
 export const sceneCode: readonly CodeLine[] = [
@@ -126,7 +132,7 @@ export const renderEnvelope: readonly CodeLine[] = [
     ['punct', ', '],
     ['key', '"frameCount"'],
     ['punct', ': '],
-    ['number', '900'],
+    ['number', String(promoFrames)],
     ['punct', ', … },'],
   ],
   [

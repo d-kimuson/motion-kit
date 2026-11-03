@@ -11,7 +11,7 @@ const Promo = () => <PromoScene board={promoStoryboard} />;
 const PromoCi = () => <PromoScene board={promoCiStoryboard} />;
 
 /** The entry holds two Compositions, so `--composition <id>` is always required. `promo` is
- * 1920x1080 at 30 fps for 900 frames (30 s); `promo-ci` is half linear resolution for 60 frames and
+ * 1920x1080 at 30 fps for 1068 frames (35.6 s); `promo-ci` is half linear resolution for 60 frames and
  * renders the opening scene, one handoff and the start of the code scene. Both durations are the
  * storyboard's own length, so the board and the declaration cannot disagree. */
 export const compositions = defineCompositions([

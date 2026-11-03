@@ -11,11 +11,13 @@ import {
   PipelineScene,
   TimeScene,
 } from './scenes.tsx';
+import { ThreeScene } from './ThreeScene.tsx';
 
 const sceneComponents: Readonly<Record<SceneKind, ComponentType>> = {
   intro: IntroScene,
   code: CodeScene,
   time: TimeScene,
+  three: ThreeScene,
   pipeline: PipelineScene,
   agent: AgentScene,
   outro: OutroScene,
