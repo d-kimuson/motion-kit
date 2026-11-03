@@ -3,8 +3,8 @@
 An agent-first framework for programmatic video. Scenes are React/TSX components on a deterministic
 timeline, every frame is a pure function of time, and the render pipeline captures frames in Chromium
 through Playwright and encodes them with FFmpeg. A CLI and structured diagnostics let a coding agent
-render a Composition and read any failure without a GUI. motion-kit is an MIT alternative to Remotion,
-named `@kimuson/motion-kit`.
+render a Composition and read any failure without a GUI. motion-kit is MIT licensed and published as
+`@kimuson/motion-kit`.
 
 ## Status
 
