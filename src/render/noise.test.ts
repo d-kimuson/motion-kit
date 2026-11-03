@@ -11,6 +11,8 @@ describe('isKnownRendererNoise', () => {
     '[.WebGL-0x12c00443200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels',
     '%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold',
     '[vite] connecting...',
+    // The loader prefixes some of its own output, so the notice has to match inside the line.
+    '[motion-kit] [vite] connecting...',
     '✨ new dependencies optimized: zod, @react-three/fiber, three',
     '✨ optimized dependencies changed. reloading',
     '(node:9804) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time',

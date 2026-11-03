@@ -6,14 +6,15 @@ const browser = (text: string, noise = false): LogRecord => ({ source: 'browser'
 const service = (text: string): LogRecord => ({ source: 'service', text, noise: false });
 
 describe('logDecision', () => {
-  it('streams and keeps everything at the verbose level', () => {
+  it('streams everything and keeps nothing at the verbose level', () => {
+    // A line already on stderr has no reason to be repeated by the failure report.
     expect(logDecision('verbose', browser('page error: boom'))).toEqual({
       stream: true,
-      keep: true,
+      keep: false,
     });
     expect(logDecision('verbose', browser('SwiftShader', true))).toEqual({
       stream: true,
-      keep: true,
+      keep: false,
     });
   });
 
@@ -54,7 +55,17 @@ describe('createLogChannel', () => {
     channel.write(browser('first'));
     channel.write(service('second'));
     expect(written).toEqual(['first', 'second']);
-    expect(channel.recent().map((record) => record.text)).toEqual(['first', 'second']);
+    expect(channel.recent()).toEqual([]);
+  });
+
+  it('keeps one record per line of a multi-line message', () => {
+    const channel = createLogChannel({ level: 'normal', capacity: 5, write: () => {} });
+    channel.write(browser('Error: boom\n    at Scene (entry.tsx:4:3)\n    at render'));
+    expect(channel.recent().map((record) => record.text)).toEqual([
+      'Error: boom',
+      '    at Scene (entry.tsx:4:3)',
+      '    at render',
+    ]);
   });
 
   it('does not stream at the default level', () => {
@@ -79,7 +90,7 @@ describe('createLogChannel', () => {
   });
 
   it('drops a line that is only whitespace', () => {
-    const channel = createLogChannel({ level: 'verbose', write: () => {} });
+    const channel = createLogChannel({ level: 'normal', write: () => {} });
     channel.write(browser('   \n'));
     expect(channel.recent()).toEqual([]);
   });

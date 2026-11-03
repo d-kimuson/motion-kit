@@ -1191,8 +1191,10 @@ export const runCli = async (
     // What the renderer said while the run worked, and what the default level held back: a failure
     // is the one moment those lines are the evidence a caller needs, so they follow the conclusion.
     // They go to stderr, never into the envelope, whose fields are versioned and whose text is the
-    // CLI's own (agent ADR).
-    if (!outcome.ok) process.stderr.write(failureLogBlock(logChannel().recent()));
+    // CLI's own. Only the default level reaches a failure report: `--verbose` streamed these lines
+    // as they arrived and `--quiet` kept none, so repeating them would say nothing new (agent ADR).
+    if (!outcome.ok && logChannel().level() === 'normal')
+      process.stderr.write(failureLogBlock(logChannel().recent()));
     return code;
   } finally {
     restoreLog();

@@ -29,4 +29,4 @@ The SwiftShader line arrived with its console arguments in front of the text (`[
 also printed Node's `ExperimentalWarning: stripTypeScriptTypes` on every start. `isKnownRendererNoise`
 (`src/render/noise.ts`) lists the development-server, Chromium, react-dom and Node notices so a
 failure report can drop them; the CLI's levels that use it are in the
-[stderr policy ADR](../adr/20261104-cli-stderr.accepted.md).
+[stderr policy ADR](../adr/20261103-cli-stderr.accepted.md).

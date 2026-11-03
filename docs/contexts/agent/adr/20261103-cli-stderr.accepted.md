@@ -22,7 +22,9 @@ The GPU question is separate: `--enable-gpu` and new headless mode are TASK-242'
 | `verbose` | `--verbose` | every line, as it arrives    | nothing further (already streamed) | shown    |
 | `quiet`   | `--quiet`   | nothing of it reaches stderr | nothing                            | hidden   |
 
-A line is kept for the failure report until the run has 20 of them, oldest dropped first; one line is cut at 500 characters. At `normal` a **known environmental notice** is not kept at all, because it says nothing about the Composition that failed: Chromium's software-WebGL fallback warning and its `GL Driver Message` lines, the Vite client's handshake and optimizer notices, react-dom's DevTools hint, and the loading child's `ExperimentalWarning`. The list is `isKnownRendererNoise` in `src/render/noise.ts`, matched by substring because a page console message carries its arguments in front of its text (`[]Automatic fallback …`). It is knowledge about the environment, so it lives in `render`, not in the CLI.
+`normal` keeps each line of the renderer's output, one record per line, until the run has 20 of them (oldest dropped first) and cuts one line at 500 characters; `--verbose` and `--quiet` keep nothing, because a streamed line is already on stderr and a suppressed one was never wanted. At `normal` a **known environmental notice** is not kept at all, because it says nothing about the Composition that failed: Chromium's software-WebGL fallback warning and its `GL Driver Message` lines, the Vite client's handshake and optimizer notices, react-dom's DevTools hint, and the loading child's `ExperimentalWarning`. The list is `isKnownRendererNoise` in `src/render/noise.ts`; every pattern matches anywhere in the line, never only at its start, because a page console message carries its arguments in front of its text (`[]Automatic fallback …`) and the loader prefixes some of its own output. It is knowledge about the environment, so it lives in `render`, not in the CLI.
+
+One notice is not a renderer line at all: the bin strips TypeScript through `node:module`, and Node warns about that experiment in the CLI's own process on every start. It is a fact about the tool rather than about the project, so the bin drops that one warning — and nothing else — unless `--verbose` is passed. The loading child's copy reaches the same policy through the renderer log.
 
 Nothing else changes: Chromium is still launched without `--enable-unsafe-swiftshader` unless `--software-webgl` asks for it, so the warning is emitted and hidden rather than prevented, and `--verbose` shows it.
 
@@ -35,7 +37,7 @@ rendering 120/300 frames (40%) ETA 12s
 ```
 
 - `total` is the artifact's frame count, the one the envelope's `data.frameCount` reports: the range's length for `--from`/`--to`, and with `--fps` the encoder's output frame count rather than the Composition's. Completed frames are counted per artifact frame, summed across every renderer `--concurrency` opened.
-- On a terminal the line is rewritten in place (`\r`) at most every 100 ms, and always for the last frame; the run ends it with a newline before anything else is written. When stderr is not a terminal — a pipe, a background job, an agent's capture — one whole line is written per 10% of the total, plus the last frame, so a captured log has eleven lines at most instead of one per frame.
+- On a terminal the line is rewritten in place at most every 100 ms, and always for the last frame: each rewrite returns to the first column and erases the row (`\r` then `ESC[K`), because the line shrinks as the run advances (`ETA 10s` becomes `9s`, and the last update carries no estimate) and a terminal would otherwise show the tail of the longer line it replaced. The run ends it with a newline before anything else is written. When stderr is not a terminal — a pipe, a background job, an agent's capture — one whole line is written per 10% of the total, plus the last frame, so a captured log has eleven lines at most instead of one per frame.
 - `ETA` is the remaining frames divided by the rate over the last 3 seconds of completions, so a burst from a pool does not set the pace; it is omitted until the window spans at least 250 ms. `--quiet` suppresses every progress line.
 
 The formatting, the thinning and the estimate are pure functions of a state and an injected monotonic clock (`src/cli/progress.ts`), so the determinism rules apply to them like any other value: no `Date`, no `performance.now`, the clock passed in.
@@ -50,7 +52,7 @@ renderer log (2 lines; --verbose streams them as they arrive):
   Error: props.text is missing
 ```
 
-They stay out of the envelope on purpose: its fields are versioned and its text is the CLI's own, and page output is machine-specific free text. A success says nothing extra, and `--verbose` already showed these lines live.
+They stay out of the envelope on purpose: its fields are versioned and its text is the CLI's own, and page output is machine-specific free text that would have to be squeezed into a `details` payload nobody can validate. A success says nothing extra, `--verbose` already showed these lines live, and `--quiet` kept none.
 
 ### Where it lives
 
@@ -58,7 +60,7 @@ They stay out of the envelope on purpose: its fields are versioned and its text 
 - `src/cli/log.ts` — the two flags as a Zod schema (`logFlagsSchema`) and the failure block's text.
 - `src/cli/progress.ts` — the progress contract and its reporter.
 - `src/render/noise.ts` — the known-notice list.
-- `src/render/loading/session.ts`, `service.ts` — the producers that write records instead of `process.stderr`.
+- `src/render/loading/session.ts`, `service.ts` and `service-log.ts` — the producers that write records instead of `process.stderr`. The service's output reaches them through `node:readline`, one record per line: a child writes bytes, and a line can span chunks.
 
 The channel's own default is `verbose`, so a library consumer that calls `renderVideo` or `openLoadingSession` directly, and the `preview` command (a person watching a page wants its console), keep the behaviour they had. Only `render`, `frame` and `check` install a level from their flags.
 
@@ -76,7 +78,7 @@ No Diagnostic code, envelope field or `schemaVersion` changes.
 
 - **Progress on stdout**: rejected — stdout is the envelope under `--json`, and the contract allows one document there.
 - **Forward the page console but filter only Chromium's warning**: rejected because Vite's handshake, the optimizer, react-dom's development hint and the loading child's Node warning fill the same channel and say just as little about the Composition.
-- **Put the kept renderer lines into `render.page-error.details`**: rejected for now. The envelope's `details` payloads are versioned and defined per code, and page text carries machine-specific paths and free-form output; the stderr block is the alternative the task allows, and it keeps the envelope stable at `schemaVersion: 1`.
+- **Put the kept renderer lines into `render.page-error.details`**: rejected for now. The envelope's `details` payloads are versioned and defined per code, and page text carries machine-specific paths and free-form output; a stderr block after the failure's Diagnostics keeps the envelope stable at `schemaVersion: 1` and needs no new contract field.
 - **Emit progress for every frame to a pipe**: rejected — a captured log becomes one line per frame and unreadable, and a writer that is slower than the render applies backpressure to it.
 - **Estimate the remainder from the whole run's average rate**: rejected because a slow start (dependency optimization, browser warm-up) then dominates the estimate for the rest of the run; a 3-second window follows the run.
 - **Infer the level from `stderr.isTTY`**: rejected — a terminal is not a statement about how much output the caller wants, and `--json` users are exactly the callers most likely to pipe.

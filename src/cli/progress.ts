@@ -201,7 +201,10 @@ export const createProgressReporter = (options: ProgressReporterOptions): Progre
       state = step.state;
       if (step.line === undefined) return;
       wrote = true;
-      write(tty ? `\r${step.line}` : `${step.line}\n`);
+      // The line shrinks as the run progresses (`ETA 10s` becomes `9s`, and the last line has no
+      // estimate at all), so each rewrite returns to the first column and erases what was there:
+      // without it a terminal would show the tail of the longer line it replaced.
+      write(tty ? `\r\u001B[K${step.line}` : `${step.line}\n`);
     },
     finish: () => {
       if (!tty || !wrote) return;

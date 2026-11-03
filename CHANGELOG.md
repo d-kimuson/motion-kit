@@ -17,9 +17,10 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   failed run prints the last 20 lines under `renderer log` instead), `--verbose` streams them as
   they arrive, and `--quiet` hides them and the progress. Chromium's
   `Automatic fallback to software WebGL has been deprecated` warning and the other notices every
-  render emits are no longer printed; `--verbose` shows them. The envelope gains no field and
+  render emits are no longer printed; `--verbose` shows them, and the bin's own Node
+  `ExperimentalWarning` is dropped unless `--verbose` is passed. The envelope gains no field and
   `schemaVersion` stays `1`. The
-  [stderr policy ADR](docs/contexts/agent/adr/20261104-cli-stderr.accepted.md) records the levels,
+  [stderr policy ADR](docs/contexts/agent/adr/20261103-cli-stderr.accepted.md) records the levels,
   the progress format and the failure block.
 
 - **Render part of a Composition.** `render` takes `--from` and `--to`, each a Global Frame (`3600`),

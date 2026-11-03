@@ -6,6 +6,21 @@ import { registerHooks, stripTypeScriptTypes } from 'node:module';
 // node_modules, so this bin is plain JS and strips only our own source tree
 // before importing the typed entry. User entry code is loaded by the render
 // child process, never by this hook.
+//
+// Node warns about that experiment on every start, in this process, whatever the
+// level: it is a fact about this bin rather than about the project being rendered,
+// so a default run stays "the result, the Diagnostics and the progress" (agent
+// ADR: CLI stderr). `--verbose` keeps every warning, including this one. The
+// loading child's own copy reaches the same policy through the renderer log.
+const verbose = process.argv.slice(2).includes('--verbose');
+if (!verbose) {
+  const emitWarning = process.emitWarning.bind(process);
+  process.emitWarning = (warning, ...rest) => {
+    const message = typeof warning === 'string' ? warning : String(warning?.message ?? '');
+    if (message.includes('stripTypeScriptTypes')) return;
+    emitWarning(warning, ...rest);
+  };
+}
 const sourceRoot = new URL('../', import.meta.url).href;
 registerHooks({
   load(url, context, nextLoad) {

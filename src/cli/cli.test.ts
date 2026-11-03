@@ -2881,6 +2881,69 @@ describe('motion-kit CLI stderr', () => {
     expect(quiet.stderr).not.toContain('renderer log (');
   }, 120_000);
 
+  it('does not repeat the streamed lines when a --verbose run fails', async () => {
+    const failed = await run([
+      'frame',
+      'entry-logging.tsx',
+      '--frame',
+      '99',
+      '--out',
+      join(outputRoot, 'logging-failed-verbose'),
+      '--verbose',
+      '--json',
+    ]);
+    expect(failed.code).toBe(1);
+    expect(assertValidEnvelope(failed).ok).toBe(false);
+    // The page's line streamed as it arrived, so the failure report has nothing left to add.
+    expect(failed.stderr).toContain('drawing the scene');
+    expect(failed.stderr).not.toContain('renderer log (');
+  }, 120_000);
+
+  it('keeps the bin own Node warning out of a default run and shows it under --verbose', async () => {
+    const held = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'warning-held.png'),
+      '--json',
+    ]);
+    expect(held.code).toBe(0);
+    expect(held.stderr).not.toContain('ExperimentalWarning');
+    // `--quiet` asks for less, not more: the same two lines stay away.
+    const quiet = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'warning-quiet.png'),
+      '--quiet',
+      '--json',
+    ]);
+    expect(quiet.code).toBe(0);
+    expect(quiet.stderr).not.toContain('ExperimentalWarning');
+    const streamed = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'warning-streamed.png'),
+      '--verbose',
+      '--json',
+    ]);
+    expect(streamed.code).toBe(0);
+    expect(streamed.stderr).toContain('ExperimentalWarning');
+  }, 180_000);
+
   it('hides the software-WebGL warning by default and streams it with --verbose', async () => {
     const held = await run([
       'frame',

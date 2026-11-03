@@ -82,11 +82,10 @@ last lines the page and the loading service said.
 | `--verbose` | every line, as it arrives             | nothing further (already shown)         | shown    |
 | `--quiet`   | nothing                               | nothing                                 | hidden   |
 
-`--verbose` and `--quiet` together are `cli.invalid-arguments` (exit 2). Known environment notices —
-Chromium's software-WebGL fallback warning, its `GL Driver Message` lines, Vite's handshake and
-dependency optimizer, react-dom's development hint — are never part of the failure block, because
-they say nothing about the Composition that failed. Everything else the page logged is, in arrival
-order:
+`--verbose` and `--quiet` together are `cli.invalid-arguments` (exit 2). Environment notices —
+Chromium's WebGL and driver lines, the development server's handshake, react-dom's hint, the bin's
+own Node warning — are never part of the failure block, because they say nothing about the
+Composition that failed. Everything else the page logged is, in arrival order:
 
 ```text
 renderer log (1 line; --verbose streams it as it arrives):
@@ -106,11 +105,12 @@ rendering 120/300 frames (40%) ETA 12s
 
 The total is `data.frameCount` — the range's length for `--from`/`--to`, and with `--fps` the
 encoder's output frame count — and the completed count is the sum over the `--concurrency`
-renderers. On a terminal the line is rewritten in place, at most every 100 ms; when stderr is not a
-terminal (a pipe, a background job, an agent's capture) one whole line is written per 10% of the
-total, so a captured log stays readable. The estimate divides the remaining frames by the rate of
-the last three seconds, so a burst of pooled captures does not set the pace; it appears once there
-is enough of a window to compute it, and it is `--quiet`'s to hide.
+renderers. On a terminal the line is rewritten in place, at most every 100 ms, erasing the rest of
+the row so a shorter line leaves nothing behind; when stderr is not a terminal (a pipe, a
+background job, an agent's capture) one whole line is written per 10% of the total, so a captured
+log stays readable. The estimate divides the remaining frames by the rate of the last three
+seconds, so a burst of pooled captures does not set the pace; it appears once there is enough of a
+window to compute it, and it is `--quiet`'s to hide.
 
 ```bash
 motion-kit render entry.tsx --out out/teaser.mp4 --json 2> render.log

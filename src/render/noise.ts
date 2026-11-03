@@ -12,19 +12,20 @@ const knownNoise = [
   // Chromium's driver notices, for example "GPU stall due to ReadPixels" on a software renderer.
   /GL Driver Message \(/iu,
   // The Vite client the loading service injects, and the optimizer it runs on first use.
-  /^\[vite\] (?:connecting|connected|hot updated|page reload)/iu,
+  /\[vite\] (?:connecting|connected|hot updated|page reload)/iu,
   /new dependencies optimized:/iu,
   /optimized dependencies changed/iu,
   // react-dom's development build.
   /Download the React DevTools for a better development experience/iu,
   // The loading child strips types the way the bin does, and Node says so on every start.
-  /^\(node:\d+\) ExperimentalWarning: stripTypeScriptTypes/iu,
-  /^\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)$/iu,
+  /\(node:\d+\) ExperimentalWarning: stripTypeScriptTypes/iu,
+  /\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)/iu,
 ];
 
 /**
- * Whether a line is one of those notices. Matching is by substring because a page console message
- * arrives with its arguments in front of it (`[]Automatic fallback to software WebGL …`).
+ * Whether a line is one of those notices. Every pattern matches anywhere in the line, never only at
+ * its start: a page console message arrives with its arguments in front of its text
+ * (`[]Automatic fallback to software WebGL …`), and the loader prefixes some of its own output.
  */
 export const isKnownRendererNoise = (text: string): boolean =>
   knownNoise.some((pattern) => pattern.test(text));

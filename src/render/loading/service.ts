@@ -4,9 +4,8 @@ import { z } from 'zod';
 
 import { DiagnosticSchema, type Diagnostic } from '../../lib/diagnostic.ts';
 import { coverOnExit } from '../../lib/exit.ts';
-import { logChannel } from '../../lib/log.ts';
-import { isKnownRendererNoise } from '../noise.ts';
 import { loadingFailure } from './diagnostics.ts';
+import { forwardServiceOutput } from './service-log.ts';
 
 export type LoadingServiceOptions = {
   projectRoot: string;
@@ -70,16 +69,9 @@ export const startLoadingService = (
   // killed on the way out; disposal is asynchronous and cannot be the only owner (lib/exit.ts).
   const releaseCover = coverOnExit(() => killGroup(child));
   // The service's own output (Vite's handshake, the optimizer, a transform failure) belongs to the
-  // renderer's log, not to the CLI's result: recorded, streamed only on request (agent ADR).
-  const forward = (chunk: Buffer | string): void => {
-    for (const text of String(chunk).split('\n')) {
-      logChannel().write({ source: 'service', text, noise: isKnownRendererNoise(text) });
-    }
-  };
-  child.stdout?.setEncoding('utf8');
-  child.stderr?.setEncoding('utf8');
-  child.stdout?.on('data', forward);
-  child.stderr?.on('data', forward);
+  // renderer's log, not to the CLI's result: recorded line by line, streamed only on request.
+  if (child.stdout !== null) void forwardServiceOutput(child.stdout);
+  if (child.stderr !== null) void forwardServiceOutput(child.stderr);
   const ready = Promise.withResolvers<string>();
   // A failure before readiness also reaches the caller through `fail`.
   void ready.promise.catch(() => {});

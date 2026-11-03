@@ -199,10 +199,54 @@ describe('createProgressReporter', () => {
     reporter.run(100);
     reporter.finish();
     expect(reporter.written).toEqual([
-      '\rrendering 50/100 frames (50%)',
-      '\rrendering 100/100 frames (100%)',
+      '\r\u001B[Krendering 50/100 frames (50%)',
+      '\r\u001B[Krendering 100/100 frames (100%)',
       '\n',
     ]);
+  });
+
+  it('erases the previous line when the new one is shorter', () => {
+    // `renderer` as a terminal does it: `\r` returns to column 0, `ESC[K` erases to the end of the
+    // row, and any other byte overwrites the cell it lands on.
+    const screen = (writes: readonly string[]): string => {
+      let row: string[] = [];
+      let column = 0;
+      for (const write of writes) {
+        for (let index = 0; index < write.length; index += 1) {
+          if (write.startsWith('\r\u001B[K', index)) {
+            row = [];
+            column = 0;
+            index += 3;
+            continue;
+          }
+          const character = write[index] ?? '';
+          if (character === '\r') column = 0;
+          else if (character === '\n') {
+            row = [];
+            column = 0;
+          } else {
+            row[column] = character;
+            column += 1;
+          }
+        }
+      }
+      return row.join('');
+    };
+    // 20 of 300 frames leaves a long estimate; the last frame carries none, which is the shrink
+    // that used to leave `ETA <1s` behind `rendering 300/300 frames (100%)`.
+    const reporter = collect({
+      total: 300,
+      level: 'normal',
+      tty: true,
+      times: [0, 500, 1_000, 1_100, 1_200],
+    });
+    reporter.run(10);
+    reporter.run(20);
+    reporter.run(299);
+    reporter.run(300);
+    // One line before the last is longer than the last, because it carries the estimate.
+    expect(reporter.written.slice(0, -1).some((write) => write.includes('ETA'))).toBe(true);
+    expect(screen(reporter.written)).toBe('rendering 300/300 frames (100%)');
   });
 
   it('writes whole lines to a pipe', () => {

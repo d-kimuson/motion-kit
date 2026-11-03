@@ -29,11 +29,12 @@ export type LogDecision = { readonly stream: boolean; readonly keep: boolean };
 /**
  * The whole level policy, as a pure function. The default level streams nothing — a run's stderr
  * carries the Diagnostics and the progress, not the renderer's chatter — but it keeps the recent
- * lines so a failure can show them. `--verbose` streams everything as it arrives; `--quiet` keeps
- * nothing.
+ * lines so a failure can show them. `--verbose` streams everything as it arrives, so it keeps
+ * nothing: a line already on stderr has no reason to be repeated by the failure report. `--quiet`
+ * keeps nothing either.
  */
 export const logDecision = (level: LogLevel, record: LogRecord): LogDecision => {
-  if (level === 'verbose') return { stream: true, keep: true };
+  if (level === 'verbose') return { stream: true, keep: false };
   if (level === 'quiet') return { stream: false, keep: false };
   return { stream: false, keep: !record.noise };
 };
@@ -41,7 +42,7 @@ export const logDecision = (level: LogLevel, record: LogRecord): LogDecision => 
 /** A record longer than this is cut, so one runaway line cannot fill a failure report. */
 const recordLimit = 500;
 
-/** How many recent records a failure report can show. */
+/** How many recent lines a failure report can show. */
 const defaultCapacity = 20;
 
 export type LogChannel = {
@@ -49,7 +50,7 @@ export type LogChannel = {
   readonly setLevel: (level: LogLevel) => void;
   /** Records one line; the live write happens only when the level allows it. */
   readonly write: (record: LogRecord) => void;
-  /** The kept records, oldest first, bounded by the channel's capacity. */
+  /** The kept lines, oldest first, bounded by the channel's capacity. */
   readonly recent: () => readonly LogRecord[];
 };
 
@@ -58,7 +59,7 @@ export type LogChannelOptions = {
    * keeps flowing exactly as it did before the CLI owned a level.
    */
   readonly level?: LogLevel;
-  /** How many records to keep for a failure report. */
+  /** How many lines to keep for a failure report. */
   readonly capacity?: number;
   /** Writes one line to its destination; stderr by default. */
   readonly write?: (text: string) => void;
@@ -82,12 +83,20 @@ export const createLogChannel = (options: LogChannelOptions = {}): LogChannel =>
       level = next;
     },
     write: (record) => {
-      if (record.text.trim() === '') return;
+      // A record becomes one kept line per line of text, so the capacity and the failure block's
+      // heading both count what a reader sees on stderr: lines.
+      const lines = record.text
+        .split('\n')
+        .map((text) => text.trimEnd())
+        .filter((text) => text.trim() !== '');
+      if (lines.length === 0) return;
       const decision = logDecision(level, record);
-      if (decision.stream) sink(record.text);
-      if (!decision.keep) return;
-      kept.push({ ...record, text: bounded(record.text) });
-      while (kept.length > capacity) kept.shift();
+      for (const text of lines) {
+        if (decision.stream) sink(text);
+        if (!decision.keep) continue;
+        kept.push({ ...record, text: bounded(text) });
+        while (kept.length > capacity) kept.shift();
+      }
     },
     recent: () => [...kept],
   };
