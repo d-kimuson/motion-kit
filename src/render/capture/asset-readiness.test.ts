@@ -357,6 +357,8 @@ describe('asset readiness barrier', () => {
       expect.objectContaining({ kind: 'font-family', phase: 'load', source: 'MissingSplit' }),
     ]);
     expect(result.error[0]?.message).toBe('The required font family failed to load.');
+    // A stylesheet face stays failed for the page's life: the hint names the only recovery.
+    expect(result.error[0]?.hint).toContain('start a new renderer');
   }, 60_000);
 
   it('publishes both failed assets when the error boundary throws', async () => {

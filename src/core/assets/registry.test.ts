@@ -170,7 +170,7 @@ describe('asset registry', () => {
         {
           code: 'asset.load-failed',
           message: 'The required font family failed to load.',
-          hint: 'Check the family, weight and style, and that the imported CSS declares faces for the rendered text.',
+          hint: 'Check that the imported CSS loads its subset files. A stylesheet face that failed stays failed for the page, so reload the preview, or start a new renderer, to retry it.',
           location: {
             compositionId: 'demo',
             sceneId: 'intro',
@@ -201,6 +201,46 @@ describe('asset registry', () => {
       },
     });
     expect(registry.snapshot().failed.map((asset) => asset.source)).toEqual(['Noto Sans JP']);
+  });
+
+  it('names the fix for the phase a CSS-declared family failed in', () => {
+    const hint = (phase: string) =>
+      assetLoadFailed({
+        assets: [{ kind: 'font-family', phase, source: 'Noto Sans JP' }],
+        cause: undefined,
+      }).hint;
+    // The fetch failed: the browser keeps that stylesheet face in error for the page's life.
+    expect(hint('load')).toContain('reload the preview, or start a new renderer, to retry it');
+    // The font set has nothing for the text, or a matched face is not usable.
+    expect(hint('font-set')).toBe(
+      'Check the family, weight and style, and that the imported CSS declares faces for the rendered text.',
+    );
+  });
+
+  it('redacts every kind it does not know, and only the family of a CSS-declared font', () => {
+    // A kind a later version adds must fail closed: only `font-family` reports its source unwrapped.
+    for (const kind of ['font', 'image', 'font-family-url', 'video', '']) {
+      const diagnostic = assetLoadFailed({
+        assets: [{ kind, phase: 'load', source: secretUrl }],
+        cause: undefined,
+      });
+      expect(diagnostic.details?.['assets']).toEqual([
+        {
+          kind,
+          phase: 'load',
+          source: 'https://example.com/image.png (+2 query parameters, redacted)',
+        },
+      ]);
+      expect(leaked(diagnostic)).toBe(false);
+    }
+    expect(
+      assetLoadFailed({
+        assets: [{ kind: 'font-family', phase: 'font-set', source: 'Noto Sans JP' }],
+        cause: undefined,
+      }),
+    ).toMatchObject({
+      details: { assets: [{ kind: 'font-family', phase: 'font-set', source: 'Noto Sans JP' }] },
+    });
   });
 
   it('retries a failed load as a new attempt', async () => {

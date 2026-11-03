@@ -13,6 +13,9 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { assetsOf } from '../runtime/composition-runtime.ts';
+import { assetCacheKey } from './registry.ts';
+
 const unwrap = <T,>(result: Result<T>): T => {
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
@@ -217,6 +220,86 @@ describe('CSS-declared font families', () => {
       removeStyles();
     }
   });
+});
+
+it('starts a new attempt for a failed stylesheet face, which cannot succeed until the page reloads', async () => {
+  const family = 'StaleFaceProbe';
+  const removeStyles = stylesheet([
+    faceRule({ family, source: '/no-such-stale-face.ttf', range: 'U+0041-005A' }),
+  ]);
+  const Stale = () => {
+    useAsset({ kind: 'font-family', id: 'stale', family, weight: 400, text: 'AB' });
+    return <p>AB</p>;
+  };
+  const definition = unwrap(
+    await unwrap(
+      defineCompositions([
+        defineComposition({
+          id: 'stale-face',
+          component: Stale,
+          schema: z.object({}),
+          width: 64,
+          height: 64,
+          fps: { numerator: 30, denominator: 1 },
+          durationInFrames: 2,
+        }),
+      ]),
+    ).mount({ revision: 'r1' }),
+  );
+  const runtime = createCompositionRuntime({
+    definition,
+    compositionRealm: 'page',
+    instance: 'stale-face',
+  });
+  const assets = assetsOf(runtime);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    flushSync(() =>
+      root.render(<Composition definition={definition} compositionRuntime={runtime} />),
+    );
+    const settled = await runtime.settleFrame(0, { source: 'renderer', requestId: 'frame' });
+    expect(settled.status).toBe('failed');
+    if (settled.status !== 'failed') throw new Error('expected failure');
+    // The failure says what retrying costs: the face stays failed in this page.
+    expect(settled.diagnostics[0]?.code).toBe('asset.load-failed');
+    expect(settled.diagnostics[0]?.hint).toContain(
+      'reload the preview, or start a new renderer, to retry it',
+    );
+    expect(assets.versions().map((version) => version.version)).toEqual(['1:failed']);
+    // A stylesheet face that failed stays in error for the life of the page, so even a fresh
+    // attempt reports the same failure and the font set still rejects a direct load.
+    expect(declaredFaces(family).map((face) => face.status)).toEqual(['error']);
+    assets.retry(
+      assetCacheKey({
+        kind: 'font-family',
+        id: 'stale',
+        family,
+        weight: 400,
+        style: 'normal',
+        text: 'AB',
+      }),
+    );
+    await expect
+      .poll(() => assets.versions().map((version) => version.version), { timeout: 5000 })
+      .toEqual(['2:failed']);
+    await expect(document.fonts.load(`normal 400 16px '${family}'`, 'AB')).rejects.toThrow(
+      /network error/i,
+    );
+    expect(declaredFaces(family).map((face) => face.status)).toEqual(['error']);
+    // A suspended render React discarded keeps its owner, so the record repeats; one entry failed.
+    expect([
+      ...new Set(
+        assets.snapshot().failed.map((asset) => [asset.kind, asset.phase, asset.source].join(':')),
+      ),
+    ]).toEqual(['font-family:load:' + family]);
+  } finally {
+    flushSync(() => root.unmount());
+    runtime.dispose();
+    container.remove();
+    removeStyles();
+  }
 });
 
 describe('useAsset suspense', () => {
