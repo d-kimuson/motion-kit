@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Result } from '../lib/result.ts';
 
 import { DiagnosticSchema } from '../lib/diagnostic.ts';
+// The source barrel: `built-artifact.test.ts` covers the published `/motion` subpath.
 import { easing, interpolate, keyframes, type Easing, type InterpolateOptions } from './index.ts';
 
 const value = <T>(result: Result<T>): T => {
@@ -28,7 +29,6 @@ const segment = fc.record({
 });
 const modes = ['clamp', 'extend', 'identity'] as const;
 
-// Import the source barrel until the package-layout task adds a /motion export.
 describe('interpolate', () => {
   it('evaluates the design.md §6.2 opacity example, including its easing', () => {
     const options = { extrapolate: 'clamp', easing: easing.easeOutCubic } as const;

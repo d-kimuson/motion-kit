@@ -65,10 +65,11 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
 - **`teaser` (TASK-206), `chart` (TASK-207), `slideshow` (TASK-208) and `explainer` (TASK-209) are
   the examples implemented so far.** Each row above is the shape its entry declares, and its
   `-ci`/`-probe` twins are the rows in the short-Composition table.
-- **Motion is hand-rolled arithmetic.** `/motion` (`interpolate`, `easing`, `spring`, `Stagger`) and
-  `/theme` are Phase 2 and have no public subpath yet, so every example computes its animation from
-  `useTime()`/`useSequence()` with plain arithmetic and hard-coded values. The example that lands
-  after Phase 2 replaces that arithmetic; the Composition ids and the acceptance look do not change.
+- **Motion is hand-rolled arithmetic.** `/motion` publishes the pure values (`interpolate`, `easing`,
+  `spring`) and `/theme` is still Phase 2, so every example computes its animation from
+  `useTime()`/`useSequence()` with plain arithmetic, and those numbers are what the acceptance look
+  fixes. The example task that adopts `/motion` replaces that arithmetic and re-baselines its renders;
+  the Composition ids and the acceptance look do not change.
 - **`teaser`, `chart` and `slideshow` commit no font.** They draw with the system sans stack, so their
   frames are fixed on one machine rather than across machines: the determinism evidence is
   fixed-environment, as the

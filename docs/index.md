@@ -179,22 +179,25 @@ Where to start: read [getting started](guide/getting-started.md) once end to end
 
 ## Package surface
 
-Only four subpaths are exported in 0.0.1:
+Only five subpaths are exported in 0.0.1:
 
 - `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
   timeline hooks (`useFrame`, `useTime`, `useSequence`, `useTimeline`), `Sequence`,
   `TransitionSeries`/`TransitionScene`/`Transition`/`useTransitionProgress`, `useAsset`, the Time
   Module functions and the Diagnostic types.
+- `@kimuson/motion-kit/motion` — `interpolate`, `keyframes`, `easing`, `spring`, `springState`,
+  `springSettleTime` and `retarget`, the pure functions that turn a time into a value
+  ([authoring](guide/authoring.md#motion-values)).
 - `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their
   types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
 - `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types; `three` and
   `@react-three/fiber` are optional peer dependencies you install.
 
-Not in 0.0.1: the preview UI and preview audio (both unreleased, in `motion-kit preview`), audio-reactive visuals, video assets, the `/motion`,
-`/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. Motion is plain
-arithmetic on `useTime()` and `useSequence()` until `/motion` lands, which is what the reference
-examples do.
+Not in 0.0.1: the preview UI and preview audio (both unreleased, in `motion-kit preview`), audio-reactive visuals, video assets, the `/theme`
+and `/presets` subpaths, the `Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate`
+commands. Until those land, a component writes its own motion over `useTime()`/`useSequence()` and the
+[motion values](guide/authoring.md#motion-values), which is what the reference examples do.
 
 ## License
 

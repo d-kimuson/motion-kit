@@ -13,7 +13,7 @@ muxing, and the determinism suite that keeps frame bytes independent of capture 
 in the repository lists what is in it and what is known to be limited.
 
 Not in 0.0.1: the preview UI and in-browser preview audio (both unreleased, in `motion-kit preview`), audio-reactive visuals, video assets, the
-`/motion`, `/theme` and `/presets` subpaths, and the `inspect`/`validate` commands. The
+`/theme` and `/presets` subpaths, the `Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. The
 [package surface](#package-surface) says what is exported today; each later context gets its own
 subpath when it lands.
 
@@ -209,20 +209,23 @@ line to stderr and exits `130` (`SIGINT`), `143` (`SIGTERM`) or `129` (`SIGHUP`)
 
 ## Package surface
 
-Each context gets its own subpath, with `core` as the package root; only the four below are exported
+Each context gets its own subpath, with `core` as the package root; only the five below are exported
 today:
 
 - `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
   timeline hooks (`useFrame`, `useTime`, `useSequence`, `useTimeline`), `Sequence`,
   `TransitionSeries`/`TransitionScene`/`Transition`/`useTransitionProgress`, `useAsset`, the Time
   Module functions and the Diagnostic types.
+- `@kimuson/motion-kit/motion` — the Pure Motion values: `interpolate`, `keyframes`, `easing`,
+  `spring`, `springState`, `springSettleTime` and `retarget`. No component, no state and no clock;
+  the [authoring](docs/guide/authoring.md#motion-values) shows the usage.
 - `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their types; Node only.
 - `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
 - `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types. `three` and
   `@react-three/fiber` are optional peer dependencies you install; the root entry never loads them.
 
-`/browser`, `/motion`, `/theme` and `/presets` are planned and do not exist yet; each gets
-its own subpath when it lands.
+`/browser`, `/theme` and `/presets` are planned and do not exist yet; each gets its own subpath when
+it lands.
 
 ## Determinism
 

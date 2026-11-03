@@ -8,6 +8,15 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **`@kimuson/motion-kit/motion`.** The Pure Motion functions are importable from the package for the
+  first time: `interpolate`, `keyframes`, `easing` (the cubic, exponential and Back families plus
+  `cubicBezier`) and the stateless spring (`spring`, `springState`, `springSettleTime`, `retarget`),
+  with the types `Easing`, `InterpolateOptions`, `Keyframe`, `Spring`, `SpringState` and
+  `RetargetOptions`. Each function takes its time as an argument, holds nothing between calls and
+  returns the shared `Result`, so an invalid range or a non-finite evaluation is a `Diagnostic`, not a
+  throw. A built-artifact test imports the published subpath from `dist` and calls every function, and
+  the [authoring guide](docs/guide/authoring.md#motion-values) shows the usage. The root entry does not
+  re-export it, and `Animate`, `Reveal` and `Stagger` are separate work: `/motion` ships values only.
 - **Fonts that CSS declares.** `useAsset({ kind: 'font-family', family, weight?, style?, text })`
   waits for the faces a stylesheet's `@font-face` rules provide for the text a frame renders, so a
   fontsource family split by `unicode-range` into dozens of subsets is captured only after the

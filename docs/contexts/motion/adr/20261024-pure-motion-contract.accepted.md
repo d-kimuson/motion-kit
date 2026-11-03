@@ -22,7 +22,7 @@ The user-owned design.md §6.2 lists these APIs and shows `[0, 0.6]` to `[0, 1]`
 
 Callers branch on `ok` and use `value` or `error`; the design.md opacity example needs that adaptation. Numeric overflow is an explicit failure instead of poisoning later styles with NaN/Infinity. Custom easing continuity remains the caller's responsibility: non-endpoint-preserving curves can jump at exact stops. Returned non-finite numbers are diagnosed when easing is evaluated, but thrown programmer errors are not caught.
 
-`src/motion/index.ts` exports the source API and its types. Package exports remain only `.` and `./agent`; `/motion` is intentionally left to the package-layout task. Spring, React integration and per-segment easing are outside this task; per-segment easing can be additive later.
+`src/motion/index.ts` exports the source API and its types. Package exports remain only `.` and `./agent`; `/motion` is intentionally left to the package-layout task. _Amended 2026-11-02 (TASK-238):_ `package.json#exports` now carries `/motion` (`src/motion/index.ts` → `dist/motion.js`), and the root entry does not re-export it, so the subpath is the only way in. Spring, React integration and per-segment easing are outside this task; per-segment easing can be additive later.
 
 ## Alternatives
 

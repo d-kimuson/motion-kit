@@ -123,5 +123,5 @@ Euler uses the reviewer's bounded domain (`t<=20`, `stiffness,damping<=100`, `ma
 
 - Binary64 quantization limits tolerances at very large targets. Cross-engine transcendental last-bit identity is not guaranteed.
 - Outside the documented joint domain, sampling is best-effort. Non-representable rates, solver intermediates, durations or an under-damped last-peak index outside the safe-integer range return Diagnostics; they do not prove mathematical output overflow. This is not an arbitrary cycle scan cap.
-- `/motion` packaging remains the existing package-layout deferral: export-map entry, build wiring and consumer smoke test.
+- `/motion` packaging is done (TASK-238): export-map entry, build wiring and a built-artifact consumer test. The components (`Animate`, `Reveal`, `Stagger`) are still unimplemented.
 - Lean validates existing core specs; no claim is made that the floating-point oscillator is formally proved.
