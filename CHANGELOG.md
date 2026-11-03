@@ -8,6 +8,21 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **`render` reports progress, and the CLI has one stderr policy.** `render` writes
+  `rendering <done>/<total> frames (<percent>%) ETA <duration>` to stderr for both routes, the total
+  being the artifact's frame count and the count summed over the `--concurrency` renderers; a
+  terminal gets one line rewritten in place, a pipe one line per 10%, and the ETA is the rate over
+  the last three seconds. `render`, `frame` and `check` also take `--verbose` and `--quiet`: the
+  default keeps the Composition's page console and the loading service's output out of stderr (a
+  failed run prints the last 20 lines under `renderer log` instead), `--verbose` streams them as
+  they arrive, and `--quiet` hides them and the progress. Chromium's
+  `Automatic fallback to software WebGL has been deprecated` warning and the other notices every
+  render emits are no longer printed; `--verbose` shows them, and the bin's own Node
+  `ExperimentalWarning` is dropped unless `--verbose` is passed. The envelope gains no field and
+  `schemaVersion` stays `1`. The
+  [stderr policy ADR](docs/contexts/agent/adr/20261103-cli-stderr.accepted.md) records the levels,
+  the progress format and the failure block.
+
 - **Render part of a Composition.** `render` takes `--from` and `--to`, each a Global Frame (`3600`),
   `mm:ss[.fff]` (`4:20`) or seconds with an `s` suffix (`260s`), and writes only that half-open
   interval as a new zero-based artifact — audio included, with the declared clips trimmed and placed

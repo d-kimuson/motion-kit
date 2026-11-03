@@ -17,15 +17,16 @@ For `render`, `frame`, `check` and `preview`, the first argument is an entry fil
 ```bash
 # Whole Composition: an .mp4 target is encoded video, any other target is a PNG directory.
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> \
-  [--props <json>] [--concurrency <n>] [--json]
+  [--props <json>] [--concurrency <n>] [--verbose | --quiet] [--json]
 
 # One frame as a PNG, or several stills in a directory.
-motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
+motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> \
+  [--props <json>] [--verbose | --quiet] [--json]
 
 # Sample frames after different capture histories and compare them.
 motion-kit check <entry> [--composition <id>] --frame <n[,n...]> \
   [--predecessor <n[,n...]>] [--history <name[,name...]>] [--exact] \
-  [--channel-tolerance <0-255>] [--changed-ratio <0..1>] [--props <json>] [--json]
+  [--channel-tolerance <0-255>] [--changed-ratio <0..1>] [--props <json>] [--verbose | --quiet] [--json]
 
 # A browser page to scrub, step and play a Composition with its audio; runs until stopped.
 motion-kit preview <entry> [--composition <id>] [--props <json>] [--preview-fps <n>] [--port <n>] [--json]
@@ -68,6 +69,53 @@ MOTION_KIT_PROJECT_ROOT=./video MOTION_KIT_VITE_CONFIG=./ci/vite.config.ts \
 
 Only disable the sandbox when the CI environment requires that explicit security trade-off.
 
+## Progress and logs
+
+`render`, `frame` and `check` run a Composition in a browser, and everything those processes print is
+stderr's business — stdout carries only your result. A run therefore reports three separate things
+there: its Diagnostics, the progress of a long `render`, and — only when something goes wrong — the
+last lines the page and the loading service said.
+
+| Flag        | While the command runs                | After a failure                         | Progress |
+| ----------- | ------------------------------------- | --------------------------------------- | -------- |
+| _(default)_ | nothing of the page or service output | the last 20 lines, under `renderer log` | shown    |
+| `--verbose` | every line, as it arrives             | nothing further (already shown)         | shown    |
+| `--quiet`   | nothing                               | nothing                                 | hidden   |
+
+`--verbose` and `--quiet` together are `cli.invalid-arguments` (exit 2). Environment notices —
+Chromium's WebGL and driver lines, the development server's handshake, react-dom's hint, the bin's
+own Node warning — are never part of the failure block, because they say nothing about the
+Composition that failed. Everything else the page logged is, in arrival order:
+
+```text
+renderer log (1 line; --verbose streams it as it arrives):
+  Error: props.text is missing
+```
+
+`preview` keeps printing the page's console: the person watching a page is the one who wants it.
+
+### Render progress
+
+`render` reports completed frames out of the artifact's total on stderr, with an estimate of the
+remainder:
+
+```text
+rendering 120/300 frames (40%) ETA 12s
+```
+
+The total is `data.frameCount` — the range's length for `--from`/`--to`, and with `--fps` the
+encoder's output frame count — and the completed count is the sum over the `--concurrency`
+renderers. On a terminal the line is rewritten in place, at most every 100 ms, erasing the rest of
+the row so a shorter line leaves nothing behind; when stderr is not a terminal (a pipe, a
+background job, an agent's capture) one whole line is written per 10% of the total, so a captured
+log stays readable. The estimate divides the remaining frames by the rate of the last three
+seconds, so a burst of pooled captures does not set the pace; it appears once there is enough of a
+window to compute it, and it is `--quiet`'s to hide.
+
+```bash
+motion-kit render entry.tsx --out out/teaser.mp4 --json 2> render.log
+```
+
 ## `render`
 
 | Option               | Meaning                                                                                                       |
@@ -78,6 +126,8 @@ Only disable the sandbox when the CI environment requires that explicit security
 | `--concurrency <n>`  | How many renderers capture frames at once; each is its own browser. Positive integer, default half the cores. |
 | `--from <bound>`     | Where to start: a Global Frame (`3600`), `mm:ss[.fff]` (`4:20`) or seconds (`260s`). Defaults to the start.   |
 | `--to <bound>`       | Exclusive end of the range, in the same notations. Defaults to the Composition end.                           |
+| `--verbose`          | Stream the Composition's page console and the loading service's output as it arrives.                         |
+| `--quiet`            | Print neither the progress lines nor the renderer log.                                                        |
 | `--json`             | Print the one-line summary as a JSON envelope instead.                                                        |
 
 ```bash
@@ -204,6 +254,8 @@ and with no output written.
 | `--frame <n>`        | Global frame indices, repeatable or comma-separated. Required.                                  |
 | `--out <path>`       | A `.png` file for one frame; any other path is a directory for `frame-<n>.png` files. Required. |
 | `--props <json>`     | JSON object validated by the Composition's schema.                                              |
+| `--verbose`          | Stream the Composition's page console and the loading service's output as it arrives.           |
+| `--quiet`            | Print no renderer log, including the one a failure would show.                                  |
 | `--json`             | Print the envelope instead of the one-line summary.                                             |
 
 ```bash
@@ -239,6 +291,8 @@ renderer configuration as `render` and `frame`.
 | `--changed-ratio <0..1>`      | Maximum changed-pixel ratio still within tolerance, inclusive. Default `0.002`.                                                                 |
 | `--composition <id>`          | Which Composition to check. Required when the registry holds more than one.                                                                     |
 | `--props <json>`              | JSON object validated by the Composition's schema.                                                                                              |
+| `--verbose`                   | Stream the Composition's page console and the loading service's output as it arrives.                                                           |
+| `--quiet`                     | Print no renderer log, including the one a failure would show.                                                                                  |
 | `--json`                      | Print the envelope instead of the one-line summary.                                                                                             |
 
 `cold` opens a fresh Renderer and captures the sample as its first frame; it is the reference every

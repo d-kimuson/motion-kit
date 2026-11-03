@@ -61,7 +61,12 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'loading',
-          include: ['src/render/loading/**/*.test.ts', 'src/render/browser/**/*.test.ts'],
+          include: [
+            'src/render/loading/**/*.test.ts',
+            'src/render/browser/**/*.test.ts',
+            // The notices the page and the loading service emit, which the loading channel filters.
+            'src/render/noise.test.ts',
+          ],
           testTimeout: 60_000,
           hookTimeout: 20_000,
         },

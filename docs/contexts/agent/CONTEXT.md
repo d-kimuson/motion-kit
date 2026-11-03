@@ -14,6 +14,9 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 | Frame range       | `FrameRange`           | The half-open range of Global Frames a `render` writes, `startFrame` inclusive and `endFrame` exclusive, resolved from `--from`/`--to` by the Time Module.                                                                                                                   |
 | Validate          | `validate`             | Checking a Composition against schemas and rules and returning diagnostics.                                                                                                                                                                                                  |
 | Layout Diagnostic | `LayoutDiagnostic`     | A problem found by DOM measurement: overflow, out-of-frame placement, unexpected scroll, unloaded font, missing asset.                                                                                                                                                       |
+| Log level         | `LogLevel`             | How much of the renderer's own output reaches stderr: `normal` (the default), `verbose` (`--verbose`) or `quiet` (`--quiet`).                                                                                                                                                |
+| Renderer log      | `renderer log`         | The lines the Composition's page (`browser`) and the loading service's child (`service`) emitted during a run, kept for a failed run's stderr block.                                                                                                                         |
+| Progress          | `ProgressState`        | The completed frames out of the artifact's total, with an ETA, that `render` reports on stderr.                                                                                                                                                                              |
 | Contact Sheet     | `contact-sheet`        | A grid of representative frames for visual review.                                                                                                                                                                                                                           |
 
 ## Invariants
@@ -32,6 +35,10 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 ## Output writes
 
 `render`'s frames route and `frame` create their output directory, write every PNG and the manifest, and read and remove the previous run's manifest through `src/cli/output.ts`. A file system that refuses any of those accesses is `render.output-unwritable` (exit `1`), with the refused path in `location.file` and `details.output` and the Node.js errno code in `details.code`, never `internal.unexpected`: the output path is the caller's, so the failure is theirs to fix. A manifest this route does not own stays `cli.invalid-arguments`, and a missing one is the first-run state. The `.mp4` route keeps the encoder's vocabulary, including for the destination directory it cannot create: `encode.output-invalid` with `reason: "unwritable"`.
+
+## Logs and progress
+
+A run's result belongs to stdout; the renderer's output, the progress of a long `render` and the evidence a failure needs go to stderr. The **Log level** decides how much of it a caller gets: `normal` (default), `--verbose` or `--quiet`, with both flags an invocation error. The invariant is that a default run's stderr carries the Diagnostics and the progress and nothing the machine says about itself, while a failed run still shows the last page lines it held back; `--verbose` streams everything as it arrives and `--quiet` keeps nothing. **Renderer log** and **Progress** name the two things that reach stderr beyond the Diagnostics. The [stderr policy ADR](adr/20261103-cli-stderr.accepted.md) fixes the levels, what counts as environment noise, the failure block, the progress format and the placement; no envelope field or Diagnostic code follows from it.
 
 ## Renderer configuration
 
