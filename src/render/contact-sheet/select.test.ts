@@ -83,11 +83,21 @@ describe('selectContactSheetFrames', () => {
     });
   });
 
-  it('refuses more tiles than one sheet holds, naming the shapes that fit', () => {
-    const failure = failureOf(every({ startFrame: 0, endFrame: 1_000, every: 1 }));
-    expect(failure[0]).toMatchObject({ code: 'cli.invalid-arguments' });
-    expect(failure[0]?.message).toContain(String(maxTiles));
-    expect(failure[0]?.hint).toContain('--every');
+  it('refuses more tiles than one sheet holds, naming the shape the caller used', () => {
+    const stepped = failureOf(every({ startFrame: 0, endFrame: 1_000, every: 1 }));
+    expect(stepped[0]).toMatchObject({ code: 'cli.invalid-arguments' });
+    expect(stepped[0]?.message).toContain(String(maxTiles));
+    expect(stepped[0]?.hint).toContain('--every');
+    // The CLI rejects --every with --frame, so the explicit path must not be told to use it alone.
+    const explicitFrames = failureOf(
+      explicit({
+        startFrame: 0,
+        endFrame: 1_000,
+        frames: Array.from({ length: maxTiles + 1 }, (_unused, index) => index),
+      }),
+    );
+    expect(explicitFrames[0]).toMatchObject({ code: 'cli.invalid-arguments' });
+    expect(explicitFrames[0]?.hint).toContain('--frame');
   });
 
   it('selects ascending, unique frames inside the range, ending on its last frame', () => {

@@ -25,6 +25,12 @@ export const maxTiles = 64;
  */
 export const maxSheetDimension = 16_384;
 
+/**
+ * The pixel budget of one sheet: a resource bound on the screenshot and on the decoded tiles, so a
+ * sheet that is legal per side cannot still ask the browser for gigabytes of raster.
+ */
+export const maxSheetPixels = 32_000_000;
+
 export type ContactSheetLayout = {
   readonly columns: number;
   readonly rows: number;
@@ -100,6 +106,11 @@ export const contactSheetLayout = (options: {
   if (width > maxSheetDimension || height > maxSheetDimension)
     return invalid(
       `The sheet would be ${String(width)}x${String(height)} pixels, and a sheet is at most ${String(maxSheetDimension)} pixels on a side.`,
+      'Lower --tile-width or --columns, or raise --every until fewer tiles fit.',
+    );
+  if (width * height > maxSheetPixels)
+    return invalid(
+      `The sheet would be ${String(width)}x${String(height)} pixels, more than the ${String(maxSheetPixels)} pixels one sheet may hold.`,
       'Lower --tile-width or --columns, or raise --every until fewer tiles fit.',
     );
   return {

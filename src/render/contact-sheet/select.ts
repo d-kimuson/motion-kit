@@ -29,11 +29,19 @@ const invalid = (message: string, hint: string): Result<never, readonly Diagnost
   ],
 });
 
-const tooMany = (count: number): Diagnostic => ({
+/**
+ * The tile cap as one Diagnostic, with the hint that fits the selection the caller used: a stepped
+ * sheet is fixed by raising `--every` or narrowing the region, an explicit one by naming fewer
+ * frames. The CLI forbids both options at once, so the hint never sends the caller to the other one.
+ */
+const tooMany = (count: number, spec: ContactSheetFrameSpec): Diagnostic => ({
   code: 'cli.invalid-arguments',
   severity: 'error',
   message: `The sheet would hold ${String(count)} tiles, but one contact sheet holds 1 to ${String(maxTiles)}.`,
-  hint: `Raise --every until the sheet holds at most ${String(maxTiles)} frames, or narrow the range with --from and --to.`,
+  hint:
+    spec.kind === 'every'
+      ? `Raise --every until the sheet holds at most ${String(maxTiles)} frames, or narrow the range with --from and --to.`
+      : `Name at most ${String(maxTiles)} frames, or select the tiles with --every instead of --frame.`,
 });
 
 const isPositiveInteger = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
@@ -69,7 +77,7 @@ export const selectContactSheetFrames = (options: {
     const last = endFrame - 1;
     if (frames.at(-1) !== last) frames.push(last);
     return frames.length > maxTiles
-      ? { ok: false, error: [tooMany(frames.length)] }
+      ? { ok: false, error: [tooMany(frames.length, spec)] }
       : { ok: true, value: frames };
   }
   const problems: Diagnostic[] = [];
@@ -97,6 +105,6 @@ export const selectContactSheetFrames = (options: {
       'The sheet has no frames.',
       'Name at least one --frame, or choose a step with --every.',
     );
-  if (frames.length > maxTiles) return { ok: false, error: [tooMany(frames.length)] };
+  if (frames.length > maxTiles) return { ok: false, error: [tooMany(frames.length, spec)] };
   return { ok: true, value: frames.sort((a, b) => a - b) };
 };

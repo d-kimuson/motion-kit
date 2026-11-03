@@ -15,7 +15,8 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   first frame and always ends on its last, `--frame <n>[,<n>...]` names the tiles instead (one or the
   other, never both), and `--from`/`--to` reuse the range `render` already accepts, so a section can
   be reviewed on its own. `--columns` and `--tile-width` shape the grid and the labels scale with it;
-  one sheet holds at most 64 tiles and at most 16384 pixels a side. The frames are captured in
+  one sheet holds at most 64 tiles, at most 16384 pixels a side and at most 32 million pixels in
+  total. The frames are captured in
   ascending order through one renderer and composited in a static Chromium page, so the same input
   writes byte-identical PNGs twice; `--out` must be a `.png` path and a refused write is
   `render.output-unwritable`. `--json` reports `data.format: "contact-sheet"` with the output path,

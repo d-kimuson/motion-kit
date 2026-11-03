@@ -141,28 +141,32 @@ The guides ship inside the package as well as in the repository, so an installed
 without a network: start at `node_modules/@kimuson/motion-kit/docs/index.md`, and the guides it links
 are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
 
-| Document                                         | What it covers                                                                                                                           |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                                                                 |
-| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                                              |
-| [CLI](docs/guide/cli.md)                         | The `render`, `frame`, `check`, `preview` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
-| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                                       |
-| [Three.js](docs/guide/three.md)                  | `ThreeCanvas`, `CameraRig`, the peer dependencies, software WebGL, qualified and excluded features.                                      |
-| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                                    |
-| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                                                |
-| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                                          |
+| Document                                         | What it covers                                                                                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                                                                                  |
+| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                                                               |
+| [CLI](docs/guide/cli.md)                         | The `render`, `frame`, `contact-sheet`, `check`, `preview` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
+| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                                                        |
+| [Three.js](docs/guide/three.md)                  | `ThreeCanvas`, `CameraRig`, the peer dependencies, software WebGL, qualified and excluded features.                                                       |
+| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                                                     |
+| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                                                                 |
+| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                                                           |
 
 ## CLI
 
 The `motion-kit` bin renders Compositions from a registry entry file and prints the guides that ship
-with the package. `render`, `frame`, `check`, `preview` and `docs` accept `--json`, which writes exactly one
+with the package. `render`, `frame`, `contact-sheet`, `check`, `preview` and `docs` accept `--json`, which writes exactly one
 versioned envelope (`schemaVersion: 1`) to stdout; without it, each command prints its result as text.
 `docs` prints the guide markdown, and its `--json` envelope carries that markdown in `data.content`;
-`render`, `frame` and `check` print a short summary; `preview` prints its URL once the page is served and then runs until stopped.
+`render`, `frame`, `contact-sheet` and `check` print a short summary; `preview` prints its URL once the page is served and then runs until stopped.
 
 ```bash
 # Capture one frame as a PNG: a `.png` target is one file, any other target a directory.
 motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
+
+# One PNG holding a grid of representative frames, each labelled with its frame and time.
+motion-kit contact-sheet <entry> [--composition <id>] (--every <n> | --frame <n[,n...]>) \
+  --out <file.png> [--columns <n>] [--tile-width <px>] [--from <bound>] [--to <bound>] [--json]
 
 # Render a Composition, or one interval of it: an .mp4 target is encoded video, any other target is PNG frames.
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--from <bound>] [--to <bound>] \

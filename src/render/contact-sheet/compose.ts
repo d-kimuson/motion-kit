@@ -19,13 +19,20 @@ export type ContactSheetTile = {
   readonly image: Uint8Array;
 };
 
-/** The captured tiles could not be composed; the page belongs to motion-kit, so a failure is ours. */
-const compositionFailure = (): Diagnostic => ({
-  code: 'internal.unexpected',
-  severity: 'error',
-  message: 'The contact sheet could not be composed.',
-  hint: 'The sheet page is generated from the captured frames; report the stderr output as a bug.',
-});
+/**
+ * The captured tiles could not be composed; the page belongs to motion-kit, so a failure is the
+ * CLI's bug rather than the caller's. The exception's stack goes to stderr — never to the envelope,
+ * per the CLI output contract — so the hint can point at it.
+ */
+const compositionFailure = (error: unknown): Diagnostic => {
+  if (error instanceof Error && error.stack !== undefined) process.stderr.write(`${error.stack}\n`);
+  return {
+    code: 'internal.unexpected',
+    severity: 'error',
+    message: 'The contact sheet could not be composed.',
+    hint: 'The sheet page is generated from the captured frames; report the stack trace on stderr as a bug.',
+  };
+};
 
 /**
  * Draws `tiles` into one PNG of `layout`'s geometry. The browser is this function's own — the
@@ -70,8 +77,8 @@ export const composeContactSheet = async (options: {
     const image = await page.screenshot({ type: 'png' });
     if (aborted()) return { ok: false, aborted: true };
     return { ok: true, value: image };
-  } catch {
-    return { ok: false, error: compositionFailure() };
+  } catch (error) {
+    return { ok: false, error: compositionFailure(error) };
   } finally {
     await context?.close().catch(() => undefined);
     await browser.close().catch(() => undefined);

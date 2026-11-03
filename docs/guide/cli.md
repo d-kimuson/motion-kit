@@ -338,8 +338,8 @@ from scene to scene — in one image, and an MP4 costs the full render.
 | `--json`             | Print the envelope instead of the one-line summary.                                                               |
 
 ```bash
-motion-kit contact-sheet entry.tsx --composition teaser --every 60 --out out/sheet.png --json
-# wrote 13 frames to /abs/out/sheet.png (1320x856)
+motion-kit contact-sheet entry.tsx --composition teaser --every 150 --out out/sheet.png --json
+# wrote 6 frames to /abs/out/sheet.png (1320x432)
 ```
 
 `--every` walks the region from its first frame in steps of `n` and always ends on the region's last
@@ -348,10 +348,10 @@ drawn twice when the walk already landed on it. `--from`/`--to` take the same no
 same half-open interval as they do for `render`, so a section can be reviewed on its own:
 `--from 4:20 --to 4:35 --every 30`.
 
-One sheet holds at most 64 tiles and at most 16384 pixels on a side — the second is what one
-screenshot can rasterise. Both limits are `cli.invalid-arguments` (exit 2) with a hint naming the
-option that fixes them, decided once the Composition's length is known and before a frame is
-captured. Neither `--every` nor `--frame`, both of them, a step or column count that is not a
+One sheet holds at most 64 tiles, at most 16384 pixels on a side and at most 32 million pixels in
+total — a resource bound on one screenshot, not a resolution the browser is asked to exceed. Every
+limit is `cli.invalid-arguments` (exit 2) with a hint naming the option that fixes it, decided once
+the Composition's length is known and before a frame is captured. Neither `--every` nor `--frame`, both of them, a step or column count that is not a
 positive integer, an `--out` that is not a `.png` path, and an empty or reversed `--from`/`--to` are
 the same code and exit before a browser opens. A `--frame` outside the Composition is
 `composition.props-invalid` (exit 1, `location.frame`), as it is for `frame` and `check`; one inside
@@ -379,14 +379,18 @@ label strip (`tileWidth`, `tileHeight`), and `frames` — the tile list, ascendi
     "composition": "teaser",
     "output": "/abs/out/sheet.png",
     "width": 1320,
-    "height": 220,
+    "height": 432,
     "columns": 4,
-    "rows": 1,
+    "rows": 2,
     "tileWidth": 320,
     "tileHeight": 180,
     "frames": [
       { "frame": 0, "timeSeconds": 0, "column": 0, "row": 0 },
-      { "frame": 60, "timeSeconds": 2, "column": 1, "row": 0 }
+      { "frame": 150, "timeSeconds": 5, "column": 1, "row": 0 },
+      { "frame": 300, "timeSeconds": 10, "column": 2, "row": 0 },
+      { "frame": 450, "timeSeconds": 15, "column": 3, "row": 0 },
+      { "frame": 600, "timeSeconds": 20, "column": 0, "row": 1 },
+      { "frame": 719, "timeSeconds": 23.96666666666667, "column": 1, "row": 1 }
     ]
   },
   "diagnostics": [],

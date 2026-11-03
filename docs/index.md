@@ -116,11 +116,12 @@ pnpm exec motion-kit frame entry.tsx --frame 60 --out out/still.png
 ```
 
 To see the whole flow without watching the video, sample it into one labelled grid — every 150th
-frame plus the last, in a single PNG an agent can read at a glance:
+frame plus the last (six tiles for this 150-frame Composition), in a single PNG an agent can read
+at a glance:
 
 ```bash
-pnpm exec motion-kit contact-sheet entry.tsx --every 150 --out out/sheet.png
-# wrote 5 frames to /Users/you/hello-video/out/sheet.png (1320x220)
+pnpm exec motion-kit contact-sheet entry.tsx --every 30 --out out/sheet.png
+# wrote 6 frames to /Users/you/hello-video/out/sheet.png (1320x432)
 ```
 
 Add `--json` to any command to get one versioned envelope on stdout instead of its text output:

@@ -55,10 +55,15 @@ the outer padding and the label strip scale with the tile, so one sheet looks th
 width. Every tile carries its frame number and its Presentation Time underneath it, in a monospaced
 label: that is what makes a tile identifiable without a second document.
 
-Two caps keep one screenshot rasterisable and affordable: 64 tiles, and 16384 pixels on either side
-of the sheet. Both are `cli.invalid-arguments`, decided once the descriptor is known and before a
-frame is captured, and both hints name the option that fixes them (`--every`, `--tile-width`,
-`--columns`, `--from`/`--to`).
+Three caps keep one screenshot rasterisable and affordable: 64 tiles, 16384 pixels on either side
+of the sheet (Chromium's own capture limit) and 32 million pixels in total (the raster budget, so a
+sheet that is legal per side cannot still ask for a gigabyte of pixels). All three are
+`cli.invalid-arguments`, decided once the descriptor is known and before a frame is captured, and
+each hint names the option that fixes it (`--every`, `--tile-width`, `--columns`, `--from`/`--to`);
+the `--frame` path is told to name fewer frames, because the CLI forbids combining it with `--every`.
+The per-side number is Chromium's documented limit; the total is a bound this command keeps, and
+`compose.test.ts` renders a 2 MP sheet to prove the screenshot path is not exercised only at the
+small fixture.
 
 ### Output and refusals
 

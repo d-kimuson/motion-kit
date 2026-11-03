@@ -90,6 +90,35 @@ describe('composeContactSheet', () => {
     expect(first.equals(second)).toBe(true);
   }, 120_000);
 
+  it('draws a sheet well beyond the tiny fixture, so the screenshot is not proven only at 134x158', async () => {
+    // Six tiles of 1000 px: 2 MP of sheet, which is the range a real Composition lands in.
+    const large = contactSheetLayout({
+      tileCount: tiles.length,
+      sourceWidth: 8,
+      sourceHeight: 8,
+      tileWidth: 1_000,
+      columns: 3,
+    });
+    if (!large.ok) throw new Error(large.error.message);
+    const image = decodePng(valueOf(await composeContactSheet({ tiles, layout: large.value })));
+    expect({ width: image.width, height: image.height }).toEqual({
+      width: large.value.width,
+      height: large.value.height,
+    });
+    expect(image.width * image.height).toBeGreaterThan(1_000_000);
+    // Each tile is still where the layout says it is.
+    for (const [index, expected] of colors.entries()) {
+      const column = index % large.value.columns;
+      const row = Math.floor(index / large.value.columns);
+      const x = large.value.padding + column * (large.value.tileWidth + large.value.gap) + 500;
+      const y =
+        large.value.padding +
+        row * (large.value.tileHeight + large.value.labelHeight + large.value.gap) +
+        500;
+      expect(near(pixelAt(image, x, y), expected)).toBe(true);
+    }
+  }, 120_000);
+
   it('reports a browser it could not launch instead of throwing', async () => {
     const composed = await composeContactSheet({
       tiles,

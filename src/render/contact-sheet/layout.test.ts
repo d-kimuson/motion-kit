@@ -6,6 +6,7 @@ import {
   defaultColumns,
   defaultTileWidth,
   maxSheetDimension,
+  maxSheetPixels,
   maxTiles,
   type ContactSheetLayout,
 } from './layout.ts';
@@ -85,6 +86,14 @@ describe('contactSheetLayout', () => {
     expect(result.error.hint).toContain('--tile-width');
   });
 
+  it('refuses a sheet that is legal per side but costs more raster than one sheet may hold', () => {
+    // 64 tiles of 1400 px: every side stays under the per-side cap, the area does not.
+    const result = layout({ tileCount: maxTiles, tileWidth: 1_400 });
+    if (result.ok) throw new Error('expected the pixel budget to refuse this sheet');
+    expect(result.error.message).toContain(String(maxSheetPixels));
+    expect(result.error.hint).toContain('--tile-width');
+  });
+
   it('covers every tile with rows of columns and keeps whole-pixel dimensions', () => {
     fc.assert(
       fc.property(
@@ -122,6 +131,7 @@ describe('contactSheetLayout', () => {
           expect(grid.height).toBeGreaterThanOrEqual(grid.rows * grid.tileHeight);
           expect(grid.width).toBeLessThanOrEqual(maxSheetDimension);
           expect(grid.height).toBeLessThanOrEqual(maxSheetDimension);
+          expect(grid.width * grid.height).toBeLessThanOrEqual(maxSheetPixels);
         },
       ),
       { numRuns: 200 },
