@@ -41,7 +41,7 @@ import {
   type PreviewArgs,
   type RenderArgs,
 } from './args.ts';
-import { commands } from './commands.ts';
+import { cliInvocation, commands } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
@@ -128,7 +128,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
       `The ${command} subcommand is not implemented yet.`,
       `${command} is not implemented yet; use render, frame, contact-sheet, docs, check or preview.`,
     );
-  return invalidArguments(`Put the subcommand first: motion-kit ${command} [options].`);
+  return invalidArguments(`Put the subcommand first: ${cliInvocation} ${command} [options].`);
 };
 
 const parseRaw = (argv: readonly string[]): ParseOutcome => {
@@ -1273,7 +1273,7 @@ const runDecided = async (
 };
 
 const usageText = `${[
-  'Usage: motion-kit <command> [args]',
+  `Usage: ${cliInvocation} <command> [args]`,
   '',
   'Commands:',
   '  check          sample frames for determinism (requires --frame <n>)',
@@ -1286,13 +1286,13 @@ const usageText = `${[
   '                 capturing at once (default: half the cores)',
   '',
   'Examples:',
-  '  motion-kit render entry.tsx --out out.mp4',
-  '  motion-kit contact-sheet entry.tsx --every 150 --out sheet.png --json',
-  '  motion-kit check entry.tsx --frame 1,4 --history pool --json',
-  '  motion-kit preview entry.tsx --composition intro',
-  '  motion-kit docs getting-started',
+  `  ${cliInvocation} render entry.tsx --out out.mp4`,
+  `  ${cliInvocation} contact-sheet entry.tsx --every 150 --out sheet.png --json`,
+  `  ${cliInvocation} check entry.tsx --frame 1,4 --history pool --json`,
+  `  ${cliInvocation} preview entry.tsx --composition intro`,
+  `  ${cliInvocation} docs getting-started`,
   '',
-  'Run `motion-kit docs` to print the guide, or `motion-kit <command> --help` for command options.',
+  `Run \`${cliInvocation} docs\` to print the guide, or \`${cliInvocation} <command> --help\` for command options.`,
 ].join('\n')}\n`;
 
 export const runCli = async (

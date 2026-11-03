@@ -1110,8 +1110,8 @@ describe('motion-kit CLI', () => {
     const leading = await run(['--help'], undefined, { envelope: false });
     expect(leading.code).toBe(0);
     expect(leading.stdout).toContain('docs [topic]');
-    expect(leading.stdout).toContain('motion-kit docs getting-started');
-    expect(leading.stdout).toContain('motion-kit docs` to print the guide');
+    expect(leading.stdout).toContain('npx @kimuson/motion-kit docs getting-started');
+    expect(leading.stdout).toContain('npx @kimuson/motion-kit docs` to print the guide');
 
     const own = await run(['docs', '--help', '--json'], undefined, { envelope: false });
     expect(own.code).toBe(0);
@@ -3179,19 +3179,19 @@ export const compositions = defineCompositions([
       argv: ['--out', '/tmp/a.png', 'render', 'entry.tsx', '--json'],
       command: 'render',
       message: 'Command-line arguments are invalid.',
-      hint: 'Put the subcommand first: motion-kit render [options].',
+      hint: 'Put the subcommand first: npx @kimuson/motion-kit render [options].',
     },
     {
       argv: ['--composition', 'frame', 'render', 'entry.tsx', '--json'],
       command: 'render',
       message: 'Command-line arguments are invalid.',
-      hint: 'Put the subcommand first: motion-kit render [options].',
+      hint: 'Put the subcommand first: npx @kimuson/motion-kit render [options].',
     },
     {
       argv: ['--json', 'render', 'entry.tsx', '--help'],
       command: 'render',
       message: 'Command-line arguments are invalid.',
-      hint: 'Put the subcommand first: motion-kit render [options].',
+      hint: 'Put the subcommand first: npx @kimuson/motion-kit render [options].',
     },
   ])('emits one envelope and exits 2 for $argv', async ({ argv, command, message, hint }) => {
     const result = await run(argv);
@@ -3210,9 +3210,21 @@ export const compositions = defineCompositions([
       const result = await run(argv);
       expect(result.code).toBe(2);
       expect(result.stdout).toBe('');
-      expect(result.stderr).toContain('Usage: motion-kit');
+      expect(result.stderr).toContain('Usage: npx @kimuson/motion-kit <command> [args]');
     },
   );
+
+  // The help is read by someone who may not have the package installed, so every usage line names
+  // the invocation that works either way: `npx` runs the package's one bin, installed or not.
+  it('names npx @kimuson/motion-kit in the leading usage and in every command usage', async () => {
+    const leading = await run(['--help'], undefined, { envelope: false });
+    expect(leading.stdout).toContain('Usage: npx @kimuson/motion-kit <command> [args]');
+    expect(leading.stdout).not.toMatch(/^ {2}motion-kit /mu);
+    for (const command of ['render', 'frame', 'contact-sheet', 'check', 'preview', 'docs']) {
+      const own = await run([command, '--help'], undefined, { envelope: false });
+      expect(own.stdout).toContain(`Usage: npx @kimuson/motion-kit ${command} [options]`);
+    }
+  });
 
   it('prints a human summary instead of JSON when --json is absent', async () => {
     const output = join(outputRoot, 'human.png');

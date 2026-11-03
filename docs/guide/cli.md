@@ -49,9 +49,12 @@ summary. The topics and their order are `index`, `getting-started`, `cli`, `auth
 `three`, `determinism`, `examples`, `troubleshooting`; an unknown topic, or `--list` with a topic, is
 `cli.invalid-arguments` (exit 2) with the topics in the hint.
 
-`motion-kit` is the bin the package installs (`bin.motion-kit` → `dist/cli.js`), so with pnpm a
-command is `pnpm exec motion-kit …`, with npm `npx motion-kit …`, and with yarn `yarn motion-kit …`.
-Both that form and `node dist/cli.js …` appear below: the second is the same CLI run out of a
+`motion-kit` is the bin the package installs (`bin.motion-kit` → `dist/cli.js`), so in a project
+that depends on the package a command is `pnpm exec motion-kit …` with pnpm, `npx motion-kit …` with
+npm, and `yarn motion-kit …` with yarn. Without an install, run `npx @kimuson/motion-kit …`: the
+bare `npx motion-kit` would fetch an unrelated package of that name. The usage text the CLI prints
+(`--help`) names the `npx @kimuson/motion-kit …` form, since it works installed or not.
+Both `motion-kit …` and `node dist/cli.js …` appear below: the second is the same CLI run out of a
 checkout of this repository, after `pnpm build`, which is how the commands in the `examples/`
 directory of the repository are written.
 
