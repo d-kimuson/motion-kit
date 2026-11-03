@@ -17,6 +17,7 @@ import { createFrameRate, frameToTime, toSeconds, type FrameRate } from '../core
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { coverOnExit, exitThroughCovers } from '../lib/exit.ts';
 import { type LoadingDescriptor } from '../lib/loading-protocol.ts';
+import { createLogChannel, logChannel, setLogChannel } from '../lib/log.ts';
 import { type Result } from '../lib/result.ts';
 import { defaultPreviewFps, previewQueryString } from '../preview/query.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
@@ -41,12 +42,14 @@ import { commands } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
+import { failureLogBlock, logFlagsOf } from './log.ts';
 import {
   createOutputDirectory,
   readOutputFile,
   removeOutputFile,
   writeOutputFile,
 } from './output.ts';
+import { createProgressReporter, type ProgressReporter } from './progress.ts';
 import { resolveFrameRange, type FrameRange } from './range.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
@@ -162,6 +165,7 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         viteConfig: options['viteConfig'],
         softwareWebgl: options['softwareWebgl'],
         disableSandbox: options['disableSandbox'],
+        log: logFlagsOf(options),
         out: options['out'],
         props: options['props'],
         concurrency: options['concurrency'],
@@ -185,6 +189,7 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         viteConfig: options['viteConfig'],
         softwareWebgl: options['softwareWebgl'],
         disableSandbox: options['disableSandbox'],
+        log: logFlagsOf(options),
         out: options['out'],
         frame: options['frame'],
         props: options['props'],
@@ -202,6 +207,7 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         viteConfig: options['viteConfig'],
         softwareWebgl: options['softwareWebgl'],
         disableSandbox: options['disableSandbox'],
+        log: logFlagsOf(options),
         frame: options['frame'],
         predecessor: options['predecessor'],
         history: options['history'],
@@ -572,6 +578,14 @@ const runRender = async (
       : await openPool(args, config, signal);
   if (!opened.ok) return opened.outcome;
   const renderer = opened.renderer;
+  // Progress is stderr's business, never stdout's: `--json` owns stdout (agent ADR: CLI stderr).
+  const progressOf = (total: number): ProgressReporter =>
+    createProgressReporter({
+      total,
+      level: args.log,
+      tty: process.stderr.isTTY === true,
+    });
+  let progress: ProgressReporter | undefined;
   try {
     const descriptor = renderer.descriptor();
     const rate = createFrameRate(descriptor.fps);
@@ -672,6 +686,12 @@ const runRender = async (
         ...(args.videoCrf === undefined ? {} : { crf: args.videoCrf }),
         ...(args.videoBitrate === undefined ? {} : { videoBitrate: args.videoBitrate }),
         signal,
+        // The encoder's own count: with `--fps` the artifact has more output frames than the range
+        // has Composition frames, and the total a reader sees must match the artifact.
+        onProgress: (item) => {
+          progress ??= progressOf(item.frameCount);
+          progress.update(item.encodedFrames);
+        },
       });
       if (!encoded.ok)
         return decide(
@@ -722,6 +742,9 @@ const runRender = async (
     const diagnostics: Diagnostic[] = [];
     let width = descriptor.width;
     let height = descriptor.height;
+    // The frames route counts its own completions: each captured frame is written as it arrives, so
+    // the count is the artifact's own, and across a pool it is their sum.
+    progress = progressOf(rangeData.frameCount);
     for await (const result of renderer.renderFrames({
       from: range.startFrame,
       to: range.endFrame,
@@ -735,6 +758,7 @@ const runRender = async (
       const written = writeOutputFile(join(outAbsolute, name), result.value.image);
       if (!written.ok) return decide(failure([written.error]));
       files.push(name);
+      progress.update(files.length);
       width = result.value.width;
       height = result.value.height;
       diagnostics.push(...result.value.diagnostics);
@@ -776,6 +800,7 @@ const runRender = async (
     });
   } finally {
     // The outcome above is already on disk; this teardown is all that is left of the run.
+    progress?.finish();
     await renderer.dispose();
   }
 };
@@ -1203,6 +1228,11 @@ export const runCli = async (
     }
   }
   let outcome: CommandOutcome;
+  // The renderer's own output — the Composition's page console and the loading service — is held
+  // back by default and shown only when the run fails; `--verbose` streams it as it arrives and
+  // `--quiet` drops it. `preview` keeps the channel it had, because the person watching a preview
+  // is the one who wants to read the page (agent ADR: CLI stderr).
+  const restoreLog = setLogChannel(createLogChannel({ level: args.log }));
   // A cancelled run's line is written below, but a library that exits the process from its own
   // signal handler can end the run before that line is reached; this cover is the last chance to
   // keep the caller's one statement about what the interrupted run left behind (lib/exit.ts).
@@ -1242,8 +1272,17 @@ export const runCli = async (
     // The run is not cancelled, so it owes the caller no aborted line any more: a signal from
     // here on must not describe a finished render as one that produced nothing.
     releaseCover();
-    return emit(buildEnvelope(args.command, outcome, durationMs()), args.json);
+    const code = emit(buildEnvelope(args.command, outcome, durationMs()), args.json);
+    // What the renderer said while the run worked, and what the default level held back: a failure
+    // is the one moment those lines are the evidence a caller needs, so they follow the conclusion.
+    // They go to stderr, never into the envelope, whose fields are versioned and whose text is the
+    // CLI's own. Only the default level reaches a failure report: `--verbose` streamed these lines
+    // as they arrived and `--quiet` kept none, so repeating them would say nothing new (agent ADR).
+    if (!outcome.ok && logChannel().level() === 'normal')
+      process.stderr.write(failureLogBlock(logChannel().recent()));
+    return code;
   } finally {
+    restoreLog();
     releaseCover();
   }
 };

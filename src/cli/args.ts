@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { previewFpsSchema } from '../preview/query.ts';
 import { checkHistories, type CheckHistory } from '../render/check/history.ts';
 import { docsTopicIds, docsTopicsHint, isDocsTopic } from './docs.ts';
+import { logFlagsSchema } from './log.ts';
 import { checkRangeOrder, parseRangeBound } from './range.ts';
 
 // The argument contract is schema-first: commander only tokenizes argv, and
@@ -48,10 +49,14 @@ const rendererConfig = {
   disableSandbox: z.boolean().optional(),
 };
 
+// What a browser-opening command does with the renderer's own output (agent ADR: CLI stderr).
+const log = { log: logFlagsSchema };
+
 export const RenderArgsSchema = z
   .strictObject({
     command: z.literal('render'),
     ...rendererConfig,
+    ...log,
     entry,
     composition,
     out,
@@ -101,6 +106,7 @@ export const RenderArgsSchema = z
 export const FrameArgsSchema = z.strictObject({
   command: z.literal('frame'),
   ...rendererConfig,
+  ...log,
   entry,
   composition,
   out,
@@ -225,6 +231,7 @@ export const CheckArgsSchema = z
   .strictObject({
     command: z.literal('check'),
     ...rendererConfig,
+    ...log,
     entry,
     composition,
     frame: frameList,

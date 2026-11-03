@@ -15,8 +15,10 @@ import {
   type LoadingDescriptor,
   type MountReceipt,
 } from '../../lib/loading-protocol.ts';
+import { logChannel } from '../../lib/log.ts';
 import { type Result } from '../../lib/result.ts';
 import { launchBrowser, type BrowserOptions, type OwnedBrowser } from '../browser/launch.ts';
+import { isKnownRendererNoise } from '../noise.ts';
 import { loadingFailure } from './diagnostics.ts';
 import { startLoadingService, type LoadingService } from './service.ts';
 
@@ -174,7 +176,12 @@ export const openLoadingSession = async (
       deviceScaleFactor: 1,
     });
     page = await context.newPage();
-    page.on('console', (message) => process.stderr.write(`${message.text()}\n`));
+    // The page's own output is not the CLI's result: it is recorded so a failed run can show it,
+    // and streamed only when the caller asked for it (agent ADR: CLI stderr).
+    page.on('console', (message) => {
+      const text = message.text();
+      logChannel().write({ source: 'browser', text, noise: isKnownRendererNoise(text) });
+    });
     page.on('pageerror', () => fail(loadingFailure('page bootstrap')));
     const handshake = Promise.withResolvers<void>();
     await page.exposeFunction('__motionKitLoadingEvent', (event: unknown) => {

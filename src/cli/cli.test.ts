@@ -146,6 +146,41 @@ export const compositions = defineCompositions([
       join(projectRoot, 'audio', name),
     ]);
   }
+  // A render long enough to need progress: 300 frames thins to one line per tenth, and a pool can
+  // finish several frames between two reports.
+  writeFileSync(
+    join(projectRoot, 'entry-progress.tsx'),
+    `import { z } from 'zod';
+import { defineComposition, defineCompositions } from ${JSON.stringify(
+      new URL('../core/composition/registry.ts', import.meta.url).pathname,
+    )};
+const Scene = () => <div style={{ width: 32, height: 32, background: '#224488' }} />;
+export const compositions = defineCompositions([
+  defineComposition({ id: 'progress', schema: z.object({}), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 300 }),
+]);`,
+  );
+  // A Composition that says something on its page console when the realm loads it: the line the CLI
+  // holds back by default and shows when the run fails.
+  writeFileSync(
+    join(projectRoot, 'entry-logging.tsx'),
+    `import { z } from 'zod';
+import { defineComposition, defineCompositions } from ${JSON.stringify(
+      new URL('../core/composition/registry.ts', import.meta.url).pathname,
+    )};
+console.warn('drawing the scene');
+const Scene = () => <div style={{ width: 32, height: 32, background: '#333333' }} />;
+export const compositions = defineCompositions([
+  defineComposition({ id: 'logging', schema: z.object({}), component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 3 }),
+]);`,
+  );
+  // A WebGL Composition: opening a context is what makes Chromium report the software-WebGL
+  // fallback warning on the page console (knowledge/20261029-swiftshader-warning.md).
+  writeFileSync(
+    join(projectRoot, 'entry-three.tsx'),
+    `export {compositions} from ${JSON.stringify(
+      new URL('../three/fixtures/reference.tsx', import.meta.url).pathname,
+    )};`,
+  );
 });
 
 afterAll(() => {
@@ -3058,4 +3093,222 @@ export const compositions = defineCompositions([
       expect(existsSync(join(output, 'manifest.json'))).toBe(true);
     }
   }, 120_000);
+});
+
+// TASK-284: what a run says besides its result, and what it holds back. The envelope contract fixes
+// stdout (`--json` is one document), so stderr is where the renderer's own output, the progress and
+// the failure evidence go; the log levels decide how much of it a caller wants
+// (agent ADR: CLI stderr).
+describe('motion-kit CLI stderr', () => {
+  const progressCounts = (stderr: string): readonly number[] =>
+    stderr
+      .split('\n')
+      .filter((line) => line.startsWith('rendering '))
+      .map((line) => Number(line.slice('rendering '.length).split('/')[0]));
+
+  it('reports thinned, monotonic progress for a frames render on a pipe', async () => {
+    const directory = join(outputRoot, 'progress-frames');
+    const result = await run(['render', 'entry-progress.tsx', '--out', directory, '--json']);
+    expect(result.code).toBe(0);
+    assertValidEnvelope(result);
+    // The document is stdout's only content: every progress line went to stderr.
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+    expect(progressCounts(result.stderr)).toEqual([30, 60, 90, 120, 150, 180, 210, 240, 270, 300]);
+    const lines = result.stderr.split('\n').filter((line) => line.startsWith('rendering '));
+    expect(lines.at(-1)).toContain('(100%)');
+    // The estimate appears once the run has a rate to report.
+    expect(lines.some((line) => line.includes(' ETA '))).toBe(true);
+  }, 180_000);
+
+  it('reports progress for an mp4 render too', async () => {
+    const output = join(outputRoot, 'progress.mp4');
+    const result = await run(['render', 'entry-progress.tsx', '--out', output, '--json']);
+    expect(result.code).toBe(0);
+    assertValidEnvelope(result);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+    expect(progressCounts(result.stderr)).toEqual([30, 60, 90, 120, 150, 180, 210, 240, 270, 300]);
+  }, 180_000);
+
+  it('hides progress under --quiet and refuses --verbose with --quiet', async () => {
+    const quiet = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      join(outputRoot, 'quiet-frames'),
+      '--quiet',
+      '--json',
+    ]);
+    expect(quiet.code).toBe(0);
+    expect(assertValidEnvelope(quiet).ok).toBe(true);
+    expect(quiet.stderr).not.toContain('rendering ');
+    const both = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      join(outputRoot, 'both-flags-frames'),
+      '--verbose',
+      '--quiet',
+      '--json',
+    ]);
+    expect(both.code).toBe(2);
+    expect(assertValidEnvelope(both).diagnostics[0]).toMatchObject({
+      code: 'cli.invalid-arguments',
+    });
+    expect(both.stderr).not.toContain('rendering ');
+  }, 120_000);
+
+  it('holds the page console back by default and streams it with --verbose', async () => {
+    const held = await run([
+      'frame',
+      'entry-logging.tsx',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'logging-held.png'),
+      '--json',
+    ]);
+    expect(held.code).toBe(0);
+    expect(held.stderr).not.toContain('drawing the scene');
+    // A success owes no failure block: the lines were kept but never needed.
+    expect(held.stderr).not.toContain('renderer log (');
+    const streamed = await run([
+      'frame',
+      'entry-logging.tsx',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'logging-streamed.png'),
+      '--verbose',
+      '--json',
+    ]);
+    expect(streamed.code).toBe(0);
+    expect(streamed.stderr).toContain('drawing the scene');
+  }, 120_000);
+
+  it('shows the held-back page log when the run fails, and nothing under --quiet', async () => {
+    const failed = await run([
+      'frame',
+      'entry-logging.tsx',
+      '--frame',
+      '99',
+      '--out',
+      join(outputRoot, 'logging-failed'),
+      '--json',
+    ]);
+    expect(failed.code).toBe(1);
+    assertValidEnvelope(failed);
+    expect(failed.stderr).toContain('renderer log (');
+    expect(failed.stderr).toContain('drawing the scene');
+    const quiet = await run([
+      'frame',
+      'entry-logging.tsx',
+      '--frame',
+      '99',
+      '--out',
+      join(outputRoot, 'logging-failed-quiet'),
+      '--quiet',
+      '--json',
+    ]);
+    expect(quiet.code).toBe(1);
+    expect(quiet.stderr).not.toContain('renderer log (');
+  }, 120_000);
+
+  it('does not repeat the streamed lines when a --verbose run fails', async () => {
+    const failed = await run([
+      'frame',
+      'entry-logging.tsx',
+      '--frame',
+      '99',
+      '--out',
+      join(outputRoot, 'logging-failed-verbose'),
+      '--verbose',
+      '--json',
+    ]);
+    expect(failed.code).toBe(1);
+    expect(assertValidEnvelope(failed).ok).toBe(false);
+    // The page's line streamed as it arrived, so the failure report has nothing left to add.
+    expect(failed.stderr).toContain('drawing the scene');
+    expect(failed.stderr).not.toContain('renderer log (');
+  }, 120_000);
+
+  it('keeps the bin own Node warning out of a default run and shows it under --verbose', async () => {
+    const held = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'warning-held.png'),
+      '--json',
+    ]);
+    expect(held.code).toBe(0);
+    expect(held.stderr).not.toContain('ExperimentalWarning');
+    // `--quiet` asks for less, not more: the same two lines stay away.
+    const quiet = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'warning-quiet.png'),
+      '--quiet',
+      '--json',
+    ]);
+    expect(quiet.code).toBe(0);
+    expect(quiet.stderr).not.toContain('ExperimentalWarning');
+    const streamed = await run([
+      'frame',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--frame',
+      '0',
+      '--out',
+      join(outputRoot, 'warning-streamed.png'),
+      '--verbose',
+      '--json',
+    ]);
+    expect(streamed.code).toBe(0);
+    expect(streamed.stderr).toContain('ExperimentalWarning');
+  }, 180_000);
+
+  it('hides the software-WebGL warning by default and streams it with --verbose', async () => {
+    const held = await run([
+      'frame',
+      'entry-three.tsx',
+      '--composition',
+      'three-canvas',
+      '--frame',
+      '1',
+      '--out',
+      join(outputRoot, 'three-held'),
+      '--json',
+    ]);
+    expect(held.code).toBe(0);
+    expect(held.stderr).not.toContain('Automatic fallback to software WebGL');
+    expect(held.stderr).not.toContain('[vite] connecting');
+    expect(held.stderr).not.toContain('GL Driver Message');
+    const streamed = await run([
+      'frame',
+      'entry-three.tsx',
+      '--composition',
+      'three-canvas',
+      '--frame',
+      '1',
+      '--out',
+      join(outputRoot, 'three-streamed'),
+      '--verbose',
+      '--json',
+    ]);
+    expect(streamed.code).toBe(0);
+    expect(streamed.stderr).toContain('Automatic fallback to software WebGL');
+  }, 240_000);
 });
