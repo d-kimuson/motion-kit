@@ -94,7 +94,11 @@ export const openLoadingSession = async (
     failure.reject(new LoadingError(diagnostic));
     if (published) void dispose();
   };
-  const deadline = async <T>(operation: string, work: () => Promise<T>): Promise<T> => {
+  const deadline = async <T>(
+    operation: string,
+    work: () => Promise<T>,
+    budgetMs = timeoutMs,
+  ): Promise<T> => {
     if (aborted) throw new LoadingAborted();
     if (terminal !== undefined) throw new LoadingError(terminal);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -105,7 +109,7 @@ export const openLoadingSession = async (
         new Promise<never>((_resolve, reject) => {
           timer = setTimeout(
             () => reject(new LoadingError(timeoutDiagnostic(operation))),
-            timeoutMs,
+            budgetMs,
           );
         }),
       ]);
@@ -264,27 +268,37 @@ export const openLoadingSession = async (
               return loadRealm(initial.url);
             });
             const instance = randomUUID();
-            const receipt = await deadline('props parse and mount', async () => {
-              const value: unknown = await page?.evaluate(
-                (request: unknown) => window.__motionKit?.mount(request),
-                {
-                  ...selection,
-                  props: selection.props ?? {},
-                  revision,
-                  instance,
-                  loadingTimeoutMs: timeoutMs,
-                  frameTimeoutMs: options.frameTimeoutMs ?? 30_000,
-                  queueTimeoutMs: options.queueTimeoutMs ?? 30_000,
-                } as unknown,
-              );
-              const result = resultSchema(mountReceiptSchema).parse(value);
-              if (!result.ok) return result;
-              await page?.setViewportSize({
-                width: result.value.descriptor.width,
-                height: result.value.descriptor.height,
-              });
-              return result;
-            });
+            // The page enforces its own per-phase budgets (defaults, props, metadata resolution) and
+            // answers with a Diagnostic when one expires. The host deadline is only a backstop for a
+            // page that cannot answer at all, so it allows the mount's phases on top of the budget:
+            // expiring first would replace the page's Diagnostic (composition id, phase hint) with a
+            // generic timeout that names neither.
+            const receipt = await deadline(
+              'props parse and mount',
+              async () => {
+                const value: unknown = await page?.evaluate(
+                  (request: unknown) => window.__motionKit?.mount(request),
+                  {
+                    ...selection,
+                    props: selection.props ?? {},
+                    revision,
+                    instance,
+                    loadingTimeoutMs: timeoutMs,
+                    frameTimeoutMs: options.frameTimeoutMs ?? 30_000,
+                    queueTimeoutMs: options.queueTimeoutMs ?? 30_000,
+                  } as unknown,
+                );
+                const result = resultSchema(mountReceiptSchema).parse(value);
+                if (!result.ok) return result;
+                await page?.setViewportSize({
+                  width: result.value.descriptor.width,
+                  height: result.value.descriptor.height,
+                });
+                return result;
+              },
+              // Two phases' worth of budget: the props parse and the metadata resolution.
+              timeoutMs * 2,
+            );
             return receipt;
           } catch (error) {
             const diagnostic =

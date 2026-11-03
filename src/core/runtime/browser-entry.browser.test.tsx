@@ -95,6 +95,78 @@ it('handshakes, preserves page-local schemas, prepares a fixed root without rend
   delete window.__motionKitLoadingEvent;
 });
 
+it('mounts the metadata the props derive and sizes the root from it', async () => {
+  const container = document.createElement('div');
+  container.id = 'motion-kit-root';
+  document.body.append(container);
+  window.__motionKitLoadingEvent = () => Promise.resolve();
+  let renders = 0;
+  bootstrapComposition(
+    defineCompositions([
+      defineComposition({
+        id: 'derived',
+        width: 32,
+        height: 32,
+        fps: { numerator: 30, denominator: 1 },
+        // Only the declaration a list reports: the mount's props decide the real metadata.
+        durationInFrames: 1,
+        schema: z.object({ frames: z.number().int().nonnegative().default(1) }),
+        component: () => {
+          renders++;
+          return <div>scene</div>;
+        },
+        resolveMetadata: ({ props }) => ({
+          ok: true,
+          value: {
+            durationInFrames: props.frames,
+            width: 64,
+            fps: { numerator: 24, denominator: 1 },
+          },
+        }),
+      }),
+    ]),
+  );
+  const api = window.__motionKit;
+  if (api === undefined) throw new Error('Missing protocol');
+  expect(api.listCompositions()).toMatchObject({
+    ok: true,
+    value: [{ id: 'derived', width: 32, durationInFrames: 1 }],
+  });
+  const mounted = await api.mount({
+    instance: 'resolved',
+    revision: 'revision',
+    props: { frames: 3 },
+    loadingTimeoutMs: 1_000,
+  });
+  expect(mounted).toMatchObject({
+    ok: true,
+    value: {
+      descriptor: {
+        id: 'derived',
+        width: 64,
+        height: 32,
+        durationInFrames: 3,
+        fps: { numerator: 24, denominator: 1 },
+      },
+    },
+  });
+  expect(renders).toBe(0);
+  expect(container.style.width).toBe('64px');
+  // The host frame range is the resolved one, for the preview and the renderer alike.
+  expect(await api.settleFrame(3, { source: 'renderer', requestId: 'past-end' })).toMatchObject({
+    status: 'failed',
+  });
+  window.__motionKitOwnership = () => Promise.resolve(true);
+  const ready = await api.settleFrame(2, { source: 'renderer', requestId: 'last' });
+  expect(ready.status).toBe('ready');
+  if (ready.status !== 'ready') throw new Error('Expected ready lease');
+  expect(ready.lease.fps).toEqual({ numerator: 24, denominator: 1 });
+  expect(api.completeCapture(ready.lease)).toEqual({ status: 'accepted' });
+  expect(api.dispose()).toEqual({ ok: true, value: undefined });
+  delete window.__motionKitOwnership;
+  delete window.__motionKitLoadingEvent;
+});
+
 it('preserves registry duration Diagnostic and rejects missing/malformed registries', () => {
   bootstrapComposition(
     defineCompositions([

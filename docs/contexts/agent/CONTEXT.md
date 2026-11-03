@@ -22,6 +22,7 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 - Include known location information in each Diagnostic according to the accepted CLI output contract.
 - A frame transport or page exception keeps the deterministic `render.page-error` message, hint and location and, when the exception yields a usable message or name, exposes the sanitized exception in `details.cause` (`message`, plus `name` and `code` when present). This evidence supports investigation without classifying the failure as page, transport/CDP or browser; human-readable output omits the cause, so agents inspect it through `--json`.
 - The [accepted CLI output contract](adr/20261024-cli-output-contract.accepted.md) fixes the JSON envelope, severity semantics, exit codes, and versioning policy.
+- Every command that mounts a Composition uses the metadata resolved from that mount's props (the [props-driven metadata decision](../core/adr/20261103-props-driven-metadata.accepted.md)): the render length, a `frame` request and a `check` sample all read it, so a frame at or past the resolved count is the same `composition.props-invalid` from every command, and a resolver failure is the command's failure before any output exists.
 
 ## Batch stills
 

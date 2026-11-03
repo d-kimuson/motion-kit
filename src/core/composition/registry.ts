@@ -6,6 +6,7 @@ import { audioTrackSchema, type AudioTrack } from '../../lib/loading-protocol.ts
 import { type Result } from '../../lib/result.ts';
 import { redactAssetSource } from '../assets/diagnostics.ts';
 import { createFrameRate, type FrameRate, type RationalInput } from '../timeline/time.ts';
+import { resolveCompositionMetadata, type MetadataResolver } from './metadata.ts';
 
 export type CompositionDescriptor = Readonly<{
   id: string;
@@ -43,6 +44,8 @@ export type CompositionDefinition<S extends z.ZodType<object>> = CompositionEntr
   Readonly<{
     schema: S;
     component: ComponentType<z.output<S>>;
+    /** Derives metadata from validated props; absent keeps the declaration for every mount. */
+    resolveMetadata?: MetadataResolver<z.output<S>>;
   }>;
 
 export const compositionFailure = (
@@ -311,10 +314,11 @@ export const defineComposition = <S extends z.ZodType<object>>(
   input: CompositionDescriptor & {
     schema: S;
     component: ComponentType<NoInfer<z.output<S>>>;
+    resolveMetadata?: MetadataResolver<NoInfer<z.output<S>>>;
   },
 ): Result<CompositionDefinition<S>> => {
   try {
-    const { id, width, height, durationInFrames, schema, component } = input;
+    const { id, width, height, durationInFrames, schema, component, resolveMetadata } = input;
     if (
       typeof id !== 'string' ||
       id.length === 0 ||
@@ -325,6 +329,7 @@ export const defineComposition = <S extends z.ZodType<object>>(
       !Number.isSafeInteger(height) ||
       height <= 0 ||
       typeof schema?.safeParseAsync !== 'function' ||
+      (resolveMetadata !== undefined && typeof resolveMetadata !== 'function') ||
       (typeof component !== 'function' && (typeof component !== 'object' || component === null))
     )
       return pageFailure();
@@ -361,6 +366,7 @@ export const defineComposition = <S extends z.ZodType<object>>(
         frameRate: fps.value,
         schema,
         component,
+        ...(resolveMetadata === undefined ? {} : { resolveMetadata }),
         prepare: async (
           props: unknown,
           revision: string,
@@ -368,11 +374,22 @@ export const defineComposition = <S extends z.ZodType<object>>(
         ): Promise<Result<PreparedComposition>> => {
           const parsed = await parseProps(schema, props, id, timeoutMs);
           if (!parsed.ok) return parsed;
+          // The one metadata resolution point: every consumer (render, frame, check, preview) reads
+          // the prepared descriptor, so the same props always select the same frames and size.
+          const resolved = await resolveCompositionMetadata<z.output<S>>({
+            id,
+            descriptor,
+            frameRate: fps.value,
+            props: parsed.value.typed,
+            resolveMetadata,
+            timeoutMs,
+          });
+          if (!resolved.ok) return resolved;
           return {
             ok: true,
             value: Object.freeze({
-              descriptor,
-              frameRate: fps.value,
+              descriptor: resolved.value.descriptor,
+              frameRate: resolved.value.frameRate,
               revision,
               props: parsed.value.json,
               render: () => createElement(component, parsed.value.typed),

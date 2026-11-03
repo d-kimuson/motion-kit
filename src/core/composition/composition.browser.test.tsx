@@ -5,6 +5,7 @@ import {
   defineComposition,
   defineCompositions,
   useCompositionFrame,
+  useTimeline,
   type ContentRegistration,
   type Result,
 } from '@kimuson/motion-kit';
@@ -419,6 +420,65 @@ describe('Composition provider', () => {
       }
       expect(parse).toHaveBeenCalledTimes(1);
       expect(unselected).not.toHaveBeenCalled();
+    } finally {
+      flushSync(() => root.unmount());
+      runtime.dispose();
+      container.remove();
+    }
+  });
+
+  it('serves the metadata resolved from the mounted props to the timeline hooks', async () => {
+    const Scene = () => {
+      const timeline = useTimeline();
+      return (
+        <p>
+          {timeline.width}x{timeline.height}@{timeline.durationInFrames}/
+          {timeline.frameRate.numerator.toString()}:{timeline.frameRate.denominator.toString()}
+        </p>
+      );
+    };
+    const registry = unwrap(
+      defineCompositions([
+        defineComposition({
+          ...metadata,
+          schema: z.object({ frames: z.number().int().nonnegative().default(10) }),
+          component: Scene,
+          resolveMetadata: ({ props }) => ({
+            ok: true,
+            value: {
+              durationInFrames: props.frames,
+              width: 64,
+              fps: { numerator: 24, denominator: 1 },
+            },
+          }),
+        }),
+      ]),
+    );
+    const definition = unwrap(
+      await registry.mount({ compositionId: 'test', props: { frames: 2 }, revision: 'r1' }),
+    );
+    expect(definition.descriptor).toMatchObject({ width: 64, height: 100, durationInFrames: 2 });
+    expect(definition.frameRate.numerator).toBe(24n);
+    const runtime = createCompositionRuntime({
+      definition,
+      instance: 'resolved',
+      compositionRealm: 'iframe',
+    });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(<Composition definition={definition} compositionRuntime={runtime} />),
+      );
+      const settled = await runtime.settleFrame(1, { source: 'renderer', requestId: 'resolved' });
+      if (settled.status !== 'ready') throw new Error('not ready');
+      expect(container.textContent).toBe('64x100@2/24:1');
+      expect(runtime.completeCapture(settled.lease)).toEqual({ status: 'accepted' });
+      // The realm's frame range is the resolved one, not the declaration's 10 frames.
+      expect(
+        await runtime.settleFrame(2, { source: 'renderer', requestId: 'past-end' }),
+      ).toMatchObject({ status: 'failed', diagnostics: [{ code: 'render.page-error' }] });
     } finally {
       flushSync(() => root.unmount());
       runtime.dispose();
