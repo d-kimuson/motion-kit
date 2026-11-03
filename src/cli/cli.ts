@@ -1187,11 +1187,13 @@ export const runCli = async (
     // The run is not cancelled, so it owes the caller no aborted line any more: a signal from
     // here on must not describe a finished render as one that produced nothing.
     releaseCover();
+    const code = emit(buildEnvelope(args.command, outcome, durationMs()), args.json);
     // What the renderer said while the run worked, and what the default level held back: a failure
-    // is the one moment those lines are the evidence a caller needs. They go to stderr, never into
-    // the envelope, whose fields are versioned and whose text is the CLI's own (agent ADR).
+    // is the one moment those lines are the evidence a caller needs, so they follow the conclusion.
+    // They go to stderr, never into the envelope, whose fields are versioned and whose text is the
+    // CLI's own (agent ADR).
     if (!outcome.ok) process.stderr.write(failureLogBlock(logChannel().recent()));
-    return emit(buildEnvelope(args.command, outcome, durationMs()), args.json);
+    return code;
   } finally {
     restoreLog();
     releaseCover();
