@@ -161,8 +161,8 @@ versioned envelope (`schemaVersion: 1`) to stdout; without it, each command prin
 `render`, `frame` and `check` print a short summary; `preview` prints its URL once the page is served and then runs until stopped.
 
 ```bash
-# Capture one frame as a PNG.
-motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]
+# Capture one frame as a PNG: a `.png` target is one file, any other target a directory.
+motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
 
 # Render a whole Composition: an .mp4 target is encoded video, any other target is PNG frames.
 motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--props <json>] [--concurrency <n>] [--json]
@@ -175,7 +175,7 @@ motion-kit check <entry> [--composition <id>] --frame <n[,n...]> [--history <nam
 
 `--composition` may be omitted only when the registry exports exactly one Composition; otherwise the
 command fails with `cli.invalid-arguments` naming the available ids. `--props` is a JSON object string
-validated by the Composition's Zod schema before the first frame, and `frame` has no `--props`.
+validated by the Composition's Zod schema before the first frame; `render` and `frame` both accept it.
 
 `--out` selects the format: an `.mp4` file is encoded H.264, and any other target is a directory of
 PNG frames plus a `manifest.json`, reported as `"format": "frames"` in `data`. There is no `--format`

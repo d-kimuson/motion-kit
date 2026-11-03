@@ -29,7 +29,7 @@ What a coding agent operates. agent provides the CLI and diagnostics: render, fr
 
 ## Output writes
 
-`render`'s frames route and `frame` create their output directory and write every PNG and the manifest through `src/cli/output.ts`. A file system that refuses one of those writes is `render.output-unwritable` (exit `1`), with the refused path in `location.file` and `details.output` and the Node.js errno code in `details.code`, never `internal.unexpected`: the output path is the caller's, so the failure is theirs to fix. The `.mp4` route's destination failures keep the encoder's own `encode.*` diagnostics.
+`render`'s frames route and `frame` create their output directory, write every PNG and the manifest, and read and remove the previous run's manifest through `src/cli/output.ts`. A file system that refuses any of those accesses is `render.output-unwritable` (exit `1`), with the refused path in `location.file` and `details.output` and the Node.js errno code in `details.code`, never `internal.unexpected`: the output path is the caller's, so the failure is theirs to fix. A manifest this route does not own stays `cli.invalid-arguments`, and a missing one is the first-run state. The `.mp4` route keeps the encoder's vocabulary, including for the destination directory it cannot create: `encode.output-invalid` with `reason: "unwritable"`.
 
 ## Renderer configuration
 

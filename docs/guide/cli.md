@@ -502,9 +502,9 @@ report today:
 in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes they do not know.
 
 `render.output-unwritable` is the one domain code about your disk rather than your Composition: a PNG
-frame, the frames `manifest`, or an output directory could not be written. `location.file` and
-`details.output` name the path and `details.code` carries the errno (`EISDIR`, `EACCES`, `ENOSPC`,
-…). It is exit `1`, not `3`: the output path is yours to fix.
+frame, the frames `manifest`, the previous run's manifest, or an output directory could not be
+accessed. `location.file` and `details.output` name the path and `details.code` carries the errno
+(`EISDIR`, `EACCES`, `ENOSPC`, …). It is exit `1`, not `3`: the output path is yours to fix.
 
 ## Exit codes
 

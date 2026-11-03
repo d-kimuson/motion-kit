@@ -1259,6 +1259,73 @@ describe('motion-kit CLI', () => {
     }
   }, 60_000);
 
+  it('reports an output manifest it cannot read as render.output-unwritable', async () => {
+    const output = join(outputRoot, 'frames-manifest-is-a-directory');
+    const manifestPath = join(output, 'manifest.json');
+    mkdirSync(manifestPath, { recursive: true });
+    const marker = Buffer.from('keep this directory untouched\n');
+    writeFileSync(join(manifestPath, 'keep.txt'), marker);
+
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--json',
+    ]);
+    // Reading the previous receipt is an output-path access like any other: a directory named
+    // `manifest.json` is the caller's to clear, not an internal bug (TASK-243).
+    expect(result.code).toBe(1);
+    expect(assertValidEnvelope(result)).toMatchObject({
+      command: 'render',
+      ok: false,
+      data: null,
+      diagnostics: [
+        {
+          code: 'render.output-unwritable',
+          severity: 'error',
+          location: { file: manifestPath },
+          details: { output: manifestPath, code: 'EISDIR' },
+        },
+      ],
+    });
+    expect(readdirSync(output)).toEqual(['manifest.json']);
+    expect(readdirSync(manifestPath)).toEqual(['keep.txt']);
+    expect(readFileSync(join(manifestPath, 'keep.txt'))).toEqual(marker);
+  }, 60_000);
+
+  it('reports an .mp4 destination directory it cannot create with the encoder code', async () => {
+    const occupied = join(outputRoot, 'mp4-parent-is-a-file');
+    writeFileSync(occupied, 'a file where the destination directory belongs');
+    const output = join(occupied, 'video.mp4');
+
+    const result = await run([
+      'render',
+      'entry.ts',
+      '--composition',
+      'one',
+      '--out',
+      output,
+      '--json',
+    ]);
+    expect(result.code).toBe(1);
+    expect(assertValidEnvelope(result)).toMatchObject({
+      command: 'render',
+      ok: false,
+      data: null,
+      diagnostics: [
+        {
+          code: 'encode.output-invalid',
+          severity: 'error',
+          details: { output, reason: 'unwritable' },
+        },
+      ],
+    });
+    expect(readFileSync(occupied, 'utf8')).toBe('a file where the destination directory belongs');
+  }, 60_000);
+
   it('writes the same frames from several renderers as from one', async () => {
     const render = async (concurrency: string) => {
       const output = join(outputRoot, `frames-${concurrency}`);

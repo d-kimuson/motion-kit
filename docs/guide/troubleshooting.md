@@ -77,11 +77,11 @@ decode, or an unsupported codec inside a clip; check the clip on its own with `f
 
 The encode produced no usable file. `details.reason` says which observation failed:
 
-| `reason`       | Meaning                                                                                      |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `"no-frames"`  | The Composition has `durationInFrames: 0`, so nothing was ever handed to FFmpeg.             |
-| `"unwritable"` | The destination directory refused the temporary file (`EACCES`, `ENOSPC`); no child started. |
-| `"empty"`      | FFmpeg exited 0 and left zero bytes.                                                         |
+| `reason`       | Meaning                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `"no-frames"`  | The Composition has `durationInFrames: 0`, so nothing was ever handed to FFmpeg.                                            |
+| `"unwritable"` | The destination refused the file (`EACCES`, `ENOSPC`), or the destination directory could not be created; no child started. |
+| `"empty"`      | FFmpeg exited 0 and left zero bytes.                                                                                        |
 
 Check write access and free disk space in the destination directory
 (`df -h .`), or give `--out` a path you own. A zero-frame Composition produces no video by
@@ -162,20 +162,21 @@ name the source as it was written, redacted:
 
 ## `render.output-unwritable`
 
-The output path refused a file the command had to write: a PNG frame, the frames `manifest`, or the
-directory the run creates for either. `location.file` and `details.output` name the path and
-`details.code` carries the errno. It is exit `1`: nothing about the Composition is wrong, so read the
-code and fix the path.
+The output path refused a file the command had to access: a PNG frame, the frames `manifest`, the
+previous run's manifest, or the directory the run creates for any of them. `location.file` and
+`details.output` name the path and `details.code` carries the errno. It is exit `1`: nothing about the
+Composition is wrong, so read the code and fix the path.
 
-| `details.code` | Usual cause                                                                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EISDIR`       | Something at the frame's own name is a directory — a leftover from another tool, or an `--out` that names one of its own frames. Remove it. |
-| `EACCES`       | The directory or file is not writable by the user running the command. Fix its permissions or choose another `--out`.                       |
-| `ENOSPC`       | The disk is full. Free space (`df -h .`) and re-run.                                                                                        |
-| `EEXIST`       | The frames directory `--out` names is an existing file. Move it, or give `--out` a directory path.                                          |
+| `details.code` | Usual cause                                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EISDIR`       | Something at the file's own name is a directory — a leftover from another tool, an `--out` that names one of its own frames, or a `manifest.json` directory. |
+| `EACCES`       | The directory or file is not readable or writable by the user running the command. Fix its permissions or choose another `--out`.                            |
+| `ENOSPC`       | The disk is full. Free space (`df -h .`) and re-run.                                                                                                         |
+| `EEXIST`       | The frames directory `--out` names is an existing file. Move it, or give `--out` a directory path.                                                           |
 
-Both routes create the directories they write into, so a missing parent is never the cause. The `.mp4`
-route reports its destination failures as `encode.output-invalid` instead.
+Both routes create the directories they write into, so a missing parent is never the cause, and a
+missing `manifest.json` is the normal first-run state. The `.mp4` route reports its destination
+failures as `encode.output-invalid` instead.
 
 ## `render.page-error`
 

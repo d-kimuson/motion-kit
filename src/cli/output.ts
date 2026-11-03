@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 
 import { type Diagnostic } from '../lib/diagnostic.ts';
 import { type Result } from '../lib/result.ts';
@@ -41,6 +41,30 @@ export const writeOutputFile = (path: string, contents: string | Uint8Array): Re
 export const createOutputDirectory = (path: string): Result<void> => {
   try {
     mkdirSync(path, { recursive: true });
+    return { ok: true, value: undefined };
+  } catch (error) {
+    return { ok: false, error: outputUnwritable(path, error) };
+  }
+};
+
+/**
+ * Reads a file the command owns, `undefined` when there is none. A missing file is a normal state of
+ * a previous run's receipt; every other refusal is the same output-path failure the writes report, so
+ * a `manifest.json` that is a directory or is unreadable is not an internal bug either.
+ */
+export const readOutputFile = (path: string): Result<string | undefined> => {
+  try {
+    return { ok: true, value: readFileSync(path, 'utf8') };
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') return { ok: true, value: undefined };
+    return { ok: false, error: outputUnwritable(path, error) };
+  }
+};
+
+/** Removes a file the command owns; a refusal there is that same boundary. */
+export const removeOutputFile = (path: string): Result<void> => {
+  try {
+    unlinkSync(path);
     return { ok: true, value: undefined };
   } catch (error) {
     return { ok: false, error: outputUnwritable(path, error) };

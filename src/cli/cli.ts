@@ -1,5 +1,5 @@
 import { CommanderError } from 'commander';
-import { mkdirSync, readFileSync, statSync, unlinkSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 
 import {
@@ -21,6 +21,7 @@ import { defaultPreviewFps, previewQueryString } from '../preview/query.ts';
 import { type FrameCaptureResult } from '../render/capture/frame.ts';
 import { checkComposition, checkReportPassed } from '../render/check/check.ts';
 import { defaultCheckComparison, type CheckComparison } from '../render/check/compare.ts';
+import { outputInvalidDiagnostic } from '../render/encoding/diagnostics.ts';
 import { openPreviewSession } from '../render/loading/preview-session.ts';
 import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
 import { renderVideo } from '../render/render-video.ts';
@@ -37,7 +38,12 @@ import { commands } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
-import { createOutputDirectory, writeOutputFile } from './output.ts';
+import {
+  createOutputDirectory,
+  readOutputFile,
+  removeOutputFile,
+  writeOutputFile,
+} from './output.ts';
 
 // The CLI maps every boundary to the TASK-164 envelope. Exceptions become
 // `internal.unexpected` (exit 3); `cli.*` diagnostics are invocation errors
@@ -332,22 +338,21 @@ const isVideoOutput = (path: string): boolean => extname(path).toLowerCase() ===
  * Invalidates the previous completion receipt before this run can write its first PNG. The
  * schemaVersion/format pair is the identifying header this route writes; anything without both
  * fields is user-owned, so the caller must refuse the run without changing it.
+ *
+ * Returns `false` for a manifest this route does not own. A file system that refuses the read or the
+ * removal is `render.output-unwritable`, like every other access to the output path, so a
+ * `manifest.json` that is a directory or is unreadable is not reported as an internal bug (TASK-243).
  */
-const prepareFramesManifest = (outAbsolute: string): boolean => {
+const prepareFramesManifest = (outAbsolute: string): Result<boolean> => {
   const manifestPath = join(outAbsolute, 'manifest.json');
-  let source: string;
-  try {
-    source = readFileSync(manifestPath, 'utf8');
-  } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
-      return true;
-    throw error;
-  }
+  const previous = readOutputFile(manifestPath);
+  if (!previous.ok) return previous;
+  if (previous.value === undefined) return { ok: true, value: true };
   let manifest: unknown;
   try {
-    manifest = JSON.parse(source);
+    manifest = JSON.parse(previous.value);
   } catch {
-    return false;
+    return { ok: true, value: false };
   }
   if (
     typeof manifest !== 'object' ||
@@ -357,9 +362,10 @@ const prepareFramesManifest = (outAbsolute: string): boolean => {
     !('format' in manifest) ||
     manifest.format !== 'frames'
   )
-    return false;
-  unlinkSync(manifestPath);
-  return true;
+    return { ok: true, value: false };
+  const removed = removeOutputFile(manifestPath);
+  if (!removed.ok) return removed;
+  return { ok: true, value: true };
 };
 
 /**
@@ -538,7 +544,16 @@ const runRender = async (
             ]),
           );
       }
-      mkdirSync(dirname(outAbsolute), { recursive: true });
+      // The encoder's own destination vocabulary covers this failure: its temporary sibling could not
+      // be created in the destination directory, so no child started (encoder ADR). A directory that
+      // cannot be created is that same observation, one step earlier.
+      try {
+        mkdirSync(dirname(outAbsolute), { recursive: true });
+      } catch {
+        return decide(
+          failure([outputInvalidDiagnostic({ output: outAbsolute, reason: 'unwritable' })]),
+        );
+      }
       // The same signal reaches the encoder, which kills its child and removes the sibling.
       // Audio is the Composition's own declaration, so it resolves against this project root;
       // the target's extension, not a flag, is what selected video output.
@@ -581,7 +596,9 @@ const runRender = async (
     }
     const created = createOutputDirectory(outAbsolute);
     if (!created.ok) return decide(failure([created.error]));
-    if (!prepareFramesManifest(outAbsolute))
+    const prepared = prepareFramesManifest(outAbsolute);
+    if (!prepared.ok) return decide(failure([prepared.error]));
+    if (!prepared.value)
       return decide(
         failure([
           {

@@ -112,7 +112,7 @@ Available today:
 | `@kimuson/motion-kit/render`                 | `createRenderer` and its types (Node only)                                                                                                                                                                                                           |
 | `@kimuson/motion-kit/agent`                  | the CLI output envelope schemas                                                                                                                                                                                                                      |
 | `@kimuson/motion-kit/three`                  | `ThreeCanvas`, `CameraRig` and their types, with `three` and `@react-three/fiber` as optional peers; a Three.js example itself stays deferred to Phase 3                                                                                             |
-| CLI                                          | `motion-kit render <entry> [--composition <id>] --out <file.mp4 \| dir> [--props <json>] [--json]` and `motion-kit frame <entry> [--composition <id>] --frame <n> --out <png> [--json]`                                                              |
+| CLI                                          | `motion-kit render <entry> [--composition <id>] --out <file.mp4 \| dir> [--props <json>] [--json]` and `motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png \| dir> [--json]`                                                |
 
 Not available yet, so no example may use them:
 
