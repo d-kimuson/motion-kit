@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { DiagnosticSchema, type Diagnostic } from '../../lib/diagnostic.ts';
 import { coverOnExit } from '../../lib/exit.ts';
+import { logChannel } from '../../lib/log.ts';
+import { isKnownRendererNoise } from '../noise.ts';
 import { loadingFailure } from './diagnostics.ts';
 
 export type LoadingServiceOptions = {
@@ -67,8 +69,17 @@ export const startLoadingService = (
   // The service is its own process-group leader, so it outlives an abrupt exit unless it is
   // killed on the way out; disposal is asynchronous and cannot be the only owner (lib/exit.ts).
   const releaseCover = coverOnExit(() => killGroup(child));
-  child.stdout?.pipe(process.stderr, { end: false });
-  child.stderr?.pipe(process.stderr, { end: false });
+  // The service's own output (Vite's handshake, the optimizer, a transform failure) belongs to the
+  // renderer's log, not to the CLI's result: recorded, streamed only on request (agent ADR).
+  const forward = (chunk: Buffer | string): void => {
+    for (const text of String(chunk).split('\n')) {
+      logChannel().write({ source: 'service', text, noise: isKnownRendererNoise(text) });
+    }
+  };
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', forward);
+  child.stderr?.on('data', forward);
   const ready = Promise.withResolvers<string>();
   // A failure before readiness also reaches the caller through `fail`.
   void ready.promise.catch(() => {});

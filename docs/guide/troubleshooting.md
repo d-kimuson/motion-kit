@@ -129,13 +129,17 @@ If the browser is installed and still will not launch:
 
 ### Automatic fallback to software WebGL has been deprecated
 
-This Chromium page-console message, forwarded to stderr, indicates a SwiftShader-backed WebGL
-context, but does not identify which canvas created it. Inspect each relevant context: get
-`gl.getExtension('WEBGL_debug_renderer_info')` and, if available, read
-`gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)`. Software rendering can materially affect throughput.
-Adding `--enable-unsafe-swiftshader` to Chromium opts trusted content into lower security guarantees
-and suppresses the warning; it does not select a GPU. This release has no GPU-selection option. See
-the [investigation](../contexts/agent/knowledge/20261029-swiftshader-warning.md).
+This Chromium page-console message means a WebGL context is SwiftShader-backed, but it does not
+identify which canvas created it. It say nothing about whether the render succeeded: it is emitted
+by the machine, on every render that opens a WebGL context, so the CLI hides it by default. Rerun
+with `--verbose` (or `createRenderer` directly, which forwards the console) to see it and the rest
+of the page's output. To inspect a context, get `gl.getExtension('WEBGL_debug_renderer_info')` and,
+if available, read `gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)`. Software rendering can materially
+affect throughput. Adding `--enable-unsafe-swiftshader` to Chromium opts trusted content into lower
+security guarantees and suppresses the warning; it does not select a GPU. This release has no
+GPU-selection option. See the
+[investigation](../contexts/agent/knowledge/20261029-swiftshader-warning.md) and the
+[stderr policy](../contexts/agent/adr/20261104-cli-stderr.accepted.md).
 
 ### The render hangs, then reports a timeout
 
