@@ -115,7 +115,7 @@ pnpm exec motion-kit frame entry.tsx --frame 60 --out out/still.png
 # captured frame 60 to /Users/you/hello-video/out/still.png (1920x1080) in 962.6ms
 ```
 
-To see the whole flow without watching the video, sample it into one labelled grid — every 150th
+To see the whole flow without watching the video, sample it into one labelled grid — every 30th
 frame plus the last (six tiles for this 150-frame Composition), in a single PNG an agent can read
 at a glance:
 
