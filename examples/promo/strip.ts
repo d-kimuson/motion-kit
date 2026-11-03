@@ -38,7 +38,7 @@ export const cardLift = (index: number, time: number): number => {
 };
 
 /** Card `index` starts to drop in at `0.25 + index * 0.06` s, so every drop starts before the
- * playhead shows; the last ones settle while the playhead is still at the far end. */
+ * playhead shows; the last ones settle while the playhead is still near the first card. */
 export const cardArrival = (index: number): number => 0.25 + index * 0.06;
 
 export type Pose = { readonly position: Vector3; readonly lookAt: Vector3; readonly fov: number };
