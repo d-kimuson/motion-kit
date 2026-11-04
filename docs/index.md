@@ -178,8 +178,8 @@ the directory you run the command in, and `render` creates the directories its o
   what is qualified or excluded, and what makes a canvas uncontrolled.
 - [Determinism](guide/determinism.md) — what "a frame is a pure function of time" guarantees, what
   breaks it, and how to check your own Composition.
-- [Examples](guide/examples.md) — the four reference videos, their commands, their placeholders and
-  the asset policy.
+- [Examples](guide/examples.md) — the four reference videos and the promo showcase, their commands
+  and their placeholders.
 - [Troubleshooting](guide/troubleshooting.md) — FFmpeg, Chromium, assets, `render.page-error` and
   cancellation, one section per code.
 

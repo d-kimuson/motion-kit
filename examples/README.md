@@ -1,8 +1,8 @@
 # Reference examples
 
-Four complete videos that fix motion-kit's output quality. Each one stresses a different axis of the
-framework, and each one is a consumer of the published package: an example imports
-`@kimuson/motion-kit` by name and its own modules, never a relative path into `src/`.
+Four reference videos that fix motion-kit's output quality, each stressing a different axis of the
+framework, plus the `promo` showcase. Every example is a consumer of the published package: it
+imports `@kimuson/motion-kit` by name and its own modules, never a relative path into `src/`.
 [The reference-examples design doc](../dev-docs/design-doc/20261025-reference-examples.md) owns the
 layout, the CI gates and the acceptance look; this page says how to run the gates, and each
 example's own `README.md` how to run the example.

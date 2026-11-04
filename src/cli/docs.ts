@@ -21,7 +21,7 @@ const summaries: Readonly<Record<DocsTopic, string>> = {
   three:
     'Three.js scenes with React Three Fiber, the peer dependencies, and what breaks determinism.',
   determinism: 'What a pure function of time guarantees and what breaks it.',
-  examples: 'The reference videos, their commands, placeholders, and asset policy.',
+  examples: 'The reference videos and the promo showcase, their commands, and placeholders.',
   troubleshooting: 'What to do for each diagnostic code.',
 };
 

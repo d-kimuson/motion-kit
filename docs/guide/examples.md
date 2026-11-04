@@ -1,9 +1,9 @@
 # Examples
 
-Four complete videos live under `examples/`. Each one is a consumer of the published package — it
-imports `@kimuson/motion-kit` by name and never a relative path into `src/` — and each one fixes the
-output quality bar for one axis of the framework. They are the best answer to "what does a real
-Composition look like?".
+Five complete videos live under `examples/`: four reference videos, each fixing the output quality bar
+for one axis of the framework, and the `promo` showcase. Every one is a consumer of the published
+package — it imports `@kimuson/motion-kit` by name and never a relative path into `src/`. They are
+the best answer to "what does a real Composition look like?".
 
 The examples ship in the repository, not in the npm package, which contains `dist/` and the
 documentation you are reading. Every command below therefore runs from a checkout:
@@ -18,7 +18,7 @@ mkdir -p out                                 # gitignored, so a clean checkout h
 An `.mp4` target also needs FFmpeg 6.0+ with `libx264` on `PATH`, and `ffprobe` for a Composition that
 declares audio.
 
-## The four videos
+## The four reference videos
 
 | Composition           | Resolution | fps | Frames | Axis                                                                         |
 | --------------------- | ---------- | --- | ------ | ---------------------------------------------------------------------------- |
@@ -30,10 +30,12 @@ declares audio.
 
 Every entry holds more than one Composition, so `--composition <id>` is always required.
 
-One more video sits beside them: `promo` (`examples/promo/`, 1920×1080, 30 fps, 1371 frames) is a
-46-second promotion video for motion-kit made with motion-kit, with one Three.js scene on `/three`
-and one scene of the preview review loop handing a comment to a coding agent. It is a showcase, not a fifth axis, so
-it has a `promo-ci` smoke twin and no probe. Watch it with
+## The promo showcase
+
+`promo` (`examples/promo/`, 1920×1080, 30 fps, 1371 frames) is a 46-second promotion video for
+motion-kit made with motion-kit, with one Three.js scene on `/three` and one scene of the preview
+review loop handing a comment to a coding agent. It adds no axis, so it has a `promo-ci` smoke twin
+and no probe. Watch it with
 `node dist/cli.js preview examples/promo/entry.tsx --composition promo`.
 
 ## Commands

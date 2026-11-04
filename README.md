@@ -136,7 +136,7 @@ reads the guide of the version it runs.
 - [Getting started](docs/guide/getting-started.md) · [Authoring](docs/guide/authoring.md) ·
   [CLI](docs/guide/cli.md) · [Three.js](docs/guide/three.md) ·
   [Determinism](docs/guide/determinism.md) · [Troubleshooting](docs/guide/troubleshooting.md)
-- [Examples](docs/guide/examples.md) — four complete reference videos under [`examples/`](examples/)
+- [Examples](docs/guide/examples.md) — four reference videos and a promo showcase under [`examples/`](examples/)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
