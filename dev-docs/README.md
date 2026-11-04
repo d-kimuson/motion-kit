@@ -1,8 +1,8 @@
 # Developing motion-kit
 
 This page is for working on motion-kit itself, in a checkout of the repository. Using the package is
-covered by the [README](../README.md) and the [documentation index](../docs/index.md). The Feedback
-Loop commands, CI, guidelines and contexts are in [AGENTS.md](../AGENTS.md); this page adds only what
+covered by the [README](../README.md) and the [documentation index](../docs/index.md). The directory
+structure, the Feedback Loop commands, CI, guidelines and contexts are in [AGENTS.md](../AGENTS.md); this page adds only what
 AGENTS.md does not say.
 
 ## Setup

@@ -262,7 +262,7 @@ guide](docs/guide/examples.md) has their commands and says which parts are place
 
 ## Contributing
 
-Working on motion-kit itself (building, testing, the repository layout) is covered in
+Working on motion-kit itself (setup, building, testing) is covered in
 [dev-docs/README.md](dev-docs/README.md).
 
 ## License
