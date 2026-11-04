@@ -3227,6 +3227,15 @@ export const compositions = defineCompositions([
     },
   );
 
+  // `--version` belongs to the program, not to a subcommand: after one it is an unknown option, and
+  // the hint must not suggest the very flag that just failed.
+  it('does not suggest --version to a subcommand that cannot take it', async () => {
+    const result = await run(['render', 'entry.tsx', '--out', 'a.mp4', '--versio', '--json']);
+    expect(result.code).toBe(2);
+    const envelope = assertValidEnvelope(result);
+    expect(envelope.diagnostics[0]?.hint).not.toContain('--version');
+  });
+
   it('describes the package in the leading help', async () => {
     const leading = await run(['--help'], undefined, { envelope: false });
     expect(leading.stdout).toContain(packageJson.description);

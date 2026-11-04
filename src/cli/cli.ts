@@ -41,7 +41,7 @@ import {
   type PreviewArgs,
   type RenderArgs,
 } from './args.ts';
-import { cliInvocation, commands, program } from './commands.ts';
+import { cliInvocation, commands, program, versionFlags } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
@@ -135,7 +135,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
 const parseRaw = (argv: readonly string[]): ParseOutcome => {
   const name = argv[0];
   if (name === 'help' || name === '--help' || name === '-h') return { kind: 'usage' };
-  if (name === '--version' || name === '-V') return { kind: 'version' };
+  if (name !== undefined && versionFlags.includes(name)) return { kind: 'version' };
   // Only an implemented subcommand in the leading position can be parsed: the CLI has no global
   // flags, so a name anywhere else, a reserved name and an unknown one all fail here with the
   // command argv named — the first positional argument, past any flag and its value — and the

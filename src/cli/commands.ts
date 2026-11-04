@@ -191,6 +191,9 @@ export const valueTakingOptions: ReadonlySet<string> = new Set(
   Object.values(commands).flatMap(valueTakingLongs),
 );
 
+/** The leading flags that ask for the package version instead of a command. */
+export const versionFlags: readonly string[] = ['-V', '--version'];
+
 /**
  * The top-level program: its name, version and description are `package.json`'s, and its help
  * lists the subcommands above. It answers only the leading `--help`/`-h`/`help` and
@@ -199,7 +202,7 @@ export const valueTakingOptions: ReadonlySet<string> = new Set(
  */
 export const program = new Command('motion-kit')
   .description(packageJson.description)
-  .version(packageJson.version)
+  .version(packageJson.version, versionFlags.join(', '))
   .usage('<command> [args]')
   .configureHelp({
     commandUsage: (command) => `${cliInvocation} ${command.usage()}`,
@@ -219,5 +222,8 @@ export const program = new Command('motion-kit')
       `Run \`${cliInvocation} docs\` to print the guide, or \`${cliInvocation} <command> --help\` for command options.`,
     ].join('\n'),
   )
-  .helpCommand(false);
+  .helpCommand(false)
+  // Each subcommand rejects an option it does not declare on its own; without this, commander would
+  // suggest the program's `--version` to a subcommand that cannot take it.
+  .enablePositionalOptions();
 for (const command of Object.values(commands)) program.addCommand(command);
