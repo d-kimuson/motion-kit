@@ -1,9 +1,8 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
-  <img alt="motion-kit" src=".github/assets/logo.svg" width="372">
-</picture>
+<img src=".github/assets/mark.svg" alt="" width="80">
+
+# motion-kit
 
 **An agent-first framework for programmatic video.**
 
@@ -14,9 +13,9 @@ Your coding agent writes the scenes in React/TSX, looks at its own frames, and r
 [![CI](https://github.com/d-kimuson/motion-kit/actions/workflows/check.yaml/badge.svg?branch=main)](https://github.com/d-kimuson/motion-kit/actions/workflows/check.yaml)
 [![license](https://img.shields.io/npm/l/@kimuson/motion-kit)](LICENSE)
 
-[![A frame of the motion-kit promo video, made with motion-kit](.github/assets/hero.png)](https://d-kimuson.github.io/motion-kit/)
+![A frame of the motion-kit promo video, made with motion-kit](.github/assets/hero.png)
 
-**[Watch the example videos →](https://d-kimuson.github.io/motion-kit/)**
+Watch the [example videos](https://d-kimuson.github.io/motion-kit/#examples), each rendered from this repository.
 
 </div>
 
