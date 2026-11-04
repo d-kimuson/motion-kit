@@ -8,6 +8,9 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **The preview page carries the motion-kit mark.** A bar across the top of `motion-kit preview` shows
+  the mark, the Composition shown, and links to the repository on GitHub and the package on npm; the
+  mark is also the tab's icon.
 - **`--version`.** `motion-kit --version` (or `-V`) prints the package version, and the leading
   `--help` is commander's help for the whole program, with the package description and every
   subcommand. Both take the name, version and description from `package.json`. Like help, a leading

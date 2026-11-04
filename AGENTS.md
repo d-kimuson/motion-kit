@@ -41,8 +41,9 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 ├── .agents/auto-pilot/        # auto-pilot state, maintenance tasks, and its own workarounds
 ├── lakefile.toml, lean-toolchain  # Lean project (specs under src/core)
 ├── skills/motion-kit/         # The user-facing agent skill (npx skills add, Claude Code plugin)
+├── lp/                        # GitHub Pages landing page; scripts/build-site.ts renders the examples next to it into _site/
 ├── .claude-plugin/            # Claude Code plugin and marketplace manifests for the skill
-└── .github/                   # CI (check.yaml) and composite setup actions
+└── .github/                   # CI (check.yaml), Pages (pages.yml), composite setup actions, brand assets (assets/)
 ```
 
 Only `src/theme` and `src/presets` have no code yet; they are created when the context gets its first code.

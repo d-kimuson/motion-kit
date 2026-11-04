@@ -17,6 +17,11 @@ const en = {
     picking: 'Click an element to comment on it · Scroll for the one beneath · Esc to stop',
     language: 'Language',
   },
+  header: {
+    links: 'motion-kit links',
+    github: 'motion-kit on GitHub',
+    npm: 'motion-kit on npm',
+  },
   transport: {
     previousHint: 'Previous frame (←, Shift+← for 10)',
     previous: 'Previous frame',
@@ -125,6 +130,11 @@ const ja: Messages = {
     stage: 'Composition',
     picking: '要素をクリックしてコメント · ホイールで下の要素へ · Esc で終了',
     language: '言語',
+  },
+  header: {
+    links: 'motion-kit のリンク',
+    github: 'GitHub の motion-kit',
+    npm: 'npm の motion-kit',
   },
   transport: {
     previousHint: '前のフレーム（←、Shift+← で 10 フレーム）',
