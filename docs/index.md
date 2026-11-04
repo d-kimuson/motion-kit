@@ -204,7 +204,8 @@ Only five subpaths are exported today:
   `@react-three/fiber` are optional peer dependencies you install.
 
 Not available yet: audio-reactive visuals, video assets, the `/theme` and `/presets` subpaths, the
-`Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. Until those land, a component writes its own motion over `useTime()`/`useSequence()` and the
+`Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. Until those land, a
+component writes its own motion over `useTime()`/`useSequence()` and the
 [motion values](guide/authoring.md#motion-values), which is what the reference examples do.
 
 ## License

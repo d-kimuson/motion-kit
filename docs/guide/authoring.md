@@ -376,7 +376,8 @@ defineComposition({
   non-finite volume — is rejected at `defineComposition` time as `render.page-error`. A declared file
   that cannot be opened is `asset.load-failed` before any frame is encoded.
 - Audio plays in the rendered `.mp4`, and also in [`motion-kit preview`](cli.md#preview), where each
-  source can be muted and the mix is approximate, so check the `.mp4`. The frames route writes pictures without sound.
+  source can be muted and the mix is approximate, so check the `.mp4`. The frames route writes
+  pictures without sound.
 
 ## Three.js
 
