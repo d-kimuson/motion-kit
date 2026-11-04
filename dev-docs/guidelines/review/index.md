@@ -28,7 +28,7 @@ Pick the patterns that apply from the content of the change.
 | ----------------------------- | ------------------------------------------------------------------------------- |
 | `Code Review`                 | Code changed. Not for documentation-only changes                                |
 | `Guideline Review`            | Always                                                                          |
-| `Docs Review`                 | Documentation (`docs/`, `AGENTS.md`, skills, troubleshots) changed              |
+| `Docs Review`                 | Documentation (`docs/`, `dev-docs/`, `AGENTS.md`, skills, troubleshots) changed |
 | `Quality Assurance`           | Product behavior changed                                                        |
 | `Seekability and Determinism` | `src/core`, `src/motion`, `src/render`, or any code that evaluates time changed |
 | `Public API`                  | Exports, component props, or Zod schemas changed                                |

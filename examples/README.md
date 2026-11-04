@@ -94,3 +94,37 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
   a data-source decision.
 - **Every full-length render is a local QA Check**, not a CI step. CI renders each `-ci` Composition
   and runs each `-probe` Composition through the eight determinism modes.
+
+## Asset policy
+
+The rule the examples follow is that a committed file must be redistributable by every clone:
+
+- **Committed**: the Noto Sans JP variable font (OFL-1.1) with its `OFL.txt` beside it under
+  `examples/explainer/assets/fonts/`, and the authored JSON datasets under `examples/chart/data/`.
+- **Generated, gitignored** under `examples/<name>/assets.local/`: the slideshow's photos and tone
+  bed, the explainer's music bed, whoosh and silent voice clips. A re-run writes byte-identical
+  files, so a clone and CI generate the same stills.
+- **Fetched locally, never committed**: VOICEVOX voice clips and the two character portraits, written
+  by `examples/explainer/fetch-assets.ts` against a local engine (`VOICEVOX_ENGINE_URL`, default
+  `http://127.0.0.1:50021`).
+- **Credited**: the explainer carries the voice, illustrator, character-project and font credit lines
+  in its README and on the video's credit slide, as the
+  [asset licensing ADR](../dev-docs/decisions/20261026-example-asset-licensing.accepted.md) requires.
+
+Each example also commits an `assets.manifest.json` listing every file under `assets/` and
+`assets.local/` with its source and licence. No script reads it; it is reviewed with the example's PR.
+
+## The CI gates
+
+```bash
+pnpm test --project cli examples/teaser/teaser.smoke.test.ts
+pnpm test --project frame-transport src/render/determinism/examples.determinism.test.ts
+```
+
+Each smoke test renders its `-ci` Composition through `node dist/cli.js render … --json` and asserts
+the envelope and the file with `ffprobe` (60 frames, `30/1`, the reduced resolution, a 2.000 s
+duration, a clean decode). The determinism test runs all eight traversal modes over each `-probe`
+Composition at frames `[0, 15, 29]`, exact PNG bytes.
+
+CI never renders a full-length video: the full renders are human QA checks. Every CI render is silent,
+because the fetched voice and music are local-only and never committed.
