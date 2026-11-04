@@ -30,7 +30,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 ├── scripts/                   # Repository tooling run by package.json scripts (lean-spec, check-licenses, check-tsconfig-coverage)
 ├── configs/                   # Test setup files
 ├── docs/
-│   ├── index.md, guide/       # User documentation, shipped in the npm package (read from node_modules)
+│   ├── index.md, guide/       # User documentation, shipped in the npm package: only how to use the package
 │   ├── CONTEXT-MAP.md         # Bounded contexts and their dependencies
 │   ├── contexts/<ctx>/        # CONTEXT.md, adr/, design-doc/, knowledge/ per context
 │   ├── decisions/             # Cross-context ADRs

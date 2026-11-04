@@ -21,12 +21,3 @@ version from `lean-toolchain`, via elan.
 
 The Phase 0 browser experiments stay separate from the framework, each with its own README and
 `pnpm spike:*` script under `spikes/<name>/`.
-
-## Documentation layout
-
-- `docs/index.md` and `docs/guide/` are the user documentation. They ship inside the npm package, so
-  an agent using motion-kit reads them from `node_modules/@kimuson/motion-kit/docs/`; keep them about
-  using the package.
-- `docs/CONTEXT-MAP.md`, `docs/contexts/`, `docs/decisions/`, `docs/design-doc/` and
-  `docs/guidelines/` are for development and stay out of the package (`files` in `package.json`).
-- `dev-docs/` is for development notes that are not guidelines or context documents.
