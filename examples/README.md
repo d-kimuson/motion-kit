@@ -7,7 +7,7 @@ framework, and each one is a consumer of the published package: an example impor
 layout, the CI gates and the acceptance look; this page says how to run the gates, and each
 example's own `README.md` how to run the example.
 
-Nothing here is shipped in the npm package (`package.json#files` is `dist` only).
+Nothing here is shipped in the npm package (`examples/` is not in `package.json#files`).
 
 ## The four targets
 
@@ -109,8 +109,8 @@ fetched voice and music are local-only.
 
 ## Asset records
 
-Each example commits an `assets.manifest.json` listing every file under `assets/` and
-`assets.local/` with its source and licence. No script reads it; it is reviewed with the example's
+The examples with media (explainer, slideshow) each commit an `assets.manifest.json` listing every
+file under `assets/` and `assets.local/` with its source and licence. No script reads it; it is reviewed with the example's
 PR. The explainer's VOICEVOX clips and character portraits come from a local engine
 (`VOICEVOX_ENGINE_URL`, default `http://127.0.0.1:50021`), and its README and credit slide carry
 the voice, illustrator, character-project and font credit lines.
