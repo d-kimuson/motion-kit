@@ -36,7 +36,7 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 │   ├── decisions/             # Cross-context ADRs
 │   ├── design-doc/            # Cross-context Design Docs
 │   └── guidelines/            # Guidelines referenced from the table below
-├── dev-docs/README.md         # Developer commands and notes moved out of the user-facing README
+├── dev-docs/README.md         # Development setup and repository notes (not shipped in the package)
 ├── .agents/troubleshots/      # Workarounds for tooling problems
 ├── .agents/auto-pilot/        # auto-pilot state, maintenance tasks, and its own workarounds
 ├── lakefile.toml, lean-toolchain  # Lean project (specs under src/core)

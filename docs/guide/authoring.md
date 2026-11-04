@@ -375,9 +375,8 @@ defineComposition({
 - An invalid declaration — `endInFrames <= startInFrames`, a negative or non-integer frame, a
   non-finite volume — is rejected at `defineComposition` time as `render.page-error`. A declared file
   that cannot be opened is `asset.load-failed` before any frame is encoded.
-- Audio plays in the rendered `.mp4`, and also in
-  [`motion-kit preview`](cli.md#preview) (unreleased), where each source can be muted and the mix is approximate,
-  so check the `.mp4`. The frames route writes pictures without sound.
+- Audio plays in the rendered `.mp4`, and also in [`motion-kit preview`](cli.md#preview), where each
+  source can be muted and the mix is approximate, so check the `.mp4`. The frames route writes pictures without sound.
 
 ## Three.js
 
@@ -417,8 +416,9 @@ bootstrap's own API: an entry never renders `Composition` itself.
 ## Not available yet
 
 `Animate`, `Reveal` and `Stagger` — the components that apply values to a wrapper element, which
-`/motion` does not ship; `defineTheme` and tokens (`/theme`); the scene presets (`/presets`); `inspect` and `validate`. Until those land, a component writes its own motion over the [motion values](#motion-values),
-which is what the [reference examples](examples.md) do.
+`/motion` does not ship; `defineTheme` and tokens (`/theme`); the scene presets (`/presets`);
+`inspect` and `validate`. Until those land, a component writes its own motion over the
+[motion values](#motion-values), which is what the [reference examples](examples.md) do.
 
 ## Related
 
