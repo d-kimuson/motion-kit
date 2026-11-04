@@ -10,7 +10,7 @@ error: render.page-error: Loading service exited failed. — Check service exite
 
 ## Workaround
 
-Wait for the other build to finish (`ls dist/` lists `index.js`, `browser.js` and `preview.js` again), then reload the preview page. Do not change the example to chase the error. Running the preview from its own worktree avoids sharing `dist/` with other work.
+Wait for the other build to finish (`ls dist/` lists `index.js`, `browser.js` and `preview.js` again), then reload the preview page (for `render` or `frame`, run the same command again). Do not change the example to chase the error. Running the preview from its own worktree avoids sharing `dist/` with other work.
 
 ## Why Not Fixed
 
