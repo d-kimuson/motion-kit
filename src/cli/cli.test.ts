@@ -450,7 +450,7 @@ const docsTopicRows = [
   { id: 'determinism', summary: 'What a pure function of time guarantees and what breaks it.' },
   {
     id: 'examples',
-    summary: 'The reference videos, their commands, placeholders, and asset policy.',
+    summary: 'The reference videos and the promo showcase, their commands, and placeholders.',
   },
   { id: 'troubleshooting', summary: 'What to do for each diagnostic code.' },
 ] as const;

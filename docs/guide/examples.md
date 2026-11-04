@@ -30,10 +30,12 @@ declares audio.
 
 Every entry holds more than one Composition, so `--composition <id>` is always required.
 
-One more video sits beside them: `promo` (`examples/promo/`, 1920×1080, 30 fps, 1371 frames) is a
-46-second promotion video for motion-kit made with motion-kit, with one Three.js scene on `/three`
-and one scene of the preview review loop handing a comment to a coding agent. It is a showcase, not a fifth axis, so
-it has a `promo-ci` smoke twin and no probe. Watch it with
+## The promo showcase
+
+`promo` (`examples/promo/`, 1920×1080, 30 fps, 1371 frames) is a 46-second promotion video for
+motion-kit made with motion-kit, with one Three.js scene on `/three` and one scene of the preview
+review loop handing a comment to a coding agent. It adds no axis, so it has a `promo-ci` smoke twin
+and no probe. Watch it with
 `node dist/cli.js preview examples/promo/entry.tsx --composition promo`.
 
 ## Commands
