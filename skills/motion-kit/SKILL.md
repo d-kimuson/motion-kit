@@ -29,7 +29,7 @@ plus the Chromium build that motion-kit's Playwright version captures frames in:
 
 ```bash
 pnpm add @kimuson/motion-kit react react-dom zod      # or npm install / yarn add
-pnpm why playwright                                   # the Playwright version motion-kit uses
+pnpm why playwright                                   # the Playwright version motion-kit uses; npm ls playwright with npm
 pnpm dlx playwright@<version> install chromium        # once per machine; npx playwright@<version> with npm
 ```
 
