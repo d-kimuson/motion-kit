@@ -1,96 +1,80 @@
+<div align="center">
+
 # motion-kit
 
-An agent-first framework for programmatic video. Scenes are React/TSX components on a deterministic
-timeline, every frame is a pure function of time, and the render pipeline captures frames in Chromium
-through Playwright and encodes them with FFmpeg. A CLI and structured diagnostics let a coding agent
-render a Composition and read any failure without a GUI. motion-kit is MIT licensed and published as
-`@kimuson/motion-kit`.
+**An agent-first framework for programmatic video.**
 
-## Status
+Your coding agent writes the scenes in React/TSX, looks at its own frames, and renders the MP4.
 
-motion-kit is before `1.0.0`, so a minor release may still change the API. `CHANGELOG.md` in the
-repository lists what each release contains and what is known to be limited.
+[![npm version](https://img.shields.io/npm/v/@kimuson/motion-kit?logo=npm&color=cb3837)](https://www.npmjs.com/package/@kimuson/motion-kit)
+[![npm downloads](https://img.shields.io/npm/dm/@kimuson/motion-kit?color=cb3837)](https://www.npmjs.com/package/@kimuson/motion-kit)
+[![CI](https://github.com/d-kimuson/motion-kit/actions/workflows/check.yaml/badge.svg?branch=main)](https://github.com/d-kimuson/motion-kit/actions/workflows/check.yaml)
+[![types](https://img.shields.io/npm/types/@kimuson/motion-kit)](https://www.npmjs.com/package/@kimuson/motion-kit)
+[![license](https://img.shields.io/npm/l/@kimuson/motion-kit)](LICENSE)
 
-Not available yet: audio-reactive visuals, video assets, the `/theme` and `/presets` subpaths, the
-`Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. The
-[package surface](#package-surface) says what is exported today; each later context gets its own
-subpath when it lands.
+![A frame of the motion-kit promo video, made with motion-kit](.github/assets/hero.png)
 
-## Install
+</div>
 
-```bash
-pnpm add @kimuson/motion-kit react react-dom zod
-pnpm exec playwright install chromium         # once per machine
-```
+## Getting started
 
-```bash
-npm install @kimuson/motion-kit react react-dom zod && npx playwright install chromium
-yarn add @kimuson/motion-kit react react-dom zod && yarn playwright install chromium
-```
-
-React 19 and ReactDOM 19 are peer dependencies of the package; Zod validates your Composition props in
-your own project, so you install it explicitly. The Chromium download is a one-time setup per machine,
-not part of every install. A 3D Composition (`@kimuson/motion-kit/three`) also installs `three` and
-`@react-three/fiber`, the package's optional peer dependencies.
-
-**Prerequisites.** Node.js runs the CLI (the package is ESM only) and, for video output, an
-**FFmpeg 6.0 or newer built with `libx264`** on `PATH`; a Composition that declares audio also needs
-its companion `ffprobe`. motion-kit ships and downloads no binary, so FFmpeg is the one thing you
-install yourself:
-
-```bash
-ffmpeg -version | head -1                     # needs 6.0 or newer
-ffmpeg -hide_banner -encoders | grep libx264
-```
-
-`frame` and a frames render need no FFmpeg at all, so you can start before installing it. See
-[troubleshooting](docs/guide/troubleshooting.md#ffmpeg) for per-OS installs and the codes a missing or
-outdated binary produces.
-
-## Agent skill
-
-The repository ships a `motion-kit` skill that tells a coding agent how to run the CLI and where the
-guides are (`motion-kit docs`). Install it with the [skills CLI](https://github.com/vercel-labs/skills)
-or as a Claude Code plugin:
+motion-kit is meant to be driven by a coding agent. Add the `motion-kit` skill and ask for a video;
+the skill tells the agent how to set up a project, run the CLI and read the guides that ship with the
+package.
 
 ```bash
 npx skills add d-kimuson/motion-kit
 ```
+
+Or as a Claude Code plugin:
 
 ```text
 /plugin marketplace add d-kimuson/motion-kit
 /plugin install motion-kit@motion-kit
 ```
 
-## Five-minute quickstart
+To try it without installing anything, point the agent at the skill in your prompt:
 
-Write an entry file that exports a `compositions` registry:
+```text
+Make a 15-second launch video for my CLI tool with motion-kit.
+Reference: https://raw.githubusercontent.com/d-kimuson/motion-kit/main/skills/motion-kit/SKILL.md
+```
+
+## How it works
+
+### 1. The agent writes the video as React
+
+A video is a **Composition**: a React component plus its size, frame rate and duration, exported from
+an entry file. Every frame is a pure function of time, so the same frame always renders the same
+pixels.
 
 ```tsx
 // entry.tsx
-import { defineComposition, defineCompositions, useFrame } from '@kimuson/motion-kit';
+import { defineComposition, defineCompositions, useTime } from '@kimuson/motion-kit';
+import { easing, interpolate } from '@kimuson/motion-kit/motion';
 import { z } from 'zod';
 
 const props = z.object({ title: z.string().default('Hello from motion-kit') });
 
-const Scene = ({ title }: z.infer<typeof props>) => (
-  <div
-    style={{
-      width: '100%',
-      height: '100%',
-      display: 'grid',
-      placeItems: 'center',
-      background: '#07080c',
-      color: '#f8f8f8',
-      fontFamily: 'system-ui, sans-serif',
-      fontSize: 96,
-    }}
-  >
-    <p style={{ margin: 0 }}>
-      {title} · frame {useFrame()}
-    </p>
-  </div>
-);
+const Scene = ({ title }: z.infer<typeof props>) => {
+  const opacity = interpolate(useTime(), [0, 0.6], [0, 1], { easing: easing.easeOutCubic });
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'grid',
+        placeItems: 'center',
+        background: '#07080c',
+        color: '#f8f8f8',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 96,
+      }}
+    >
+      <p style={{ margin: 0, opacity: opacity.ok ? opacity.value : 0 }}>{title}</p>
+    </div>
+  );
+};
 
 export const compositions = defineCompositions([
   defineComposition({
@@ -105,175 +89,50 @@ export const compositions = defineCompositions([
 ]);
 ```
 
-Render it to an MP4:
+### 2. The agent checks its own frames
+
+`contact-sheet` samples the timeline into one labelled PNG, so the agent sees the whole flow in a
+single image instead of watching a video. `frame` captures any one frame the same way.
 
 ```bash
-pnpm exec motion-kit render entry.tsx --out out.mp4
-# encoded 150 frames to /Users/kaito/hello-video/out.mp4 (1920x1080) in 6212.9ms
+npx @kimuson/motion-kit contact-sheet entry.tsx --every 30 --out sheet.png
 ```
 
-Capture one still instead:
+![A contact sheet of the promo video: sampled frames in a grid, each labelled with its frame and time](.github/assets/contact-sheet.png)
+
+### 3. You review in the preview and hand comments back
+
+`preview` serves a page where you scrub and play the Composition with its audio and a timeline of its
+Sequences. Click an element to comment on it, then Copy Markdown: each comment carries its time, the
+JSX file and line, and a `motion-kit frame` command, ready to paste back to the agent.
 
 ```bash
-pnpm exec motion-kit frame entry.tsx --frame 60 --out still.png
-# captured frame 60 to /Users/kaito/hello-video/still.png (1920x1080) in 962.6ms
+npx @kimuson/motion-kit preview entry.tsx
 ```
 
-Read the same run as one machine-readable envelope:
+![The motion-kit preview page: the picture, the side panel and the timeline of named Sequences](.github/assets/preview.png)
+
+### 4. The agent renders the MP4
 
 ```bash
-pnpm exec motion-kit render entry.tsx --out out.mp4 --json
+npx @kimuson/motion-kit render entry.tsx --out out.mp4
 ```
 
-```json
-{
-  "schemaVersion": 1,
-  "command": "render",
-  "ok": true,
-  "data": {
-    "output": "/Users/kaito/hello-video/out.mp4",
-    "format": "mp4",
-    "width": 1920,
-    "height": 1080,
-    "fps": { "numerator": 30, "denominator": 1 },
-    "frameCount": 150,
-    "durationSeconds": 5
-  },
-  "diagnostics": [],
-  "durationMs": 6212.9
-}
-```
-
-`--out` picks the format — an `.mp4` target is encoded video, any other target is a directory of PNG
-frames plus a `manifest.json` — and there is no `--format` flag. A bad declaration or a failed render
-is reported as a Diagnostic with a stable `code`, never as a stack trace. The full walkthrough,
-including props overrides and where paths resolve, is [getting started](docs/guide/getting-started.md).
+Every command takes `--json` and answers with one versioned envelope, and a failure is a Diagnostic
+with a stable `code` and a `hint` rather than a stack trace. That is what lets the agent go round
+write, check and fix on its own.
 
 ## Documentation
 
-The guides ship inside the package as well as in the repository, so an installed copy reads them
-without a network: start at `node_modules/@kimuson/motion-kit/docs/index.md`, and the guides it links
-are the files under `node_modules/@kimuson/motion-kit/docs/guide/`.
+The guides ship inside the npm package and `npx @kimuson/motion-kit docs` prints them, so the agent
+reads the guide of the version it runs.
 
-| Document                                         | What it covers                                                                                                                                            |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Documentation index](docs/index.md)             | What motion-kit is, a five-minute quickstart, and the table of contents.                                                                                  |
-| [Getting started](docs/guide/getting-started.md) | Requirements, install, a first entry, a first render, props, frames output.                                                                               |
-| [CLI](docs/guide/cli.md)                         | The `render`, `frame`, `contact-sheet`, `check`, `preview` and `docs` commands, every flag, the `--json` envelope, diagnostics, exit codes, cancellation. |
-| [Authoring](docs/guide/authoring.md)             | Composition, props, time hooks, `Sequence`, `TransitionSeries`, `useAsset`, audio.                                                                        |
-| [Three.js](docs/guide/three.md)                  | `ThreeCanvas`, `CameraRig`, the peer dependencies, software WebGL, qualified and excluded features.                                                       |
-| [Determinism](docs/guide/determinism.md)         | What a pure function of time guarantees, what breaks it, how to check your own video.                                                                     |
-| [Examples](docs/guide/examples.md)               | The four reference videos, their commands, placeholders and asset policy.                                                                                 |
-| [Troubleshooting](docs/guide/troubleshooting.md) | FFmpeg, Chromium, assets, `render.page-error` and cancellation.                                                                                           |
-
-## CLI
-
-The `motion-kit` bin renders Compositions from a registry entry file and prints the guides that ship
-with the package. `render`, `frame`, `contact-sheet`, `check`, `preview` and `docs` accept `--json`, which writes exactly one
-versioned envelope (`schemaVersion: 1`) to stdout; without it, each command prints its result as text.
-`docs` prints the guide markdown, and its `--json` envelope carries that markdown in `data.content`;
-`render`, `frame`, `contact-sheet` and `check` print a short summary; `preview` prints its URL once the page is served and then runs until stopped.
-
-```bash
-# Capture one frame as a PNG: a `.png` target is one file, any other target a directory.
-motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png | dir> [--props <json>] [--json]
-
-# One PNG holding a grid of representative frames, each labelled with its frame and time.
-motion-kit contact-sheet <entry> [--composition <id>] (--every <n> | --frame <n[,n...]>) \
-  --out <file.png> [--columns <n>] [--tile-width <px>] [--from <bound>] [--to <bound>] [--json]
-
-# Render a Composition, or one interval of it: an .mp4 target is encoded video, any other target is PNG frames.
-motion-kit render <entry> [--composition <id>] --out <file.mp4 | dir> [--from <bound>] [--to <bound>] \
-  [--props <json>] [--concurrency <n>] [--json]
-
-# Sample frames after different capture histories and compare them; writes no artifact.
-motion-kit check <entry> [--composition <id>] --frame <n[,n...]> [--history <name[,name...]>] [--json]
-```
-
-`motion-kit docs` prints the guide that ships with the package; `motion-kit docs <topic>` prints one topic (`--list` names them).
-
-`--composition` may be omitted only when the registry exports exactly one Composition; otherwise the
-command fails with `cli.invalid-arguments` naming the available ids. `--props` is a JSON object string
-validated by the Composition's Zod schema before the first frame; `render` and `frame` both accept it.
-
-`--out` selects the format: an `.mp4` file is encoded H.264, and any other target is a directory of
-PNG frames plus a `manifest.json`, reported as `"format": "frames"` in `data`. There is no `--format`
-flag.
-
-`--concurrency` sets how many renderers capture frames at once, each a browser of its own; it defaults
-to half the machine's cores and must be a positive integer. A frame's bytes do not depend on which
-renderer captured it. The `.mp4` route captures JPEG (quality 95) rather than PNG, since the H.264
-encode is lossy anyway; the directory route writes PNG.
-
-`--from` and `--to` render part of the Composition: each is a Global Frame (`3600`), `mm:ss[.fff]`
-(`4:20`) or seconds with an `s` suffix (`260s`), and the interval is half-open, so the output holds
-the frames whose presentation time is in it. The artifact is a new zero-based video —
-`--from 4:20 --to 4:35` is a fifteen-second check instead of a whole render — and so is the frames
-route's `frame-00000.png` sequence; audio comes along, a Composition that declares audio keeps one
-audio stream (silent where no clip plays), and `data.range` reports the original frames and seconds.
-An unreadable bound and a same-unit empty range are `cli.invalid-arguments` before a browser opens;
-a range outside the Composition is the same error once its frame count is known, before any capture.
-
-Encoding needs an FFmpeg 6.0+ with `libx264` on `PATH` — and, for a Composition that declares audio,
-its companion `ffprobe`, which the same install provides: motion-kit ships and downloads no binary, so
-this is a prerequisite you install yourself. A missing or unsupported FFmpeg is
-`encode.ffmpeg-not-found` or `encode.ffmpeg-unsupported` before the first frame; `frame` and an `--out`
-directory need no FFmpeg at all.
-
-Audio has no flag either: the `.mp4` route muxes whatever the Composition declares in `audio`,
-resolving each `src` against the directory the command runs in. `volume: 1` is the file's own level,
-mono and stereo alike. A declared file that is missing, is not a regular file, or cannot be opened for
-reading is `asset.load-failed` with the file in `location`, reported before any frame is encoded and
-with no output written, and a Composition that declares no audio renders exactly as it did before
-audio existed. The declaration fields and the mixing rules are in
-[authoring](docs/guide/authoring.md#audio).
-
-Exit codes: `0` success, `1` domain failure (e.g. invalid props), `2` invocation error (e.g. missing
-entry or unknown id), `3` unexpected internal error. Failures are always Diagnostics in the envelope.
-Under `--json` stdout carries one JSON document even for an unusable invocation; `command` is the
-subcommand argv named, or `null` when it named none. A run you cancel emits no envelope: it writes one
-line to stderr and exits `130` (`SIGINT`), `143` (`SIGTERM`) or `129` (`SIGHUP`). The
-[CLI reference](docs/guide/cli.md) has the full tables.
-
-## Package surface
-
-Each context gets its own subpath, with `core` as the package root; only the five below are exported
-today:
-
-- `@kimuson/motion-kit` — the authoring surface: `defineComposition`, `defineCompositions`, the
-  timeline hooks (`useFrame`, `useTime`, `useSequence`, `useTimeline`), `Sequence`,
-  `TransitionSeries`/`TransitionScene`/`Transition`/`useTransitionProgress`, `useAsset`, the Time
-  Module functions and the Diagnostic types.
-- `@kimuson/motion-kit/motion` — the Pure Motion values: `interpolate`, `keyframes`, `easing`,
-  `spring`, `springState`, `springSettleTime` and `retarget`. No component, no state and no clock;
-  the [authoring](docs/guide/authoring.md#motion-values) shows the usage.
-- `@kimuson/motion-kit/render` — `createRenderer`, `createRendererPool`, `checkComposition` and their types; Node only.
-- `@kimuson/motion-kit/agent` — the CLI output envelope schemas.
-- `@kimuson/motion-kit/three` — `ThreeCanvas`, `CameraRig` and their types. `three` and
-  `@react-three/fiber` are optional peer dependencies you install; the root entry never loads them.
-
-`/browser`, `/theme` and `/presets` are planned and do not exist yet; each gets its own subpath when
-it lands.
-
-## Determinism
-
-A frame is a pure function of its index, and the renderer treats it that way: it seeks, waits for the
-readiness barrier — never a timer — then captures. The repository's determinism suite compares exact
-PNG bytes across eight traversal modes (sequential, random, reverse, repeated, fresh realm, held
-session, fresh renderer, concurrent) in a fixed environment, and its `concurrent` mode is what lets
-`render --concurrency` be safe. What that does not promise — byte equality across GPUs and platforms,
-or trees broken by wall clocks, randomness, CSS animation or antialiased edges — is laid out in
-[determinism](docs/guide/determinism.md). `motion-kit check` samples your own Composition across cold,
-warm and pool histories and reports which frames changed; a pass is evidence for the sampled frames
-and environment only.
-
-## Examples
-
-Four complete videos live under `examples/` in the repository: a 24-second teaser (dense motion), a
-222-second explainer (long duration, subtitles against audio), a 20-second chart (schema-first props)
-and a 30-second vertical slideshow (assets and aspect switching). They are consumers of the published
-package and ship in the repository, not in the npm tarball; [the examples
-guide](docs/guide/examples.md) has their commands and says which parts are placeholders.
+- [Documentation index](docs/index.md) — requirements, a quickstart and the package surface
+- [Getting started](docs/guide/getting-started.md) · [Authoring](docs/guide/authoring.md) ·
+  [CLI](docs/guide/cli.md) · [Three.js](docs/guide/three.md) ·
+  [Determinism](docs/guide/determinism.md) · [Troubleshooting](docs/guide/troubleshooting.md)
+- [Examples](docs/guide/examples.md) — four complete reference videos under [`examples/`](examples/)
+- [Changelog](CHANGELOG.md)
 
 ## Contributing
 
@@ -282,5 +141,4 @@ Working on motion-kit itself (setup, building, testing) is covered in
 
 ## License
 
-MIT. The package also ships `THIRD_PARTY_LICENSES.md`, which reproduces the license texts and
-attribution notices of its runtime dependencies.
+[MIT](LICENSE)

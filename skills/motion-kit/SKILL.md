@@ -22,6 +22,20 @@ In a project that depends on the package, the bin is `motion-kit` (`pnpm exec mo
 `npx motion-kit`, `yarn motion-kit`). Do not run a bare `npx motion-kit` without an install: it
 fetches an unrelated package.
 
+## Setting up a project
+
+A Composition imports `@kimuson/motion-kit`, so a project needs the package and its peers installed,
+plus a Chromium for Playwright to capture frames in:
+
+```bash
+pnpm add @kimuson/motion-kit react react-dom zod   # or npm install / yarn add
+pnpm exec playwright install chromium              # once per machine
+```
+
+An `.mp4` target also needs FFmpeg 6.0+ with `libx264` on `PATH`, which motion-kit does not install
+(`ffmpeg -version`). `frame`, `contact-sheet` and `preview` work without it. `docs getting-started`
+has the full requirements and `docs troubleshooting` the per-OS FFmpeg installs.
+
 ## Read the docs before writing code
 
 The guides ship with the package, and `docs` prints them. Read the topic you need instead of guessing
