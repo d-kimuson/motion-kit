@@ -784,7 +784,7 @@ report today:
 
 `layout.*` (`layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`,
 `layout.font-not-loaded`) is reserved for the later `inspect`/`validate` work and no command emits it
-in 0.0.1. Adding a code is a compatible change; consumers must tolerate codes they do not know.
+yet. Adding a code is a compatible change; consumers must tolerate codes they do not know.
 
 `render.output-unwritable` is the one domain code about your disk rather than your Composition: a PNG
 frame, the frames `manifest`, the previous run's manifest, a contact sheet, or an output directory

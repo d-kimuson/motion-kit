@@ -8,12 +8,11 @@ render a Composition and read any failure without a GUI. motion-kit is MIT licen
 
 ## Status
 
-**0.0.1 is the first public release.** It ships the renderer, the CLI, H.264 MP4 encoding, AAC audio
-muxing, and the determinism suite that keeps frame bytes independent of capture order. `CHANGELOG.md`
-in the repository lists what is in it and what is known to be limited.
+motion-kit is before `1.0.0`, so a minor release may still change the API. `CHANGELOG.md` in the
+repository lists what each release contains and what is known to be limited.
 
-Not in 0.0.1: the preview UI and in-browser preview audio (both unreleased, in `motion-kit preview`), audio-reactive visuals, video assets, the
-`/theme` and `/presets` subpaths, the `Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. The
+Not available yet: audio-reactive visuals, video assets, the `/theme` and `/presets` subpaths, the
+`Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. The
 [package surface](#package-surface) says what is exported today; each later context gets its own
 subpath when it lands.
 
@@ -261,23 +260,10 @@ and a 30-second vertical slideshow (assets and aspect switching). They are consu
 package and ship in the repository, not in the npm tarball; [the examples
 guide](docs/guide/examples.md) has their commands and says which parts are placeholders.
 
-## Development
+## Contributing
 
-```bash
-pnpm install
-pnpm fix        # oxlint --fix and oxfmt
-pnpm lint       # oxlint, oxfmt --check, package checks, license allowlist, tsconfig, Lean specs
-pnpm typecheck
-pnpm test
-pnpm build      # tsdown: dist/ for the published package and the CLI
-lake build      # Lean specs under src/core (Lean version from lean-toolchain, via elan)
-nix develop     # devShell from flake.nix: Node 26, pnpm, gitleaks, elan
-```
-
-CI runs `pnpm lint`, `pnpm typecheck`, `lake build` and `pnpm test`. The render tests need a Chromium
-(`pnpm exec playwright install chromium`), and the encoding and CLI tests also need FFmpeg and
-`ffprobe` on `PATH`. The Phase 0 browser experiments stay separate from the framework, each with its
-own README and `pnpm spike:*` script under `spikes/<name>/`.
+Working on motion-kit itself (setup, building, testing) is covered in
+[dev-docs/README.md](dev-docs/README.md).
 
 ## License
 

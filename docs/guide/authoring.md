@@ -3,7 +3,7 @@
 A motion-kit video is a React tree plus the metadata that fixes its timeline. This page covers what
 an entry file exports, the hooks that report time, the two structural components (`Sequence` and
 `TransitionSeries`), the [motion values](#motion-values), asset loading, and audio declarations.
-Everything it names is exported from `@kimuson/motion-kit` in 0.0.1, except the motion values, which
+Everything it names is exported from `@kimuson/motion-kit`, except the motion values, which
 come from the `@kimuson/motion-kit/motion` subpath; anything marked planned is not.
 
 ## The registry
@@ -375,9 +375,9 @@ defineComposition({
 - An invalid declaration — `endInFrames <= startInFrames`, a negative or non-integer frame, a
   non-finite volume — is rejected at `defineComposition` time as `render.page-error`. A declared file
   that cannot be opened is `asset.load-failed` before any frame is encoded.
-- Audio plays in the rendered `.mp4`, and also in
-  [`motion-kit preview`](cli.md#preview) (unreleased), where each source can be muted and the mix is approximate,
-  so check the `.mp4`. The frames route writes pictures without sound.
+- Audio plays in the rendered `.mp4`, and also in [`motion-kit preview`](cli.md#preview), where each
+  source can be muted and the mix is approximate, so check the `.mp4`. The frames route writes
+  pictures without sound.
 
 ## Three.js
 
@@ -414,13 +414,12 @@ Everything worth naming is exported from the package root: `CompositionDefinitio
 `Composition`, `CompositionContent` and `useCompositionFrame` are exported too, but they are the page
 bootstrap's own API: an entry never renders `Composition` itself.
 
-## Not available in 0.0.1
+## Not available yet
 
 `Animate`, `Reveal` and `Stagger` — the components that apply values to a wrapper element, which
-`/motion` does not ship; `defineTheme` and tokens (`/theme`); the scene presets (`/presets`); the
-preview UI, which arrives with the unreleased [`motion-kit preview`](cli.md#preview); `inspect` and
-`validate`. Until those land, a component writes its own motion over the [motion values](#motion-values),
-which is what the [reference examples](examples.md) do.
+`/motion` does not ship; `defineTheme` and tokens (`/theme`); the scene presets (`/presets`);
+`inspect` and `validate`. Until those land, a component writes its own motion over the
+[motion values](#motion-values), which is what the [reference examples](examples.md) do.
 
 ## Related
 
