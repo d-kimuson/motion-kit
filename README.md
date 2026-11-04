@@ -9,7 +9,6 @@ Your coding agent writes the scenes in React/TSX, looks at its own frames, and r
 [![npm version](https://img.shields.io/npm/v/@kimuson/motion-kit?logo=npm&color=cb3837)](https://www.npmjs.com/package/@kimuson/motion-kit)
 [![npm downloads](https://img.shields.io/npm/dm/@kimuson/motion-kit?color=cb3837)](https://www.npmjs.com/package/@kimuson/motion-kit)
 [![CI](https://github.com/d-kimuson/motion-kit/actions/workflows/check.yaml/badge.svg?branch=main)](https://github.com/d-kimuson/motion-kit/actions/workflows/check.yaml)
-[![types](https://img.shields.io/npm/types/@kimuson/motion-kit)](https://www.npmjs.com/package/@kimuson/motion-kit)
 [![license](https://img.shields.io/npm/l/@kimuson/motion-kit)](LICENSE)
 
 ![A frame of the motion-kit promo video, made with motion-kit](.github/assets/hero.png)
@@ -33,7 +32,7 @@ Or as a Claude Code plugin:
 /plugin install motion-kit@motion-kit
 ```
 
-To try it without installing anything, point the agent at the skill in your prompt:
+To try it without installing the skill, point the agent at it in your prompt:
 
 ```text
 Make a 15-second launch video for my CLI tool with motion-kit.
@@ -97,6 +96,8 @@ single image instead of watching a video. `frame` captures any one frame the sam
 ```bash
 npx @kimuson/motion-kit contact-sheet entry.tsx --every 30 --out sheet.png
 ```
+
+The sheet of the 46-second promo video in [`examples/promo`](examples/promo/):
 
 ![A contact sheet of the promo video: sampled frames in a grid, each labelled with its frame and time](.github/assets/contact-sheet.png)
 

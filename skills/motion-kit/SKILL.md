@@ -25,16 +25,21 @@ fetches an unrelated package.
 ## Setting up a project
 
 A Composition imports `@kimuson/motion-kit`, so a project needs the package and its peers installed,
-plus a Chromium for Playwright to capture frames in:
+plus the Chromium build that motion-kit's Playwright version captures frames in:
 
 ```bash
-pnpm add @kimuson/motion-kit react react-dom zod   # or npm install / yarn add
-pnpm exec playwright install chromium              # once per machine
+pnpm add @kimuson/motion-kit react react-dom zod      # or npm install / yarn add
+pnpm why playwright                                   # the Playwright version motion-kit uses
+pnpm dlx playwright@<version> install chromium        # once per machine; npx playwright@<version> with npm
 ```
 
+Playwright is a dependency of motion-kit, not of the project, so pnpm does not put a `playwright` bin
+in the project; run the version it reports rather than the latest.
+
 An `.mp4` target also needs FFmpeg 6.0+ with `libx264` on `PATH`, which motion-kit does not install
-(`ffmpeg -version`). `frame`, `contact-sheet` and `preview` work without it. `docs getting-started`
-has the full requirements and `docs troubleshooting` the per-OS FFmpeg installs.
+(`ffmpeg -version`); a Composition that declares audio also needs its companion `ffprobe`. `frame`,
+`contact-sheet` and `preview` work without FFmpeg. `docs getting-started` has the full requirements
+and `docs troubleshooting` the per-OS FFmpeg installs.
 
 ## Read the docs before writing code
 
