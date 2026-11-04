@@ -157,8 +157,7 @@ Each example has a README of its own beside its entry file, in a checkout of the
 - `examples/promo/README.md` — the storyboard, how each scene owns its half of a `TransitionSeries`
   handoff, and why the showcase has no probe.
 
-What may be committed, the CI gates, and the layout and acceptance look each example is measured
-against are in the repository's
+What the examples may commit and how CI checks them is in the repository's
 [examples README](https://github.com/d-kimuson/motion-kit/blob/main/examples/README.md).
 
 ## Related

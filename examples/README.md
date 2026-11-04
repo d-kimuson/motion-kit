@@ -4,7 +4,8 @@ Four complete videos that fix motion-kit's output quality. Each one stresses a d
 framework, and each one is a consumer of the published package: an example imports
 `@kimuson/motion-kit` by name and its own modules, never a relative path into `src/`.
 [The reference-examples design doc](../dev-docs/design-doc/20261025-reference-examples.md) owns the
-layout, the CI gates and the acceptance look; each example's own `README.md` owns how to run it.
+layout, the CI gates and the acceptance look; this page says how to run the gates, and each
+example's own `README.md` how to run the example.
 
 Nothing here is shipped in the npm package (`package.json#files` is `dist` only).
 
@@ -95,36 +96,21 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
 - **Every full-length render is a local QA Check**, not a CI step. CI renders each `-ci` Composition
   and runs each `-probe` Composition through the eight determinism modes.
 
-## Asset policy
-
-The rule the examples follow is that a committed file must be redistributable by every clone:
-
-- **Committed**: the Noto Sans JP variable font (OFL-1.1) with its `OFL.txt` beside it under
-  `examples/explainer/assets/fonts/`, and the authored JSON datasets under `examples/chart/data/`.
-- **Generated, gitignored** under `examples/<name>/assets.local/`: the slideshow's photos and tone
-  bed, the explainer's music bed, whoosh and silent voice clips. A re-run writes byte-identical
-  files, so a clone and CI generate the same stills.
-- **Fetched locally, never committed**: VOICEVOX voice clips and the two character portraits, written
-  by `examples/explainer/fetch-assets.ts` against a local engine (`VOICEVOX_ENGINE_URL`, default
-  `http://127.0.0.1:50021`).
-- **Credited**: the explainer carries the voice, illustrator, character-project and font credit lines
-  in its README and on the video's credit slide, as the
-  [asset licensing ADR](../dev-docs/decisions/20261026-example-asset-licensing.accepted.md) requires.
-
-Each example also commits an `assets.manifest.json` listing every file under `assets/` and
-`assets.local/` with its source and licence. No script reads it; it is reviewed with the example's PR.
-
-## The CI gates
+## Running the gates
 
 ```bash
 pnpm test --project cli examples/teaser/teaser.smoke.test.ts
 pnpm test --project frame-transport src/render/determinism/examples.determinism.test.ts
 ```
 
-Each smoke test renders its `-ci` Composition through `node dist/cli.js render … --json` and asserts
-the envelope and the file with `ffprobe` (60 frames, `30/1`, the reduced resolution, a 2.000 s
-duration, a clean decode). The determinism test runs all eight traversal modes over each `-probe`
-Composition at frames `[0, 15, 29]`, exact PNG bytes.
+The first runs one example's smoke test (each example has its own `<name>.smoke.test.ts`), the
+second the determinism gate over every `-probe` Composition. Every CI render is silent, because the
+fetched voice and music are local-only.
 
-CI never renders a full-length video: the full renders are human QA checks. Every CI render is silent,
-because the fetched voice and music are local-only and never committed.
+## Asset records
+
+Each example commits an `assets.manifest.json` listing every file under `assets/` and
+`assets.local/` with its source and licence. No script reads it; it is reviewed with the example's
+PR. The explainer's VOICEVOX clips and character portraits come from a local engine
+(`VOICEVOX_ENGINE_URL`, default `http://127.0.0.1:50021`), and its README and credit slide carry
+the voice, illustrator, character-project and font credit lines.
