@@ -8,7 +8,8 @@ happened as one JSON document, so a script or a coding agent can read a failure 
 
 The package is `@kimuson/motion-kit`: ESM only, MIT licensed, installable with any Node package
 manager. A frame is a pure function of its index, which is what makes `--concurrency` change speed
-rather than output.
+rather than output. It is before `1.0.0`, so a minor release may still change the API; the changelog
+says what each release changed.
 
 This page is the entry point to the seven guides beside it in `docs/guide/`. It ships in the npm
 package too, so an installed copy reads the same from

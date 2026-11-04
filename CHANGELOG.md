@@ -281,4 +281,4 @@ has a predecessor it must stay compatible with.
   Nothing in the package fetches, bundles or ships them, and no hosted voice service is used.
 - **Not in this release.** The preview UI, the `/motion`, `/theme`, `/presets` and `/three` subpaths,
   `inspect` and `validate`, video assets, and audio in preview are later phases. The
-  [package surface](README.md#package-surface) lists what is exported today.
+  [package surface](docs/index.md#package-surface) lists what is exported today.
