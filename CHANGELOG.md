@@ -8,6 +8,10 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 
 ### Added
 
+- **`--version`.** `motion-kit --version` (or `-V`) prints the package version, and the leading
+  `--help` is commander's help for the whole program, with the package description and every
+  subcommand. Both take the name, version and description from `package.json`. Like help, a leading
+  `--version` exits 0 and emits no envelope, even with `--json`.
 - **See a whole Composition in one image.** `motion-kit contact-sheet <entry> --every 150
   --out sheet.png` writes one PNG holding a grid of representative frames, each labelled with its
   frame number and presentation time, so a coding agent judges the pacing and the per-scene layout

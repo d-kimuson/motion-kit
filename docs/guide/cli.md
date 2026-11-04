@@ -814,7 +814,9 @@ The exit code is not a field of the envelope; it follows from `ok` and from the 
 
 `motion-kit --help`, `motion-kit -h`, `motion-kit help` and `motion-kit <command> --help` print usage
 text on stdout and exit `0` — with or without `--json`, because they ask for documentation, not for a
-result, and emit no envelope. Any other unusable argv still gets its one document under `--json`:
+result, and emit no envelope. A leading `--version` or `-V` prints the package version the same
+way; after a command it is an unknown option. Any other unusable argv still gets its one document
+under `--json`:
 
 ```bash
 motion-kit --json

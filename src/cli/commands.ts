@@ -1,5 +1,7 @@
 import { Command } from 'commander';
 
+import packageJson from '../../package.json' with { type: 'json' };
+
 // The CLI's command table, shared by the parser (`cli.ts`) and the argv-to-command resolver
 // (`invocation.ts`). Keeping the declarations in one place is what lets the resolver know which
 // options consume a value: an option's value is not a positional argument, so
@@ -11,7 +13,7 @@ import { Command } from 'commander';
  * `npx` runs its one bin (`motion-kit`) either way, so every usage line names this rather than the
  * bare bin.
  */
-export const cliInvocation = 'npx @kimuson/motion-kit';
+export const cliInvocation = `npx ${packageJson.name}`;
 
 /** A subcommand whose `--help` usage line starts with `cliInvocation` instead of its bare name. */
 const cliCommand = (name: string): Command =>
@@ -20,6 +22,9 @@ const cliCommand = (name: string): Command =>
   });
 
 const renderCommand = cliCommand('render')
+  .description(
+    'render a Composition to an MP4 (--out file.mp4), PNG frames (--out dir) or the mixed audio alone (--out audio.wav), with --concurrency <n> renderers capturing at once (default: half the cores)',
+  )
   .argument('<entry>')
   .option('--composition <id>')
   .requiredOption('--out <file-or-dir>')
@@ -45,6 +50,7 @@ const renderCommand = cliCommand('render')
   .configureOutput({ outputError: () => {} });
 
 const frameCommand = cliCommand('frame')
+  .description('capture one or more frames to PNG')
   .argument('<entry>')
   .option('--composition <id>')
   .requiredOption(
@@ -66,6 +72,7 @@ const frameCommand = cliCommand('frame')
   .configureOutput({ outputError: () => {} });
 
 const contactSheetCommand = cliCommand('contact-sheet')
+  .description('one PNG grid of representative frames (--every <n> or --frame <n>)')
   .argument('<entry>')
   .option('--composition <id>')
   .option('--every <n>', 'a tile every n frames, from the range start, ending on its last frame')
@@ -95,6 +102,7 @@ const contactSheetCommand = cliCommand('contact-sheet')
   .configureOutput({ outputError: () => {} });
 
 const checkCommand = cliCommand('check')
+  .description('sample frames for determinism (requires --frame <n>)')
   .argument('<entry>')
   .option('--composition <id>')
   .requiredOption(
@@ -130,6 +138,7 @@ const checkCommand = cliCommand('check')
   .configureOutput({ outputError: () => {} });
 
 const previewCommand = cliCommand('preview')
+  .description("serve a browser preview with playback, scrubbing and the clips' audio")
   .argument('<entry>')
   .option('--composition <id>')
   .option('--props <json>')
@@ -142,6 +151,7 @@ const previewCommand = cliCommand('preview')
   .configureOutput({ outputError: () => {} });
 
 const docsCommand = cliCommand('docs')
+  .description('print a shipped guide; --list names the topics')
   .argument('[topic]')
   .option('--list')
   .option('--json')
@@ -180,3 +190,40 @@ const valueTakingLongs = (command: Command): string[] =>
 export const valueTakingOptions: ReadonlySet<string> = new Set(
   Object.values(commands).flatMap(valueTakingLongs),
 );
+
+/** The leading flags that ask for the package version instead of a command. */
+export const versionFlags: readonly string[] = ['-V', '--version'];
+
+/**
+ * The top-level program: its name, version and description are `package.json`'s, and its help
+ * lists the subcommands above. It answers only the leading `--help`/`-h`/`help` and
+ * `--version`/`-V` requests; a subcommand is parsed by its own command so that a parse failure
+ * still becomes an envelope (`cli.ts`).
+ */
+export const program = new Command('motion-kit')
+  .description(packageJson.description)
+  .version(packageJson.version, versionFlags.join(', '))
+  .usage('<command> [args]')
+  .configureHelp({
+    commandUsage: (command) => `${cliInvocation} ${command.usage()}`,
+    sortSubcommands: true,
+  })
+  .addHelpText(
+    'after',
+    [
+      '',
+      'Examples:',
+      `  ${cliInvocation} render entry.tsx --out out.mp4`,
+      `  ${cliInvocation} contact-sheet entry.tsx --every 150 --out sheet.png --json`,
+      `  ${cliInvocation} check entry.tsx --frame 1,4 --history pool --json`,
+      `  ${cliInvocation} preview entry.tsx --composition intro`,
+      `  ${cliInvocation} docs getting-started`,
+      '',
+      `Run \`${cliInvocation} docs\` to print the guide, or \`${cliInvocation} <command> --help\` for command options.`,
+    ].join('\n'),
+  )
+  .helpCommand(false)
+  // Each subcommand rejects an option it does not declare on its own; without this, commander would
+  // suggest the program's `--version` to a subcommand that cannot take it.
+  .enablePositionalOptions();
+for (const command of Object.values(commands)) program.addCommand(command);
