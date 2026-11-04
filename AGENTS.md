@@ -40,6 +40,8 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 ├── .agents/troubleshots/      # Workarounds for tooling problems
 ├── .agents/auto-pilot/        # auto-pilot state, maintenance tasks, and its own workarounds
 ├── lakefile.toml, lean-toolchain  # Lean project (specs under src/core)
+├── skills/motion-kit/        # The user-facing agent skill (npx skills add, Claude Code plugin)
+├── .claude-plugin/            # Claude Code plugin and marketplace manifests for the skill
 └── .github/                   # CI (check.yaml) and composite setup actions
 ```
 

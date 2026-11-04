@@ -1,0 +1,10 @@
+{
+  "name": "motion-kit",
+  "description": "Write, render and check programmatic videos with motion-kit (@kimuson/motion-kit).",
+  "author": {
+    "name": "d-kimuson"
+  },
+  "homepage": "https://github.com/d-kimuson/motion-kit",
+  "repository": "https://github.com/d-kimuson/motion-kit",
+  "license": "MIT"
+}

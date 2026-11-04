@@ -1,0 +1,14 @@
+{
+  "name": "motion-kit",
+  "description": "The motion-kit skill for coding agents that write programmatic video.",
+  "owner": {
+    "name": "d-kimuson"
+  },
+  "plugins": [
+    {
+      "name": "motion-kit",
+      "source": "./",
+      "description": "Write, render and check programmatic videos with motion-kit (@kimuson/motion-kit)."
+    }
+  ]
+}

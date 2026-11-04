@@ -47,6 +47,21 @@ ffmpeg -hide_banner -encoders | grep libx264
 [troubleshooting](docs/guide/troubleshooting.md#ffmpeg) for per-OS installs and the codes a missing or
 outdated binary produces.
 
+## Agent skill
+
+The repository ships a `motion-kit` skill that tells a coding agent how to run the CLI and where the
+guides are (`motion-kit docs`). Install it with the [skills CLI](https://github.com/vercel-labs/skills)
+or as a Claude Code plugin:
+
+```bash
+npx skills add d-kimuson/motion-kit
+```
+
+```text
+/plugin marketplace add d-kimuson/motion-kit
+/plugin install motion-kit@motion-kit
+```
+
 ## Five-minute quickstart
 
 Write an entry file that exports a `compositions` registry:
