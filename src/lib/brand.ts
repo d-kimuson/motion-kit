@@ -19,5 +19,8 @@ export const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" heigh
 /** The mark as a `data:` URL, for an `<img>` or a favicon. */
 export const markDataUrl = `data:image/svg+xml,${encodeURIComponent(markSvg)}`;
 
+/** The wordmark's accent: the hyphen in "motion-kit", the end of the mark's gradient. */
+export const accentColor = '#2fe3d0';
+
 export const repositoryUrl = 'https://github.com/d-kimuson/motion-kit';
 export const npmUrl = 'https://www.npmjs.com/package/@kimuson/motion-kit';

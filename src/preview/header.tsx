@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react';
 
-import { markDataUrl, npmUrl, repositoryUrl } from '../lib/brand.ts';
+import { accentColor, markDataUrl, npmUrl, repositoryUrl } from '../lib/brand.ts';
 import { useMessages } from './messages.ts';
 import { buttonVariants } from './ui/button.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.tsx';
@@ -52,7 +52,7 @@ export const Header = ({ compositionId }: { compositionId: string | undefined })
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-card/40 px-3">
       <img src={markDataUrl} alt="" className="size-5" />
       <span className="text-sm font-semibold tracking-tight">
-        motion<span className="text-[#2fe3d0]">-</span>kit
+        motion<span style={{ color: accentColor }}>-</span>kit
       </span>
       {compositionId === undefined ? undefined : (
         <>
