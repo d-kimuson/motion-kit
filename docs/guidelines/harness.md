@@ -12,17 +12,18 @@ Where the things agents read (AGENTS.md, guidelines, skills, troubleshots) live,
 
 ## Placement
 
-| Kind                 | Location                                                                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guideline            | `docs/guidelines/<name>.md`. When split, `docs/guidelines/<name>/*.md` with the shared part in `index.md`                                   |
-| Review patterns      | `docs/guidelines/review/index.md`. `REVIEW.md` and the `Code Review Rules` section of AGENTS.md only point to it; no other tool-facing file |
-| Agent Skills         | `.agents/skills/<name>/` (`SKILL.md` and `README.md`)                                                                                       |
-| Workarounds          | `.agents/troubleshots/<topic>.md` (`docs/guidelines/writing/troubleshoot.md`)                                                               |
-| Terms and invariants | Cross-context: `docs/CONTEXT-MAP.md`. Per context: `docs/contexts/<context>/CONTEXT.md` (`docs/guidelines/writing/context.md`)              |
-| ADR                  | Cross-context: `docs/decisions/`. Per context: `docs/contexts/<context>/adr/` (`docs/guidelines/writing/adr.md`)                            |
-| Design Doc           | Cross-context: `docs/design-doc/`. Per context: `docs/contexts/<context>/design-doc/` (`docs/guidelines/writing/design-doc.md`)             |
-| Lean spec            | Next to the implementation under `src/core` (`docs/guidelines/quality-assurance/lean-spec.md`)                                              |
-| auto-pilot           | State, maintenance tasks, and workarounds of auto-pilot: `.agents/auto-pilot/` (`docs/guidelines/auto-pilot.md`)                            |
+| Kind                 | Location                                                                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guideline            | `docs/guidelines/<name>.md`. When split, `docs/guidelines/<name>/*.md` with the shared part in `index.md`                                                                                                                       |
+| Review patterns      | `docs/guidelines/review/index.md`. `REVIEW.md` and the `Code Review Rules` section of AGENTS.md only point to it; no other tool-facing file                                                                                     |
+| Agent Skills         | `.agents/skills/<name>/` (`SKILL.md` and `README.md`): skills for working on this repository                                                                                                                                    |
+| Published skill      | `skills/<name>/SKILL.md`, listed by `.claude-plugin/`: skills for users of the package, installed with `npx skills add` or as a Claude Code plugin; not part of this repository's harness and not moved under `.agents/skills/` |
+| Workarounds          | `.agents/troubleshots/<topic>.md` (`docs/guidelines/writing/troubleshoot.md`)                                                                                                                                                   |
+| Terms and invariants | Cross-context: `docs/CONTEXT-MAP.md`. Per context: `docs/contexts/<context>/CONTEXT.md` (`docs/guidelines/writing/context.md`)                                                                                                  |
+| ADR                  | Cross-context: `docs/decisions/`. Per context: `docs/contexts/<context>/adr/` (`docs/guidelines/writing/adr.md`)                                                                                                                |
+| Design Doc           | Cross-context: `docs/design-doc/`. Per context: `docs/contexts/<context>/design-doc/` (`docs/guidelines/writing/design-doc.md`)                                                                                                 |
+| Lean spec            | Next to the implementation under `src/core` (`docs/guidelines/quality-assurance/lean-spec.md`)                                                                                                                                  |
+| auto-pilot           | State, maintenance tasks, and workarounds of auto-pilot: `.agents/auto-pilot/` (`docs/guidelines/auto-pilot.md`)                                                                                                                |
 
 ## Updating
 
