@@ -32,7 +32,7 @@ Until the repository has a GitHub remote (`git remote -v` prints nothing), the t
 ### Verification
 
 - **Feedback Loop**: before committing, run every command in the Feedback Loop of AGENTS.md whose "When to run" applies, and fix what fails.
-- **CI Pass**: after pushing, wait for CI with `gh pr checks --watch` and fix what fails.
+- **CI Pass**: after pushing, wait for CI and fix what fails. CI takes about 13 minutes, longer than a foreground tool call may run, so wait in the background: `until ! gh pr checks <number> | grep -q pending; do sleep 30; done; gh pr checks <number>` (or `gh pr checks <number> --watch` as a background command).
 - **Review**: delegate to a SubAgent with this instruction, verbatim: "Review PR #<number> for TASK-<number> (or the maintenance or feedback item named in the request) by `REVIEW.md` and post the findings as review comments on the PR." (Main Push: "Review the commits <range> for TASK-<number> by `REVIEW.md` and return the findings as a list.") Fix the findings and repeat until there are none. The round count and the stop belong to the auto-pilot (`docs/guidelines/auto-pilot.md`, Precedence when documents disagree), which records the count in its own state and tells you when the rule stopped the loop: stop and report then, instead of opening another round.
 - **QA Check**: delegate to a SubAgent with this instruction, verbatim: "Verify <summary of the change> by the QA Check steps in `docs/guidelines/quality-assurance/index.md` and comment the result on PR #<number>." (Main Push: "... and return the result.") `approve` passes. On `reject`, fix and ask again. On `human-check`, attach the human-check content of the result to the completion report as it is, for the user to verify.
 
