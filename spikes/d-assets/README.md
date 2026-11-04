@@ -1,6 +1,6 @@
 # Spike D: explicit asset readiness before capture
 
-Run `pnpm spike:assets` to reproduce font, image, GLTF and texture readiness controls in Playwright Chromium. The experiment is **not shipped or exported and is deliberately outside `pnpm test`**: browser provisioning is not part of the default checks and the suite stays out of the CI gates ([ADR](../../docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)). On Linux it fails 5/5 on one screenshot pixel in the font fixture, with no readiness difference ([record](../../docs/contexts/render/knowledge/20261031-linux-spike-qualification.md)). See the [report](../../docs/contexts/render/knowledge/spike-d-assets.md) and [accepted cross-context ADR](../../docs/decisions/20261023-asset-readiness-registry.accepted.md).
+Run `pnpm spike:assets` to reproduce font, image, GLTF and texture readiness controls in Playwright Chromium. The experiment is **not shipped or exported and is deliberately outside `pnpm test`**: browser provisioning is not part of the default checks and the suite stays out of the CI gates ([ADR](../../dev-docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)). On Linux it fails 5/5 on one screenshot pixel in the font fixture, with no readiness difference ([record](../../dev-docs/contexts/render/knowledge/20261031-linux-spike-qualification.md)). See the [report](../../dev-docs/contexts/render/knowledge/spike-d-assets.md) and [accepted cross-context ADR](../../dev-docs/decisions/20261023-asset-readiness-registry.accepted.md).
 
 ## Run
 

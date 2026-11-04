@@ -4,7 +4,7 @@ The explainer: 222 seconds on what an index fund is, in 19 spoken lines over 10 
 five layers that share one storyboard. `script.ts` is the script; `script.schema.ts` owns the format,
 the reading rate and the timing arithmetic; `script.test.ts` holds the numbers to their literals;
 `plan.ts` converts seconds to frames once for every layer.
-[The reference-examples design doc](../../docs/design-doc/20261025-reference-examples.md#explainer--long-duration-many-sequences-and-transitions-subtitles-against-audio)
+[The reference-examples design doc](../../dev-docs/design-doc/20261025-reference-examples.md#explainer--long-duration-many-sequences-and-transitions-subtitles-against-audio)
 owns the target.
 
 This README covers **how to run the example, what is committed and what is credited**. The timing and
@@ -106,7 +106,7 @@ fails when a beat keys to a phrase the narration never says.
 
 ## Credit lines
 
-The [asset licensing ADR](../../docs/decisions/20261026-example-asset-licensing.accepted.md#credit-lines)
+The [asset licensing ADR](../../dev-docs/decisions/20261026-example-asset-licensing.accepted.md#credit-lines)
 requires this block in this README and on the video's credit slide:
 
 ```text
@@ -144,7 +144,7 @@ OFL font, and nothing else — the voice, the portraits, the music bed and the w
 `fetch-assets.ts` run away.
 
 `assets.manifest.json` is the design doc's provenance record for both directories
-([Assets and provenance](../../docs/design-doc/20261025-reference-examples.md#assets-and-provenance)):
+([Assets and provenance](../../dev-docs/design-doc/20261025-reference-examples.md#assets-and-provenance)):
 one row per file under `assets/` and `assets.local/` with `path`, `kind`, `source`, `license` and
 `credit`, committed while the files it names mostly are not. The font rows carry the OFL, the
 music bed, the whoosh and `durations.json` are `generated`, the voice clips name the voices and
@@ -155,7 +155,7 @@ with this example's PR.
 
 `ofl/notosansjp` publishes no `.woff2`, only the variable `NotoSansJP[wght].ttf` (9,589,900 bytes), so
 the committed file is converted once from that TTF — the
-[ADR's documented command block](../../docs/decisions/20261026-example-asset-licensing.accepted.md):
+[ADR's documented command block](../../dev-docs/decisions/20261026-example-asset-licensing.accepted.md):
 
 ```sh
 curl -sS -o 'NotoSansJP[wght].ttf' 'https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf'

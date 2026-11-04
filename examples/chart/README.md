@@ -5,7 +5,7 @@ counts its final value up. It is the reference example for **schema-first props 
 data is a validated Composition prop, so the same entry renders a second dataset from a second JSON
 file and nothing about the layout moves — the y-domain, the tick count and the label positions are
 computed from the points.
-[The reference-examples design doc](../../docs/design-doc/20261025-reference-examples.md#chart--schema-first-props-svg-animated-numbers-regenerate-from-other-data)
+[The reference-examples design doc](../../dev-docs/design-doc/20261025-reference-examples.md#chart--schema-first-props-svg-animated-numbers-regenerate-from-other-data)
 owns the target; this file says how to run and read it.
 
 ## Compositions
@@ -174,7 +174,7 @@ file under `data/` and no code change.
 - **The type is the system sans stack, so the look is fixed per machine, not across machines.**
   Committing an OFL font with its `OFL.txt` is allowed and is not done here, so the determinism
   evidence is fixed-environment, as the
-  [Phase 1 determinism record](../../docs/contexts/render/knowledge/20261024-phase1-determinism.md)
+  [Phase 1 determinism record](../../dev-docs/contexts/render/knowledge/20261024-phase1-determinism.md)
   says.
 - **No antialiased curve anywhere, and that is load-bearing.** A stroked circle marker made the probe
   fail four of the seven modes: the sequential capture of frame 29 and a re-capture in a fresh
@@ -197,5 +197,5 @@ file under `data/` and no code change.
 
 **This example commits two JSON files, no media and no font.** Both are authored for the repository,
 so they need no credit line and the
-[asset licensing ADR](../../docs/decisions/20261026-example-asset-licensing.accepted.md) grants
+[asset licensing ADR](../../dev-docs/decisions/20261026-example-asset-licensing.accepted.md) grants
 nothing here; `assets.manifest.json` is not needed.

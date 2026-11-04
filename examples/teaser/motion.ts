@@ -1,7 +1,7 @@
 // Motion as plain arithmetic on time: /motion now publishes interpolate, easing and spring, and
 // /theme is still Phase 2, so the teaser keeps computing its own springs and easings here — these
 // numbers are the acceptance look. The example task that adopts /motion replaces this module; the
-// Composition ids and the look stay (docs/design-doc/20261025-reference-examples.md, "teaser").
+// Composition ids and the look stay (dev-docs/design-doc/20261025-reference-examples.md, "teaser").
 
 export const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));

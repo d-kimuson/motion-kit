@@ -4,10 +4,10 @@ name: Spikes (Linux)
 # runner image that check.yaml uses. Every other measurement in spikes/ is
 # macOS arm64; this workflow records the renderer backend, pass counts and
 # per-run wall time on Linux. The Linux results and their diagnoses are in
-# docs/contexts/render/knowledge/20261031-linux-spike-qualification.md.
+# dev-docs/contexts/render/knowledge/20261031-linux-spike-qualification.md.
 #
 # The spikes stay out of check.yaml, per the cross-context ADR
-# docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md. Two suites do
+# dev-docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md. Two suites do
 # not hold byte-exact DOM+PNG equality on Linux: `clock` fails intermittently
 # and `assets` on one pixel of the font fixture. They keep running here, marked
 # known-linux-failure, so a regression is still visible without blocking a pull
@@ -140,7 +140,7 @@ jobs:
           failures=0
           level=error
           if [ "$KNOWN_FAILURE" = "true" ]; then level=warning; fi
-          DIAGNOSIS='Diagnosis: docs/contexts/render/knowledge'
+          DIAGNOSIS='Diagnosis: dev-docs/contexts/render/knowledge'
           DIAGNOSIS="${DIAGNOSIS}/20261031-linux-spike-qualification.md"
           for repetition in $(seq 1 "$REPETITIONS"); do
             log="${LOG_DIR}/${{ matrix.suite }}-${repetition}.log"
@@ -208,7 +208,7 @@ jobs:
                 + "| \(.vitestDuration) | \(.renderer) |"
               ' "${LOG_DIR}/measurements.jsonl"
               if [ "$KNOWN_FAILURE" = "true" ]; then
-                doc='docs/contexts/render/knowledge'
+                doc='dev-docs/contexts/render/knowledge'
                 doc="${doc}/20261031-linux-spike-qualification.md"
                 echo
                 echo "Known Linux failure: ${doc}"

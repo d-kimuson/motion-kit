@@ -7,7 +7,7 @@
 // each layer resolves on its own, and the CI twin at 960x540 is the same picture at half size.
 //
 // Phase 2 replaces the values here with /theme tokens and /motion curves; the tree that reads them
-// does not change (docs/design-doc/20261025-reference-examples.md, "explainer").
+// does not change (dev-docs/design-doc/20261025-reference-examples.md, "explainer").
 import {
   compareTime,
   createFrameRate,

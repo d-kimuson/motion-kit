@@ -7,7 +7,7 @@
 /** The notices a healthy render emits every time, as the page or the service spells them. */
 const knownNoise = [
   // Chromium, whenever a Composition opens a WebGL context without an unsafe SwiftShader opt-in
-  // (docs/contexts/agent/knowledge/20261029-swiftshader-warning.md).
+  // (dev-docs/contexts/agent/knowledge/20261029-swiftshader-warning.md).
   /Automatic fallback to software WebGL has been deprecated/iu,
   // Chromium's driver notices, for example "GPU stall due to ReadPixels" on a software renderer.
   /GL Driver Message \(/iu,

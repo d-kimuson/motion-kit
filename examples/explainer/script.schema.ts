@@ -1,6 +1,6 @@
 // The shape of the `explainer` script, and the timing arithmetic the example derives from it.
 //
-// The format is fixed by docs/design-doc/20261025-reference-examples.md ("explainer"): every line
+// The format is fixed by dev-docs/design-doc/20261025-reference-examples.md ("explainer"): every line
 // carries its own duration, `seconds = ceil(codePoints(text) / 5)`, and the video's length is the sum
 // of those durations plus a 3-second tail for the disclaimer. Nothing here renders: the file is data
 // contract plus pure functions, so `script.ts`, the entry and the test cannot disagree about seconds.

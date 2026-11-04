@@ -5,7 +5,7 @@ sentence — _Notes that think ahead of their time — ZEPHYR_ — each snapping
 on an easing curve, over a dark ground with one accent colour. It is the reference
 example for **dense motion and determinism under it** — every frame changes, and every frame is the
 same file however the frames are traversed.
-[The reference-examples design doc](../../docs/design-doc/20261025-reference-examples.md#teaser--dense-springs-stagger-theme-tokens-determinism-under-heavy-motion)
+[The reference-examples design doc](../../dev-docs/design-doc/20261025-reference-examples.md#teaser--dense-springs-stagger-theme-tokens-determinism-under-heavy-motion)
 owns the target; this file says how to run and read it.
 
 ## Compositions
@@ -111,7 +111,7 @@ never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all e
 - **The type is the system sans stack, so the look is fixed per machine, not across machines.** The
   design doc allows committing an OFL font with its `OFL.txt`; this example does not, so its
   determinism evidence is fixed-environment (as the
-  [Phase 1 determinism record](../../docs/contexts/render/knowledge/20261024-phase1-determinism.md)
+  [Phase 1 determinism record](../../dev-docs/contexts/render/knowledge/20261024-phase1-determinism.md)
   says) and a frame rendered on another OS will differ in its glyphs.
 - **Motion is hand-rolled arithmetic.** `/motion` publishes the values (`interpolate`, `easing`,
   `spring`) and `/theme` is still Phase 2, so `motion.ts` keeps the springs and `scenes.tsx` the
@@ -129,5 +129,5 @@ never imported by an example — at frames `[0, 15, 29]`, exact PNG bytes, all e
 
 **This example commits no asset and needs no credit line.** There is no media, no font file, no
 downloaded image and no generated placeholder: the whole video is text, CSS gradients and arithmetic.
-The [asset licensing ADR](../../docs/decisions/20261026-example-asset-licensing.accepted.md) therefore
+The [asset licensing ADR](../../dev-docs/decisions/20261026-example-asset-licensing.accepted.md) therefore
 has nothing to grant here, and `assets.manifest.json` is not needed.

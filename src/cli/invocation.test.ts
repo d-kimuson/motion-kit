@@ -1,7 +1,7 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 
-import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
+import committedSchema from '../../dev-docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import { CommandSchema, EnvelopeSchema, type Envelope } from '../agent/cli-output.ts';
 import { valueTakingOptions, commands } from './commands.ts';
 // How an agent's argv becomes the envelope's `command`, checked against the committed schema: an

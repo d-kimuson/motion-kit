@@ -19,7 +19,7 @@
     // resolves to src/ so that nominal (symbol-branded) types and module-level singletons stay
     // identical between package-name and relative imports. The published package resolves the same
     // name to dist/ through `package.json#exports`; scripts/check-browser-graph.test.ts verifies
-    // that built layout. See docs/contexts/render/CONTEXT.md.
+    // that built layout. See dev-docs/contexts/render/CONTEXT.md.
     "paths": {
       "@kimuson/motion-kit": ["./src/index.ts"],
       "@kimuson/motion-kit/render": ["./src/render/index.ts"],

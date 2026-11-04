@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
+import committedSchema from '../../dev-docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import { EnvelopeSchema, type Envelope } from '../agent/cli-output.ts';
 import { parsePreviewQuery } from '../preview/query.ts';
 import { runCli } from './cli.ts';

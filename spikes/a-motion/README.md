@@ -1,6 +1,6 @@
 # Spike A: Motion seekability
 
-Run `pnpm spike:motion` to compare sequential, random/repeated, and isolated frame captures in real Chromium. This is an experiment, not shipped code or a public integration API. Findings and limits are in the [report](../../docs/contexts/motion/knowledge/spike-a-seekability.md); the historical integration proposal is a [superseded ADR](../../docs/contexts/motion/adr/20261023-explicit-motion-seeking.superseded.md).
+Run `pnpm spike:motion` to compare sequential, random/repeated, and isolated frame captures in real Chromium. This is an experiment, not shipped code or a public integration API. Findings and limits are in the [report](../../dev-docs/contexts/motion/knowledge/spike-a-seekability.md); the historical integration proposal is a [superseded ADR](../../dev-docs/contexts/motion/adr/20261023-explicit-motion-seeking.superseded.md).
 
 ## Run
 
@@ -36,6 +36,6 @@ The completion check is `flushSync` for React changes, followed by Motion's publ
 
 ## Test placement
 
-This runs **separately from `pnpm test`**. The final measured full suite took 29.38 s locally (10 tests, 218 PNG captures), already near the task's ~30 s CI ceiling. Linux is qualified: 5/5 runs passed in all six qualifications on `ubuntu-latest` (29.06–30.91 s) ([record](../../docs/contexts/render/knowledge/20261031-linux-spike-qualification.md)). It still runs outside the CI gates ([ADR](../../docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)). Lint/typecheck still cover all spike TypeScript, and the package's `files` allowlist excludes the spike.
+This runs **separately from `pnpm test`**. The final measured full suite took 29.38 s locally (10 tests, 218 PNG captures), already near the task's ~30 s CI ceiling. Linux is qualified: 5/5 runs passed in all six qualifications on `ubuntu-latest` (29.06–30.91 s) ([record](../../dev-docs/contexts/render/knowledge/20261031-linux-spike-qualification.md)). It still runs outside the CI gates ([ADR](../../dev-docs/decisions/20261031-spike-suites-stay-out-of-ci.accepted.md)). Lint/typecheck still cover all spike TypeScript, and the package's `files` allowlist excludes the spike.
 
 The seven packages listed in the report are pinned devDependencies; see the report for versions/licenses. React peerDependency promotion remains TASK-149.

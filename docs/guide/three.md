@@ -98,7 +98,7 @@ A frame the renderer can reproduce from its time alone is **Tier B**: rendering 
 again gives the same bytes. Anything history-dependent is **Tier C**: it still renders, but the
 render reports the `seek.uncontrolled` warning and the determinism suite refuses to certify it. The
 table below is the author-facing summary; the [qualification
-ADR](../contexts/three/adr/20261031-three-advanced-qualification.accepted.md) has the test behind
+ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md) has the test behind
 each row.
 
 | You want…                              | Write                                                                             | Tier       |
@@ -174,7 +174,7 @@ A frame is never captured when the canvas could not draw it and three reports th
 
 A texture upload that fails is the gap in that rule: three reports it nowhere a canvas can observe,
 so the frame is not guaranteed to fail and the case is excluded rather than claimed (see the
-[qualification ADR](../contexts/three/adr/20261031-three-advanced-qualification.accepted.md)).
+[qualification ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md)).
 
 ## Software rendering
 

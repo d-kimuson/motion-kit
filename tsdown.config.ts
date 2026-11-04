@@ -5,7 +5,7 @@ const vendor = (name: string) => new URL(`src/preview/vendor/${name}.ts`, import
 // One entry per public subpath. Adding a subpath touches five places: an entry
 // here, a condition block in `package.json#exports`, an alias line in
 // `vitest.config.ts`, a `paths` entry in `tsconfig.json`, and the export pin in
-// `scripts/check-browser-graph.test.ts` (see docs/contexts/render/CONTEXT.md).
+// `scripts/check-browser-graph.test.ts` (see dev-docs/contexts/render/CONTEXT.md).
 export default defineConfig([
   {
     entry: {

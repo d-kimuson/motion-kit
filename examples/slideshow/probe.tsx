@@ -5,7 +5,7 @@ import { FlatSurface } from './slides/flat.tsx';
 import { SLIDESHOW_FPS, probeSlides } from './slides/plan.ts';
 import { SlideshowScene } from './slides/slides.tsx';
 
-// The determinism gate's Composition (docs/design-doc/20261025-reference-examples.md, "CI policy"):
+// The determinism gate's Composition (dev-docs/design-doc/20261025-reference-examples.md, "CI policy"):
 // 480x270 for 30 frames — a `TransitionSeries` crossfade plus the width/height layout read, from the
 // same `SlideshowScene` the full example renders, with flat surfaces instead of the `useAsset` photos:
 // an image inside a Sequence is the construct TASK-201 tracks, so media stays out of the probes until

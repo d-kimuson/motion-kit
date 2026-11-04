@@ -2,7 +2,7 @@
 
 ## Symptom
 
-The recipe in `docs/guidelines/auto-pilot.md` (start the Independent Agent as a SubAgent with worktree isolation) does not work in this harness (pi with the pi-subagents package).
+The recipe in `dev-docs/guidelines/auto-pilot.md` (start the Independent Agent as a SubAgent with worktree isolation) does not work in this harness (pi with the pi-subagents package).
 
 - An inline workflow block in the reply is rejected with:
 

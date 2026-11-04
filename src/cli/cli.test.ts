@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
+import committedSchema from '../../dev-docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import packageJson from '../../package.json' with { type: 'json' };
 import { EnvelopeSchema, DocsTopicSchema, type Envelope } from '../agent/cli-output.ts';
 import { currentDate } from '../lib/clock.ts';

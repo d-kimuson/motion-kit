@@ -11,7 +11,7 @@ import { compositions as probeCompositions } from './probe.tsx';
 const execFileAsync = promisify(execFile);
 
 // Every command runs from the repository root: the CLI's projectRoot is process.cwd(), and React,
-// ReactDOM and Zod resolve against it (docs/design-doc/20261025-reference-examples.md, "Running an
+// ReactDOM and Zod resolve against it (dev-docs/design-doc/20261025-reference-examples.md, "Running an
 // example"). `pnpm test` builds dist/ first, so the shipped CLI is the thing under test.
 const repositoryRoot = new URL('../../', import.meta.url).pathname;
 const cli = join(repositoryRoot, 'dist', 'cli.js');

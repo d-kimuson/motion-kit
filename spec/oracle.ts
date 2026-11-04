@@ -1,4 +1,4 @@
-// Shared part of the differential tests (docs/guidelines/quality-assurance/lean-spec.md): sends a request to the
+// Shared part of the differential tests (dev-docs/guidelines/quality-assurance/lean-spec.md): sends a request to the
 // Lean oracle built by `lake build` and returns the spec's result. Import it from `<name>.oracle.test.ts` only;
 // the JSON conversion between Lean types and implementation values stays inside each test.
 import { spawnSync } from 'node:child_process';

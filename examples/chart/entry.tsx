@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ChartScene } from './chart.tsx';
 
 // The props schema lives in the Composition registry, so the page validates it before the first
-// frame is captured: that is this example's axis (docs/design-doc/20261025-reference-examples.md,
+// frame is captured: that is this example's axis (dev-docs/design-doc/20261025-reference-examples.md,
 // "chart"). `series` has no default, so the data is always supplied — `--props` in the documented
 // commands, and `composition.props-invalid` with the failing path when a reader omits it. The other
 // three fields default, so a dataset file only has to carry what it changes.
