@@ -111,6 +111,14 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   `FontFace` objects and reports a family that no stylesheet declares for the text as
   `asset.load-failed`, naming the family. The subset URLs stay in the stylesheet.
 
+### Fixed
+
+- **The loading service no longer outlives a killed parent.** Every command that loads a Composition
+  starts a Vite loading process of its own. When the process that started it died without
+  cleaning up (SIGKILL, a killed terminal or agent session, a test worker killed on timeout), that
+  service and its esbuild stayed running indefinitely. It now exits as soon as its parent's IPC
+  channel closes.
+
 ## 0.2.1 — 2026-11-02
 
 ### Added
