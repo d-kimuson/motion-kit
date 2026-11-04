@@ -3,11 +3,15 @@
  * The mark is the one drawn in examples/promo (`Mark` in parts.tsx); `.github/assets/mark.svg` is
  * this same document, kept equal by brand.test.ts.
  */
+
+/** The wordmark's accent: the hyphen in "motion-kit", the end of the mark's gradient. */
+export const accentColor = '#2fe3d0';
+
 export const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="motion-kit-mark" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#8b6cff"/>
-      <stop offset="1" stop-color="#2fe3d0"/>
+      <stop offset="1" stop-color="${accentColor}"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="16" fill="url(#motion-kit-mark)"/>
@@ -18,9 +22,6 @@ export const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" heigh
 
 /** The mark as a `data:` URL, for an `<img>` or a favicon. */
 export const markDataUrl = `data:image/svg+xml,${encodeURIComponent(markSvg)}`;
-
-/** The wordmark's accent: the hyphen in "motion-kit", the end of the mark's gradient. */
-export const accentColor = '#2fe3d0';
 
 export const repositoryUrl = 'https://github.com/d-kimuson/motion-kit';
 export const npmUrl = 'https://www.npmjs.com/package/@kimuson/motion-kit';
