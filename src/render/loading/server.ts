@@ -118,6 +118,12 @@ const crashed = (error: unknown) => {
   console.error(error);
   send({ type: 'failure', error: failed(error) }, () => process.disconnect?.());
 };
+// The parent owns this service, and every path that ends it closes the IPC channel: `dispose`
+// and a reported failure disconnect from here, and a parent that dies without running its exit
+// covers (SIGKILL, a fatal signal, a killed test worker) has its end closed by the OS. Vite's
+// watcher, its HTTP server and esbuild keep the event loop alive, and this service is its own
+// process group, so nothing else ends it: an unreachable service leaves instead of lingering.
+process.on('disconnect', () => process.exit(0));
 process.on('uncaughtException', crashed);
 process.on('unhandledRejection', crashed);
 try {

@@ -1,4 +1,4 @@
-import { fork } from 'node:child_process';
+import { fork, spawn } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -802,5 +802,48 @@ export default {plugins:[react()],test:{environment:'jsdom'},build:{outDir:'dist
     expect(() => process.kill(pid, 0)).toThrow('ESRCH');
     expect(existsSync(recordValue.workspace)).toBe(false);
     expect(Number(process.hrtime.bigint() - started) / 1e6).toBeLessThan(15_000);
+  }, 30_000);
+
+  it('ends the service when its parent is killed without running its exit covers', async () => {
+    const root = fixture();
+    const workspace = mkdtempSync(join(tmpdir(), 'motion-kit-orphan-'));
+    directories.push(workspace);
+    // A parent that starts the service, prints its pid once ready, then waits to be SIGKILLed:
+    // `process.on('exit')` never runs, so only the service itself can notice it is orphaned.
+    const parent = spawn(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const { startLoadingService } = await import(${JSON.stringify(new URL('./service.ts', import.meta.url).href)});
+const service = startLoadingService(${JSON.stringify({ projectRoot: root, entry: 'entry.tsx', workspace })}, () => {});
+await service.ready;
+console.log(service.pid);
+setInterval(() => {}, 1000);`,
+      ],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    let pid: number | undefined;
+    try {
+      pid = await new Promise<number>((done, reject) => {
+        parent.stdout.setEncoding('utf8');
+        parent.stdout.once('data', (line: string) => done(Number(line.trim())));
+        parent.once('exit', () => reject(new Error('Parent exited before the service was ready')));
+      });
+      parent.kill('SIGKILL');
+      const service = pid;
+      await vi.waitFor(() => expect(() => process.kill(service, 0)).toThrow('ESRCH'), {
+        timeout: 10_000,
+        interval: 100,
+      });
+    } finally {
+      parent.kill('SIGKILL');
+      if (pid !== undefined)
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          // Already gone: the assertion above is what this test is for.
+        }
+    }
   }, 30_000);
 });
