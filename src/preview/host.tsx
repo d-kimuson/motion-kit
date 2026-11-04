@@ -31,7 +31,7 @@ const fail = (root: HTMLElement, message: string) => {
 };
 
 /**
- * Boot the preview host page the loading server serves (docs/design-doc/20261101-browser-preview.md):
+ * Boot the preview host page the loading server serves (dev-docs/design-doc/20261101-browser-preview.md):
  * it embeds the composition realm in an iframe and drives it over a MessagePort.
  */
 export const startPreviewHost = (): void => {

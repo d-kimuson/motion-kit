@@ -4,7 +4,7 @@ import type { SurfaceProps } from './slides.tsx';
 // covers this example's structure (the TransitionSeries crossfade and the width/height layout read),
 // not the image path: an `useAsset` image inside a Sequence failed `reverse` twice and has not
 // reproduced since, so the probes stay off it until that finding is settled
-// (docs/design-doc/20261025-reference-examples.md, "CI policy").
+// (dev-docs/design-doc/20261025-reference-examples.md, "CI policy").
 
 /** One flat colour per slide id, so the same slide is the same bytes on every traversal. */
 const FLAT_COLOURS: Readonly<Record<string, string>> = {

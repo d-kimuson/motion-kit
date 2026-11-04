@@ -371,7 +371,7 @@ creates the parent directory and writes the PNG, so a refused invocation, a fail
 cancellation all leave no directory and no partial sheet. An output path that refuses the write is
 `render.output-unwritable` (exit 1), like every other PNG the CLI writes. The tiles are captured in ascending frame order through one renderer, so a sheet is a
 pure function of the Composition, the frames it selected, the grid options and the Chromium build:
-run it twice and the two files are byte-identical ([the contact-sheet ADR](../contexts/agent/adr/20261103-contact-sheet.accepted.md)
+run it twice and the two files are byte-identical ([the contact-sheet ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/agent/adr/20261103-contact-sheet.accepted.md)
 records how the grid is composited and why).
 
 `data` is a strict `format: "contact-sheet"` object: the Composition id, the absolute `output` path,

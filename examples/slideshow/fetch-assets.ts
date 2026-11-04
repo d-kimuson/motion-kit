@@ -15,7 +15,7 @@ import {
 // The slideshow's placeholder step: eight FFmpeg `gradients`/`noise` stills and a `sine`/`anoisesrc`
 // tone bed into the gitignored `assets.local/`. No network, no engine, no committed bytes — the whole
 // example renders from these files, and CI runs this same function as the smoke test's own setup
-// (docs/design-doc/20261025-reference-examples.md, "Assets and provenance").
+// (dev-docs/design-doc/20261025-reference-examples.md, "Assets and provenance").
 //
 // This is a Node.js process but still an example: it uses Node.js and its own modules only, never a
 // relative path into `src/`, and never Python.

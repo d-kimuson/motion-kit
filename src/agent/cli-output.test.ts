@@ -13,7 +13,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
+import committedSchema from '../../dev-docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import { DiagnosticCodeSchema } from '../index.ts';
 import { createCliOutputJsonSchema } from './cli-output-json-schema.ts';
 

@@ -1,6 +1,6 @@
 name: Release
 
-# `npm version` + `git push --follow-tags` (docs/guidelines/release.md) pushes a signed
+# `npm version` + `git push --follow-tags` (dev-docs/guidelines/release.md) pushes a signed
 # `v<version>` tag; this publishes that version to npm with Trusted Publishing (OIDC), so no
 # npm token is stored in the repository.
 on:
@@ -36,7 +36,7 @@ jobs:
           # piece of state the published bytes could depend on.
           package-manager-cache: false
 
-      # `--ignore-scripts` as in `check.yaml` (docs/guidelines/local-dev.md): a dependency's
+      # `--ignore-scripts` as in `check.yaml` (dev-docs/guidelines/local-dev.md): a dependency's
       # install script must not run inside the job that can mint the publishing identity, and
       # the only permitted build script is the `lefthook install` this job does not need.
       - name: Install dependencies

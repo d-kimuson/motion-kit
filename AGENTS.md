@@ -6,7 +6,7 @@ motion-kit is an agent-first framework for programmatic video: scenes are writte
 
 Stack: TypeScript, React, Zod (schema-first props and CLI input), Three.js + React Three Fiber (optional, `/three` only), Node.js for rendering and the CLI. Tooling: pnpm, oxlint/oxfmt, vitest + fast-check, Lean 4 specs for the time module.
 
-The product vision lives in `docs/tmp/design.md` on the author's machine (gitignored, not in the repository). Decisions taken from it are recorded as ADRs and in `docs/contexts/*/CONTEXT.md`.
+The product vision lives in `dev-docs/tmp/design.md` on the author's machine (gitignored, not in the repository). Decisions taken from it are recorded as ADRs and in `dev-docs/contexts/*/CONTEXT.md`.
 
 ## Directory Structure
 
@@ -29,14 +29,15 @@ The product vision lives in `docs/tmp/design.md` on the author's machine (gitign
 ├── spec/                      # Lean oracle (Oracle.lean) and the differential-test helper (oracle.ts)
 ├── scripts/                   # Repository tooling run by package.json scripts (lean-spec, check-licenses, check-tsconfig-coverage)
 ├── configs/                   # Test setup files
-├── docs/
-│   ├── index.md, guide/       # User documentation, shipped in the npm package: only how to use the package
+├── docs/                      # User documentation, shipped in the npm package: only how to use the package
+│   └── index.md, guide/
+├── dev-docs/                  # Documentation for developing motion-kit (not shipped in the package)
+│   ├── README.md              # Development setup and repository notes
 │   ├── CONTEXT-MAP.md         # Bounded contexts and their dependencies
 │   ├── contexts/<ctx>/        # CONTEXT.md, adr/, design-doc/, knowledge/ per context
 │   ├── decisions/             # Cross-context ADRs
 │   ├── design-doc/            # Cross-context Design Docs
 │   └── guidelines/            # Guidelines referenced from the table below
-├── dev-docs/README.md         # Development setup and repository notes (not shipped in the package)
 ├── .agents/troubleshots/      # Workarounds for tooling problems
 ├── .agents/auto-pilot/        # auto-pilot state, maintenance tasks, and its own workarounds
 ├── lakefile.toml, lean-toolchain  # Lean project (specs under src/core)
@@ -66,22 +67,22 @@ CI (`.github/workflows/check.yaml`) runs `pnpm lint`, `pnpm typecheck`, `lake bu
 References contain important instructions that are intentionally separated for progressive disclosure.
 Always read every reference relevant to the task before making changes.
 
-| When to read                                                                                                  | Reference                                                              |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Deciding how to proceed with a task, or how far to take an implementation task (commit, push, PR, merge)      | `docs/guidelines/delegate.md`                                          |
-| Committing                                                                                                    | `docs/guidelines/commit.md`                                            |
-| Writing documentation                                                                                         | `docs/guidelines/writing/index.md` and the guide for the document type |
-| Checking what a term means, adding or changing a term                                                         | `docs/CONTEXT-MAP.md` and the context's `CONTEXT.md`                   |
-| Changing AGENTS.md, guidelines, skills, or troubleshots                                                       | `docs/guidelines/harness.md`                                           |
-| Writing or changing code                                                                                      | `docs/guidelines/coding/index.md`                                      |
-| Verifying a change by running it (QA Check), deciding what kind of tests to write, reproducing a failing test | `docs/guidelines/quality-assurance/index.md`                           |
-| Writing or changing a Lean spec, writing a differential test                                                  | `docs/guidelines/quality-assurance/lean-spec.md`                       |
-| Adding tools or dependencies                                                                                  | `docs/guidelines/local-dev.md`                                         |
-| Releasing a version to npm, or setting up the trusted publisher                                               | `docs/guidelines/release.md`                                           |
-| Checking, filing, or updating tasks                                                                           | `docs/guidelines/backlog.md`                                           |
-| Asking the user or the team a question, or reporting to them                                                  | `docs/guidelines/team-channel.md`                                      |
-| Leading the progress of the project (when started as auto-pilot)                                              | `docs/guidelines/auto-pilot.md`                                        |
-| A command or tool fails unexpectedly                                                                          | `.agents/troubleshots/`                                                |
+| When to read                                                                                                  | Reference                                                                  |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Deciding how to proceed with a task, or how far to take an implementation task (commit, push, PR, merge)      | `dev-docs/guidelines/delegate.md`                                          |
+| Committing                                                                                                    | `dev-docs/guidelines/commit.md`                                            |
+| Writing documentation                                                                                         | `dev-docs/guidelines/writing/index.md` and the guide for the document type |
+| Checking what a term means, adding or changing a term                                                         | `dev-docs/CONTEXT-MAP.md` and the context's `CONTEXT.md`                   |
+| Changing AGENTS.md, guidelines, skills, or troubleshots                                                       | `dev-docs/guidelines/harness.md`                                           |
+| Writing or changing code                                                                                      | `dev-docs/guidelines/coding/index.md`                                      |
+| Verifying a change by running it (QA Check), deciding what kind of tests to write, reproducing a failing test | `dev-docs/guidelines/quality-assurance/index.md`                           |
+| Writing or changing a Lean spec, writing a differential test                                                  | `dev-docs/guidelines/quality-assurance/lean-spec.md`                       |
+| Adding tools or dependencies                                                                                  | `dev-docs/guidelines/local-dev.md`                                         |
+| Releasing a version to npm, or setting up the trusted publisher                                               | `dev-docs/guidelines/release.md`                                           |
+| Checking, filing, or updating tasks                                                                           | `dev-docs/guidelines/backlog.md`                                           |
+| Asking the user or the team a question, or reporting to them                                                  | `dev-docs/guidelines/team-channel.md`                                      |
+| Leading the progress of the project (when started as auto-pilot)                                              | `dev-docs/guidelines/auto-pilot.md`                                        |
+| A command or tool fails unexpectedly                                                                          | `.agents/troubleshots/`                                                    |
 
 ## Code Review Rules
 

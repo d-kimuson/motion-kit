@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
+import committedSchema from '../../dev-docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
 import { EnvelopeSchema } from '../agent/cli-output.ts';
 
 const require = createRequire(import.meta.url);

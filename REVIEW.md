@@ -1,3 +1,3 @@
 # Review
 
-Review by `docs/guidelines/review/index.md`. Read it in full before reviewing.
+Review by `dev-docs/guidelines/review/index.md`. Read it in full before reviewing.

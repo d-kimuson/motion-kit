@@ -142,8 +142,8 @@ if available, read `gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)`. Software rend
 affect throughput. Adding `--enable-unsafe-swiftshader` to Chromium opts trusted content into lower
 security guarantees and suppresses the warning; it does not select a GPU. This release has no
 GPU-selection option. See the
-[investigation](../contexts/agent/knowledge/20261029-swiftshader-warning.md) and the
-[stderr policy](../contexts/agent/adr/20261103-cli-stderr.accepted.md).
+[investigation](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/agent/knowledge/20261029-swiftshader-warning.md) and the
+[stderr policy](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/agent/adr/20261103-cli-stderr.accepted.md).
 
 ### The render hangs, then reports a timeout
 

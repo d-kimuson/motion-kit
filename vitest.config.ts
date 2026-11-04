@@ -51,7 +51,7 @@ export default defineConfig({
         test: {
           name: 'cli',
           // The reference examples' smoke tests render through the built CLI and assert the MP4
-          // (docs/design-doc/20261025-reference-examples.md, "CI policy").
+          // (dev-docs/design-doc/20261025-reference-examples.md, "CI policy").
           include: ['src/cli/**/*.test.ts', 'examples/**/*.smoke.test.ts'],
           testTimeout: 60_000,
           hookTimeout: 60_000,

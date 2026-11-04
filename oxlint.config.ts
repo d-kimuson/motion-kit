@@ -1,6 +1,6 @@
 import { defineConfig } from 'oxlint';
 
-// Dependency boundaries (docs/CONTEXT-MAP.md): Three.js only in the three context, Node.js only in render and cli.
+// Dependency boundaries (dev-docs/CONTEXT-MAP.md): Three.js only in the three context, Node.js only in render and cli.
 // Composed per directory in `overrides` below, because `no-restricted-imports` replaces the whole option list.
 const THREE_RESTRICTION = {
   paths: [{ name: 'three', message: 'Three.js is used only in src/three (the /three subpath).' }],
@@ -37,7 +37,7 @@ const EXAMPLE_RESTRICTION = {
   patterns: [EXAMPLE_SRC_PATTERN, EXAMPLE_NODE_PATTERN],
 };
 // `fetch-assets.ts` is a Node.js process that is still an example: it may use Node.js, but it does
-// not reach into `src/` either (docs/design-doc/20261025-reference-examples.md carves out Node.js
+// not reach into `src/` either (dev-docs/design-doc/20261025-reference-examples.md carves out Node.js
 // only, not the source boundary).
 const EXAMPLE_NODE_RESTRICTION = {
   paths: [],
@@ -283,7 +283,7 @@ export default defineConfig({
     ],
     'no-restricted-imports': ['error', mergeRestrictions(THREE_RESTRICTION, NODE_RESTRICTION)],
     'import/no-nodejs-modules': 'error', // Node.js built-ins only where no-restricted-imports allows them (overrides below)
-    'import/no-cycle': 'error', // Contexts depend in one direction (docs/CONTEXT-MAP.md); cycles hide ordering bugs
+    'import/no-cycle': 'error', // Contexts depend in one direction (dev-docs/CONTEXT-MAP.md); cycles hide ordering bugs
 
     'typescript/no-explicit-any': 'error', // any 型の使用を禁止
     'typescript/no-non-null-assertion': 'error', // non-null assertion operator の使用を禁止
@@ -420,7 +420,7 @@ export default defineConfig({
       },
     },
     {
-      // Reference examples (docs/design-doc/20261025-reference-examples.md, "How examples/ enters
+      // Reference examples (dev-docs/design-doc/20261025-reference-examples.md, "How examples/ enters
       // the checks"): the default rules plus the consumer boundary above. `mergeRestrictions`, so
       // the Three.js restriction the top-level `rules` apply survives into `examples/**`.
       files: ['examples/**'],

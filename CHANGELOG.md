@@ -35,7 +35,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   Composition stays `composition.props-invalid`. The output path is touched only once the image
   exists, so a refused or cancelled run leaves no directory and no partial image. No Diagnostic code
   is added, so `schemaVersion` stays `1`. The
-  [contact-sheet ADR](docs/contexts/agent/adr/20261103-contact-sheet.accepted.md) records the
+  [contact-sheet ADR](dev-docs/contexts/agent/adr/20261103-contact-sheet.accepted.md) records the
   compositing method and the determinism argument.
 - **`render` reports progress, and the CLI has one stderr policy.** `render` writes
   `rendering <done>/<total> frames (<percent>%) ETA <duration>` to stderr for both routes, the total
@@ -49,7 +49,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   render emits are no longer printed; `--verbose` shows them, and the bin's own Node
   `ExperimentalWarning` is dropped unless `--verbose` is passed. The envelope gains no field and
   `schemaVersion` stays `1`. The
-  [stderr policy ADR](docs/contexts/agent/adr/20261103-cli-stderr.accepted.md) records the levels,
+  [stderr policy ADR](dev-docs/contexts/agent/adr/20261103-cli-stderr.accepted.md) records the levels,
   the progress format and the failure block.
 - **Export the mixed audio alone.** `render` takes an `--out` ending in `.wav` and writes the
   Composition's declared `audio` mixed into 48 kHz stereo 16-bit PCM, without capturing a single
@@ -65,7 +65,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   and the same `range`; a Composition that declares no audio is the new `render.no-audio` (exit 1)
   instead of a silent file, while a range that keeps no clip writes silence with `trackCount: 0`.
   A missing clip stays `asset.load-failed` and a refused target keeps the `encode.*` codes. The
-  [audio export ADR](docs/contexts/render/adr/20261103-audio-only-wav-export.accepted.md) records the
+  [audio export ADR](dev-docs/contexts/render/adr/20261103-audio-only-wav-export.accepted.md) records the
   surface, the format and why a realm is still opened.
 
 - **Render part of a Composition.** `render` takes `--from` and `--to`, each a Global Frame (`3600`),
@@ -78,7 +78,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   plays) and every declared `src` is validated, on ranged and whole renders alike. A bound that cannot
   be read, an empty or inverted range of one notation, and a range outside the Composition are
   `cli.invalid-arguments` (exit 2); the first two are decided before a browser opens. The
-  [render frame range ADR](docs/contexts/agent/adr/20261103-render-frame-range.accepted.md) records
+  [render frame range ADR](dev-docs/contexts/agent/adr/20261103-render-frame-range.accepted.md) records
   the notation, the rounding and how the range combines with `--fps`, `--scale` and `--concurrency`.
 - **Metadata from props.** `defineComposition` accepts `resolveMetadata`, a callback that derives a
   Composition's `durationInFrames` (and optionally `width`, `height` and `fps`) from its validated
@@ -92,7 +92,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   reporting the declaration, and invalid, thrown or timed-out resolutions stay Diagnostics
   (`composition.duration-invalid`, `render.page-error`) with no new code. The
   [authoring guide](docs/guide/authoring.md#metadata-from-props) shows the usage and the
-  [decision](docs/contexts/core/adr/20261103-props-driven-metadata.accepted.md) records the
+  [decision](dev-docs/contexts/core/adr/20261103-props-driven-metadata.accepted.md) records the
   resolution point.
 
 - **`@kimuson/motion-kit/motion`.** The Pure Motion functions are importable from the package for the
@@ -178,7 +178,7 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
   used to render with a console log and no material. Which advanced three behaviour is qualified, and
   which stays excluded (damped controls, physics, temporal feedback, WebGPU, XR, context recovery), is
   recorded in the [three qualification
-  ADR](docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md); the [Three.js
+  ADR](dev-docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md); the [Three.js
   guide](docs/guide/three.md) lists what to use instead of each excluded item.
 
 ### Fixed

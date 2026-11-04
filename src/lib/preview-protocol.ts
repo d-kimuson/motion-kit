@@ -14,7 +14,7 @@ import { type Result } from './result.ts';
 
 /**
  * Messages between a preview host page and the composition realm in its iframe
- * (docs/design-doc/20261101-browser-preview.md). Plain data, validated on both sides.
+ * (dev-docs/design-doc/20261101-browser-preview.md). Plain data, validated on both sides.
  */
 export const previewProtocolVersion = 2;
 

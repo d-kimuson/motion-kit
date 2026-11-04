@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ChartScene } from './chart.tsx';
 import { type ChartProps } from './scale.ts';
 
-// The determinism gate's Composition (docs/design-doc/20261025-reference-examples.md, "CI policy"):
+// The determinism gate's Composition (dev-docs/design-doc/20261025-reference-examples.md, "CI policy"):
 // 480x270 for 30 frames, the same `ChartScene` the full chart renders. A separate registry keeps it
 // out of what a reader renders, and its props schema is empty because `DeterminismComposition.props`
 // is a flat record — a nested `series` cannot travel through the suite, so the dataset is a module

@@ -1,4 +1,4 @@
-// The determinism gate's Composition (docs/design-doc/20261025-reference-examples.md, "CI policy"):
+// The determinism gate's Composition (dev-docs/design-doc/20261025-reference-examples.md, "CI policy"):
 // the same layers and the same storyboard shape at 480x270 for 30 frames, drawn flat.
 //
 // The gate compares PNG bytes with no tolerance, on this machine and on the Linux runner, so the

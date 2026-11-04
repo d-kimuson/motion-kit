@@ -10,7 +10,7 @@
 //
 // It calls `tailwindcss` directly rather than `@tailwindcss/node`: the latter depends on
 // lightningcss, which is MPL-2.0 and, once installed, also resolves as Vite's optional peer in the
-// production closure (docs/contexts/render/adr/20261024-bundled-vite.accepted.md). Without it the
+// production closure (dev-docs/contexts/render/adr/20261024-bundled-vite.accepted.md). Without it the
 // output is left unminified.
 import { Scanner } from '@tailwindcss/oxide';
 import { readFileSync, writeFileSync } from 'node:fs';

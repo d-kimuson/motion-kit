@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The explainer's asset setup, in two steps (docs/design-doc/20261025-reference-examples.md,
+// The explainer's asset setup, in two steps (dev-docs/design-doc/20261025-reference-examples.md,
 // "Assets and provenance"). Everything it writes lands in the gitignored `assets.local/`; nothing
 // under `assets/` is ever touched, and no fetched or synthesized file is committed.
 //
@@ -364,7 +364,7 @@ const fetchPortraits = async (useVoicevox: boolean): Promise<void> => {
 /**
  * Step 1 as one call: the music bed, the whoosh and the silent voice placeholders. It needs Node and
  * FFmpeg and nothing else, so the smoke test runs it as its own setup — CI has no committed media,
- * no VOICEVOX engine and no network (docs/design-doc/20261025-reference-examples.md, "Assets and
+ * no VOICEVOX engine and no network (dev-docs/design-doc/20261025-reference-examples.md, "Assets and
  * provenance").
  */
 export const generatePlaceholders = (report: Report = log): void => {

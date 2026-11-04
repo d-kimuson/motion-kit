@@ -2,7 +2,7 @@
 
 ## Symptom
 
-After a URL field in `src/agent/cli-output.ts` is declared with `z.url()`, every test that compiles `docs/contexts/agent/schema/cli-output.v1.schema.json` with Ajv fails at compile time:
+After a URL field in `src/agent/cli-output.ts` is declared with `z.url()`, every test that compiles `dev-docs/contexts/agent/schema/cli-output.v1.schema.json` with Ajv fails at compile time:
 
 ```
 Error: unknown format "uri" ignored in schema at path "#/..."
@@ -14,4 +14,4 @@ Declare URLs and paths in the CLI envelope as plain `z.string()` (optionally `.m
 
 ## Why Not Fixed
 
-Zod emits `format: "uri"` for `z.url()`. The repository's `Ajv2020` instance does not load `ajv-formats`, so strict mode rejects the unknown format. Fixing it means adding `ajv-formats` (a dependency, `docs/guidelines/local-dev.md`) to every Ajv instance in the tests and to the consumers the published schema is meant for, which the contract does not require. Delete this troubleshot if the formats plugin is adopted.
+Zod emits `format: "uri"` for `z.url()`. The repository's `Ajv2020` instance does not load `ajv-formats`, so strict mode rejects the unknown format. Fixing it means adding `ajv-formats` (a dependency, `dev-docs/guidelines/local-dev.md`) to every Ajv instance in the tests and to the consumers the published schema is meant for, which the contract does not require. Delete this troubleshot if the formats plugin is adopted.

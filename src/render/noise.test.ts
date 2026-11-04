@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { isKnownRendererNoise } from './noise.ts';
 
 // The lines these cases quote were observed on a macOS arm64 render of a ThreeCanvas
-// (docs/contexts/agent/knowledge/20261029-swiftshader-warning.md). A page console message carries
+// (dev-docs/contexts/agent/knowledge/20261029-swiftshader-warning.md). A page console message carries
 // its arguments in front of the text, which is why the SwiftShader line starts with `[]`.
 describe('isKnownRendererNoise', () => {
   it.each([

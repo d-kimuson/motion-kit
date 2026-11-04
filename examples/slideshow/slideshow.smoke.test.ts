@@ -13,7 +13,7 @@ import { layoutFor } from './slides/plan.ts';
 const execFileAsync = promisify(execFile);
 
 // Every command runs from the repository root: the CLI's projectRoot is process.cwd(), and React,
-// ReactDOM and Zod resolve against it (docs/design-doc/20261025-reference-examples.md, "Running an
+// ReactDOM and Zod resolve against it (dev-docs/design-doc/20261025-reference-examples.md, "Running an
 // example"). `pnpm test` builds dist/ first, so the shipped CLI is the thing under test.
 const repositoryRoot = new URL('../../', import.meta.url).pathname;
 const cli = join(repositoryRoot, 'dist', 'cli.js');
@@ -75,7 +75,7 @@ let renderedAt: number | undefined;
 describe('slideshow example', () => {
   // The smoke test is its own setup: CI has no committed media and no network, so the FFmpeg
   // placeholders are generated here, before the render that needs them
-  // (docs/design-doc/20261025-reference-examples.md, "Assets and provenance").
+  // (dev-docs/design-doc/20261025-reference-examples.md, "Assets and provenance").
   beforeAll(async () => {
     mkdirSync(outDirectory, { recursive: true });
     await generatePlaceholders({ report: (message) => console.info(message) });

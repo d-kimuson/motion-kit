@@ -3,10 +3,11 @@
 Four complete videos that fix motion-kit's output quality. Each one stresses a different axis of the
 framework, and each one is a consumer of the published package: an example imports
 `@kimuson/motion-kit` by name and its own modules, never a relative path into `src/`.
-[The reference-examples design doc](../docs/design-doc/20261025-reference-examples.md) owns the
-layout, the CI gates and the acceptance look; each example's own `README.md` owns how to run it.
+[The reference-examples design doc](../dev-docs/design-doc/20261025-reference-examples.md) owns the
+layout, the CI gates and the acceptance look; this page says how to run the gates, and each
+example's own `README.md` how to run the example.
 
-Nothing here is shipped in the npm package (`package.json#files` is `dist` only).
+Nothing here is shipped in the npm package (`examples/` is not in `package.json#files`).
 
 ## The four targets
 
@@ -81,16 +82,35 @@ which `.gitignore` already ignores; `assets.local/` is the only other generated 
 - **`teaser`, `chart` and `slideshow` commit no font.** They draw with the system sans stack, so their
   frames are fixed on one machine rather than across machines: the determinism evidence is
   fixed-environment, as the
-  [Phase 1 determinism record](../docs/contexts/render/knowledge/20261024-phase1-determinism.md)
+  [Phase 1 determinism record](../dev-docs/contexts/render/knowledge/20261024-phase1-determinism.md)
   states. `explainer` is the exception the design doc allows: it commits Noto Sans JP, which is
   OFL-1.1, with `OFL.txt` beside it, and loads it through `useAsset({ kind: 'font' })`.
 - **`explainer` and `slideshow` media are generated locally.** The voices, sprites, photos and music
   never enter the tree: `fetch-assets.ts` writes them into the gitignored `assets.local/`, and CI
   renders flat/generated placeholders (see the
-  [asset licensing ADR](../docs/decisions/20261026-example-asset-licensing.accepted.md)). Both
+  [asset licensing ADR](../dev-docs/decisions/20261026-example-asset-licensing.accepted.md)). Both
   examples' `fetch-assets.ts` run in their own smoke test as its setup, so CI needs no committed
   bytes and no network.
 - **`chart`'s committed datasets are synthetic**, shaped like an index so the example never waits on
   a data-source decision.
 - **Every full-length render is a local QA Check**, not a CI step. CI renders each `-ci` Composition
   and runs each `-probe` Composition through the eight determinism modes.
+
+## Running the gates
+
+```bash
+pnpm test --project cli examples/teaser/teaser.smoke.test.ts
+pnpm test --project frame-transport src/render/determinism/examples.determinism.test.ts
+```
+
+The first runs one example's smoke test (each example has its own `<name>.smoke.test.ts`), the
+second the determinism gate over every `-probe` Composition. Every CI render is silent, because the
+fetched voice and music are local-only.
+
+## Asset records
+
+The examples with media (explainer, slideshow) each commit an `assets.manifest.json` listing every
+file under `assets/` and `assets.local/` with its source and licence. No script reads it; it is reviewed with the example's
+PR. The explainer's VOICEVOX clips and character portraits come from a local engine
+(`VOICEVOX_ENGINE_URL`, default `http://127.0.0.1:50021`), and its README and credit slide carry
+the voice, illustrator, character-project and font credit lines.

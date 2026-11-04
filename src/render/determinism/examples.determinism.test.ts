@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { requiredDeterminismModes } from './compare.ts';
 import { defineDeterminismSuite, runDeterminismSuite } from './suite.ts';
 
-// One row per reference example (docs/design-doc/20261025-reference-examples.md, "CI policy").
+// One row per reference example (dev-docs/design-doc/20261025-reference-examples.md, "CI policy").
 // The probe registry is reached as a module path string, and the suite imports it inside its own
 // temporary project: an example never imports the suite, and package.json#exports gains no subpath.
 // Each row renders the example's `<name>-probe` Composition (480x270, 30 frames) at exact PNG bytes.

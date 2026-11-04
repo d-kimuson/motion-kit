@@ -12,7 +12,7 @@
 //
 // The font is loaded once here, in a local `Suspense` inside the tree, because a throw that reaches
 // the root Suspense keeps the Composition's own content acknowledgement from happening and the
-// readiness barrier waits until its deadline (docs/design-doc/20261025-reference-examples.md). The
+// readiness barrier waits until its deadline (dev-docs/design-doc/20261025-reference-examples.md). The
 // variable face is registered once per weight the video sets, because the loader's readiness check
 // asks for one weight at a time.
 import { useAsset, useTimeline } from '@kimuson/motion-kit';

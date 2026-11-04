@@ -1,7 +1,7 @@
 // The slideshow's data, timing and look as plain values and arithmetic. `/motion` publishes the
 // values, but `/theme` is still Phase 2 and this example's numbers are its acceptance look, so the
 // Ken Burns move is computed from `useSequence()`'s seconds here; nothing in this file touches React
-// (docs/design-doc/20261025-reference-examples.md, "slideshow").
+// (dev-docs/design-doc/20261025-reference-examples.md, "slideshow").
 
 export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
