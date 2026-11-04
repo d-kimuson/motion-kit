@@ -30,10 +30,10 @@ the API, the flags or the meaning of a Diagnostic code.
 ```bash
 npx @kimuson/motion-kit docs                    # the index: overview, quickstart, guide map
 npx @kimuson/motion-kit docs --list             # the topic ids, one per line with a summary
-npx @kimuson/motion-kit docs <topic>            # one guide, e.g. getting-started, cli, authoring
+npx @kimuson/motion-kit docs <topic>            # one guide by its id from --list
 npx @kimuson/motion-kit docs <topic> --json     # the same markdown in data.content
 ```
 
-Start with `getting-started` for a new project, `authoring` for the Composition API, `cli` for
-commands and the `--json` envelope, and `troubleshooting` for a Diagnostic code. With the package
-installed, the same files are under `node_modules/@kimuson/motion-kit/docs/`.
+Start with `docs getting-started` for a new project, `docs authoring` for the Composition API,
+`docs cli` for commands and the `--json` envelope, and `docs troubleshooting` for a Diagnostic
+code. With the package installed, the same files are under `node_modules/@kimuson/motion-kit/docs/`.
