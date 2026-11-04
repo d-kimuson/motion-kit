@@ -123,7 +123,13 @@ const crashed = (error: unknown) => {
 // covers (SIGKILL, a fatal signal, a killed test worker) has its end closed by the OS. Vite's
 // watcher, its HTTP server and esbuild keep the event loop alive, and this service is its own
 // process group, so nothing else ends it: an unreachable service leaves instead of lingering.
-process.on('disconnect', () => process.exit(0));
+// Pipe writes are asynchronous on macOS, so the log a failure just printed (a stack, Vite's
+// output) is flushed first; the timer bounds that wait when nobody reads the pipes any more.
+process.on('disconnect', () => {
+  const leave = () => process.exit(0);
+  setTimeout(leave, 1000);
+  process.stdout.write('', () => process.stderr.write('', leave));
+});
 process.on('uncaughtException', crashed);
 process.on('unhandledRejection', crashed);
 try {
