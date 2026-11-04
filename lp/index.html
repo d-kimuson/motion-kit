@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>motion-kit — an agent-first framework for programmatic video</title>
+    <meta
+      name="description"
+      content="Your coding agent writes the scenes in React/TSX, looks at its own frames, and renders the MP4. Every video on this page was made with motion-kit."
+    />
+    <link rel="icon" href="mark.svg" type="image/svg+xml" />
+    <!--
+      A static page with no build: scripts/build-site.ts copies it into _site/ next to the videos it
+      renders from examples/, and .github/workflows/pages.yml publishes that. The colours are the
+      promo video's (examples/promo/look.ts).
+    -->
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #090b14;
+        --ink-raised: #10131f;
+        --chalk: #eef1fa;
+        --chalk-soft: #a9b0c6;
+        --chalk-faint: #6c7390;
+        --rule: rgba(238, 241, 250, 0.09);
+        --violet: #8b6cff;
+        --cyan: #2fe3d0;
+        --sans: 'Inter', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--ink);
+        color: var(--chalk);
+        font: 16px/1.6 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: inherit;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.9em;
+      }
+      .wrap {
+        width: min(1120px, 100% - 48px);
+        margin-inline: auto;
+      }
+      .hyphen {
+        color: var(--cyan);
+      }
+
+      /* Navigation */
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: color-mix(in srgb, var(--ink) 80%, transparent);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--rule);
+      }
+      nav .wrap {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        height: 60px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: -0.02em;
+        text-decoration: none;
+      }
+      .brand img {
+        width: 28px;
+        height: 28px;
+      }
+      nav .links {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+        font-size: 14px;
+      }
+      nav .links a {
+        color: var(--chalk-soft);
+        text-decoration: none;
+      }
+      nav .links a:hover {
+        color: var(--chalk);
+      }
+
+      /* Hero */
+      .hero {
+        position: relative;
+        padding: 96px 0 72px;
+        text-align: center;
+        overflow: hidden;
+      }
+      .hero::before {
+        content: '';
+        position: absolute;
+        inset: -40% -10% auto;
+        height: 120%;
+        background:
+          radial-gradient(40% 50% at 30% 40%, rgba(139, 108, 255, 0.22), transparent 70%),
+          radial-gradient(35% 45% at 72% 55%, rgba(47, 227, 208, 0.14), transparent 70%);
+        pointer-events: none;
+      }
+      .hero > * {
+        position: relative;
+      }
+      .hero .mark {
+        width: 88px;
+        height: 88px;
+        filter: drop-shadow(0 12px 40px rgba(139, 108, 255, 0.45));
+      }
+      h1 {
+        margin: 28px 0 0;
+        font-size: clamp(40px, 7vw, 76px);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+      .gradient {
+        background: linear-gradient(90deg, var(--violet), var(--cyan));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .lead {
+        max-width: 640px;
+        margin: 20px auto 0;
+        color: var(--chalk-soft);
+        font-size: 19px;
+      }
+      .install {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 36px;
+        padding: 12px 12px 12px 20px;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: var(--ink-raised);
+        font-family: var(--mono);
+        font-size: 15px;
+      }
+      .install .prompt {
+        color: var(--chalk-faint);
+        user-select: none;
+      }
+      .install button {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--chalk-soft);
+        font: 13px var(--sans);
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .install button:hover {
+        color: var(--chalk);
+        border-color: var(--chalk-faint);
+      }
+      .ctas {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        border: 1px solid var(--rule);
+      }
+      .button.primary {
+        background: linear-gradient(90deg, var(--violet), var(--cyan));
+        color: var(--ink);
+        border: 0;
+      }
+      .button svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+
+      /* Sections */
+      section {
+        padding: 72px 0;
+        border-top: 1px solid var(--rule);
+      }
+      h2 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 40px);
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+      }
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--cyan);
+        font: 600 13px var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .section-lead {
+        max-width: 680px;
+        margin: 16px 0 40px;
+        color: var(--chalk-soft);
+      }
+
+      /* Showcase */
+      .featured,
+      .card {
+        border: 1px solid var(--rule);
+        border-radius: 16px;
+        background: var(--ink-raised);
+        overflow: hidden;
+      }
+      video {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #000;
+      }
+      .featured video {
+        aspect-ratio: 16 / 9;
+      }
+      .caption {
+        padding: 18px 22px 22px;
+      }
+      .caption h3 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: -0.01em;
+      }
+      .caption .meta {
+        margin-left: 8px;
+        color: var(--chalk-faint);
+        font: 13px var(--mono);
+        font-weight: 400;
+      }
+      .caption p {
+        margin: 6px 0 0;
+        color: var(--chalk-soft);
+        font-size: 15px;
+      }
+      .caption a.source {
+        display: inline-block;
+        margin-top: 10px;
+        color: var(--cyan);
+        font-size: 14px;
+        text-decoration: none;
+      }
+      .caption a.source:hover {
+        text-decoration: underline;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+      .card.vertical {
+        grid-row: span 2;
+      }
+      .card video {
+        aspect-ratio: 16 / 9;
+      }
+      .card.vertical video {
+        aspect-ratio: auto;
+        max-height: 640px;
+        object-fit: contain;
+      }
+
+      /* Steps */
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        counter-reset: step;
+      }
+      .step {
+        padding: 24px;
+        border: 1px solid var(--rule);
+        border-radius: 16px;
+        background: var(--ink-raised);
+        counter-increment: step;
+      }
+      .step::before {
+        content: counter(step);
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: linear-gradient(135deg, var(--violet), var(--cyan));
+        color: var(--ink);
+        font-weight: 700;
+      }
+      .step h3 {
+        margin: 16px 0 6px;
+        font-size: 17px;
+      }
+      .step p {
+        margin: 0;
+        color: var(--chalk-soft);
+        font-size: 15px;
+      }
+      .step code {
+        color: var(--chalk);
+      }
+      pre {
+        margin: 0;
+        padding: 20px 22px;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: var(--ink-raised);
+        overflow-x: auto;
+        font: 14px/1.7 var(--mono);
+        color: var(--chalk-soft);
+      }
+      pre .c {
+        color: var(--chalk-faint);
+      }
+      .prompt-block {
+        margin-top: 20px;
+      }
+
+      /* Narrow screens: the section links give way to the external ones, and commands scroll. */
+      .brand,
+      .install code {
+        white-space: nowrap;
+      }
+      @media (max-width: 640px) {
+        nav .links a[href^='#'] {
+          display: none;
+        }
+        .install {
+          max-width: 100%;
+        }
+        .install code {
+          overflow-x: auto;
+        }
+      }
+      footer {
+        padding: 40px 0 56px;
+        border-top: 1px solid var(--rule);
+        color: var(--chalk-faint);
+        font-size: 14px;
+      }
+      footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px 24px;
+        align-items: center;
+      }
+      footer .links {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+      }
+      footer a {
+        color: var(--chalk-soft);
+        text-decoration: none;
+      }
+      footer a:hover {
+        color: var(--chalk);
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <a class="brand" href="#">
+          <img src="mark.svg" alt="" />
+          <span>motion<span class="hyphen">-</span>kit</span>
+        </a>
+        <div class="links">
+          <a href="#examples">Examples</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="https://github.com/d-kimuson/motion-kit/blob/main/docs/index.md">Docs</a>
+          <a href="https://github.com/d-kimuson/motion-kit">GitHub</a>
+          <a href="https://www.npmjs.com/package/@kimuson/motion-kit">npm</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="wrap">
+        <img class="mark" src="mark.svg" alt="" />
+        <h1>Ask your agent for a video.<br /><span class="gradient">Get the MP4.</span></h1>
+        <p class="lead">
+          motion-kit is an agent-first framework for programmatic video. Your coding agent writes
+          the scenes in React/TSX, looks at its own frames, and renders the MP4. Every video on this
+          page was made with it.
+        </p>
+        <div class="install">
+          <span class="prompt">$</span>
+          <code id="install-command">npx skills add d-kimuson/motion-kit</code>
+          <button type="button" data-copy="install-command">Copy</button>
+        </div>
+        <div class="ctas">
+          <a class="button primary" href="#examples">Watch the examples</a>
+          <a class="button" href="https://github.com/d-kimuson/motion-kit">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+              />
+            </svg>
+            GitHub
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="examples">
+        <div class="wrap">
+          <p class="eyebrow">Examples</p>
+          <h2>Rendered by motion-kit, from the code in the repository</h2>
+          <p class="section-lead">
+            Each video is rendered from <code>examples/</code> on every push to <code>main</code>,
+            so what you see is what the current code produces. Open the source to see the React
+            behind it.
+          </p>
+
+          <article class="featured">
+            <video controls preload="none" playsinline poster="videos/promo.jpg">
+              <source src="videos/promo.mp4" type="video/mp4" />
+            </video>
+            <div class="caption">
+              <h3>promo <span class="meta">46 s · 1920×1080</span></h3>
+              <p>
+                motion-kit introducing itself: a scene written as a React component, a Three.js
+                scene on the same clock, the render pipeline, the CLI an agent reads and the preview
+                review loop.
+              </p>
+              <a
+                class="source"
+                href="https://github.com/d-kimuson/motion-kit/tree/main/examples/promo"
+                >examples/promo →</a
+              >
+            </div>
+          </article>
+
+          <div class="grid">
+            <article class="card">
+              <video controls preload="none" playsinline poster="videos/teaser.jpg">
+                <source src="videos/teaser.mp4" type="video/mp4" />
+              </video>
+              <div class="caption">
+                <h3>teaser <span class="meta">24 s · 1920×1080</span></h3>
+                <p>
+                  Eight words, one at a time, each snapping in on a spring. Dense motion where every
+                  frame is still the same file however the frames are traversed.
+                </p>
+                <a
+                  class="source"
+                  href="https://github.com/d-kimuson/motion-kit/tree/main/examples/teaser"
+                  >examples/teaser →</a
+                >
+              </div>
+            </article>
+            <article class="card vertical">
+              <video controls preload="none" playsinline poster="videos/slideshow.jpg">
+                <source src="videos/slideshow.mp4" type="video/mp4" />
+              </video>
+              <div class="caption">
+                <h3>slideshow <span class="meta">30 s · 1080×1920</span></h3>
+                <p>
+                  A vertical slideshow: full-bleed photos with a Ken Burns move, captions,
+                  crossfades and a music bed. The same components also render at 16:9.
+                </p>
+                <a
+                  class="source"
+                  href="https://github.com/d-kimuson/motion-kit/tree/main/examples/slideshow"
+                  >examples/slideshow →</a
+                >
+              </div>
+            </article>
+            <article class="card">
+              <video controls preload="none" playsinline poster="videos/chart.jpg">
+                <source src="videos/chart.mp4" type="video/mp4" />
+              </video>
+              <div class="caption">
+                <h3>chart <span class="meta">20 s · 1920×1080</span></h3>
+                <p>
+                  An index chart that draws itself on and counts its final value up. The data is a
+                  validated prop, so another JSON file renders another chart with no layout change.
+                </p>
+                <a
+                  class="source"
+                  href="https://github.com/d-kimuson/motion-kit/tree/main/examples/chart"
+                  >examples/chart →</a
+                >
+              </div>
+            </article>
+            <article class="card">
+              <video controls preload="none" playsinline poster="videos/explainer.jpg">
+                <source src="videos/explainer.mp4" type="video/mp4" />
+              </video>
+              <div class="caption">
+                <h3>explainer <span class="meta">3 min 42 s · 1920×1080</span></h3>
+                <p>
+                  What an index fund is, in 19 lines over 10 slides with subtitles and transitions.
+                  The voice here is a silent placeholder; the example also wires in a VOICEVOX
+                  narration.
+                </p>
+                <a
+                  class="source"
+                  href="https://github.com/d-kimuson/motion-kit/tree/main/examples/explainer"
+                  >examples/explainer →</a
+                >
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works">
+        <div class="wrap">
+          <p class="eyebrow">How it works</p>
+          <h2>Built for the agent's loop: write, look, fix, render</h2>
+          <p class="section-lead">
+            Every frame is a pure function of time, every command answers in JSON, and every failure
+            is a Diagnostic with a stable code and a hint, so the agent can check its own work.
+          </p>
+          <div class="steps">
+            <div class="step">
+              <h3>The agent writes React</h3>
+              <p>
+                A video is a Composition: a React component plus its size, frame rate and duration,
+                on a deterministic timeline.
+              </p>
+            </div>
+            <div class="step">
+              <h3>It checks its own frames</h3>
+              <p>
+                <code>contact-sheet</code> samples the timeline into one labelled PNG, so the agent
+                sees the whole flow in a single image.
+              </p>
+            </div>
+            <div class="step">
+              <h3>You review in the preview</h3>
+              <p>
+                <code>preview</code> plays it in the browser. Comment on an element and hand the
+                comments back as Markdown.
+              </p>
+            </div>
+            <div class="step">
+              <h3>It renders the MP4</h3>
+              <p>
+                <code>render</code> captures the frames in Chromium and encodes them with FFmpeg,
+                the same pixels every time.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="get-started">
+        <div class="wrap">
+          <p class="eyebrow">Get started</p>
+          <h2>Add the skill, then ask for a video</h2>
+          <p class="section-lead">
+            The <code>motion-kit</code> skill tells your coding agent how to set up a project, run
+            the CLI and read the guides that ship with the package.
+          </p>
+          <pre><span class="c"># any agent that reads skills</span>
+npx skills add d-kimuson/motion-kit
+
+<span class="c"># or as a Claude Code plugin</span>
+/plugin marketplace add d-kimuson/motion-kit
+/plugin install motion-kit@motion-kit</pre>
+          <pre
+            class="prompt-block"
+          ><span class="c"># or try it without the skill: point the agent at it in your prompt</span>
+Make a 15-second launch video for my CLI tool with motion-kit.
+Reference: https://raw.githubusercontent.com/d-kimuson/motion-kit/main/skills/motion-kit/SKILL.md</pre>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <a class="brand" href="#">
+          <img src="mark.svg" alt="" />
+          <span>motion<span class="hyphen">-</span>kit</span>
+        </a>
+        <span>MIT License</span>
+        <div class="links">
+          <a href="https://github.com/d-kimuson/motion-kit/blob/main/docs/index.md">Docs</a>
+          <a href="https://github.com/d-kimuson/motion-kit/blob/main/CHANGELOG.md">Changelog</a>
+          <a href="https://github.com/d-kimuson/motion-kit">GitHub</a>
+          <a href="https://www.npmjs.com/package/@kimuson/motion-kit">npm</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      for (const button of document.querySelectorAll('[data-copy]')) {
+        button.addEventListener('click', async () => {
+          const text = document.getElementById(button.dataset.copy).textContent;
+          await navigator.clipboard.writeText(text);
+          button.textContent = 'Copied';
+          setTimeout(() => (button.textContent = 'Copy'), 1500);
+        });
+      }
+    </script>
+  </body>
+</html>

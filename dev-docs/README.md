@@ -21,3 +21,19 @@ version from `lean-toolchain`, via elan.
 
 The Phase 0 browser experiments stay separate from the framework, each with its own README and
 `pnpm spike:*` script under `spikes/<name>/`.
+
+## Landing page
+
+`lp/index.html` is the GitHub Pages site, a static page with no build. `.github/workflows/pages.yml`
+runs `node scripts/build-site.ts` on every push to `main`: it copies `lp/` into `_site/` and renders
+each example into `_site/videos/` with a poster frame, so the videos always match the code and are
+never committed. To look at the page locally, after `pnpm build`:
+
+```bash
+node scripts/build-site.ts teaser chart   # only the named examples; no argument renders all five
+npx serve _site                           # or any static server
+```
+
+The brand assets are under `.github/assets/`: `mark.svg` (the same document as `src/lib/brand.ts`,
+which the preview page uses), and the wordmark as `logo.svg` for light backgrounds and `logo-dark.svg`
+for dark ones.

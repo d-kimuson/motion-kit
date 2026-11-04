@@ -1,3 +1,4 @@
+import { markDataUrl } from '../../lib/brand.ts';
 import {
   previewConfigElementId,
   previewFailureReporter,
@@ -15,4 +16,4 @@ export const htmlShell = (preview = false): string =>
 /** The preview host page; its configuration is inline JSON, `<` escaped so it cannot end the tag.
  * `dark` turns on the dark variants of its components (src/preview/styles.css). */
 export const previewShell = (config: PreviewHostConfig): string =>
-  `<!doctype html><html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>motion-kit preview</title></head><body><div id="motion-kit-preview"></div><script type="application/json" id="${previewConfigElementId}">${JSON.stringify(config).replaceAll('<', '\\u003c')}</script><script type="module" src="/@id/${previewEntryId}"></script></body></html>`;
+  `<!doctype html><html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>motion-kit preview</title><link rel="icon" href="${markDataUrl}"></head><body><div id="motion-kit-preview"></div><script type="application/json" id="${previewConfigElementId}">${JSON.stringify(config).replaceAll('<', '\\u003c')}</script><script type="module" src="/@id/${previewEntryId}"></script></body></html>`;

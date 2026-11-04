@@ -6,6 +6,7 @@ import { CommentLayer } from './comment-layer.tsx';
 import { type Review } from './comments-panel.tsx';
 import { type PreviewController, type PreviewState } from './controller.ts';
 import { type ElementBox } from './elements-panel.tsx';
+import { Header } from './header.tsx';
 import { type LocaleSetting } from './locale.ts';
 import { messages, MessagesContext, useMessages } from './messages.ts';
 import { SidePanel } from './side-panel.tsx';
@@ -188,9 +189,11 @@ export const PreviewView = ({
           panel wider or narrower; the bottom panel spans the page, under a handle that drags it
           taller or shorter. */}
         {/* The panel group sizes itself to its parent, so the page's height is set around it. */}
-        <div className="isolate h-screen overflow-hidden">
+        <div className="isolate flex h-screen flex-col overflow-hidden">
+          <Header compositionId={descriptor?.id} />
           <ResizablePanelGroup
             orientation="vertical"
+            className="min-h-0 flex-1"
             defaultLayout={rows.defaultLayout}
             onLayoutChanged={rows.onLayoutChanged}
           >

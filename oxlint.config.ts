@@ -412,6 +412,7 @@ export default defineConfig({
         // src/render/render-video.test.ts), so list the file here instead.
         'src/motion/spring-determinism.test.ts',
         'src/motion/built-artifact.test.ts',
+        'src/lib/brand.test.ts',
       ],
       rules: {
         'no-restricted-imports': ['error', THREE_RESTRICTION],
