@@ -1,9 +1,9 @@
 # Examples
 
-Four complete videos live under `examples/`. Each one is a consumer of the published package — it
-imports `@kimuson/motion-kit` by name and never a relative path into `src/` — and each one fixes the
-output quality bar for one axis of the framework. They are the best answer to "what does a real
-Composition look like?".
+Five complete videos live under `examples/`: four reference videos, each fixing the output quality bar
+for one axis of the framework, and the `promo` showcase. Every one is a consumer of the published
+package — it imports `@kimuson/motion-kit` by name and never a relative path into `src/`. They are
+the best answer to "what does a real Composition look like?".
 
 The examples ship in the repository, not in the npm package, which contains `dist/` and the
 documentation you are reading. Every command below therefore runs from a checkout:
@@ -18,7 +18,7 @@ mkdir -p out                                 # gitignored, so a clean checkout h
 An `.mp4` target also needs FFmpeg 6.0+ with `libx264` on `PATH`, and `ffprobe` for a Composition that
 declares audio.
 
-## The four videos
+## The four reference videos
 
 | Composition           | Resolution | fps | Frames | Axis                                                                         |
 | --------------------- | ---------- | --- | ------ | ---------------------------------------------------------------------------- |

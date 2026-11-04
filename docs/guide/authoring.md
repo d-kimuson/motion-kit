@@ -426,4 +426,4 @@ bootstrap's own API: an entry never renders `Composition` itself.
 - [CLI](cli.md) — how `--props`, `--composition` and `--out` reach the registry.
 - [Determinism](determinism.md) — the rules that keep `useFrame()`-derived output reproducible.
 - [Three.js](three.md) — the 3D canvas, its absolute camera, and software WebGL.
-- [Examples](examples.md) — the same APIs in four complete videos.
+- [Examples](examples.md) — the same APIs in five complete videos.

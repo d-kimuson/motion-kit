@@ -259,7 +259,7 @@ The CLI's project root is the directory you run it in (`process.cwd()`):
 - [Authoring](authoring.md) — Composition, Sequence, TransitionSeries, hooks, `useAsset`, audio.
 - [Determinism](determinism.md) — what "every frame is a pure function of time" guarantees, and
   what it does not.
-- [Examples](examples.md) — four complete videos in the repository, with the commands that render
+- [Examples](examples.md) — five complete videos in the repository, with the commands that render
   them.
 - [Troubleshooting](troubleshooting.md) — FFmpeg, Chromium, assets and the diagnostics each failure
   reports.
