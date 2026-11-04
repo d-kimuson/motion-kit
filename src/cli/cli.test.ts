@@ -20,6 +20,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import committedSchema from '../../docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
+import packageJson from '../../package.json' with { type: 'json' };
 import { EnvelopeSchema, DocsTopicSchema, type Envelope } from '../agent/cli-output.ts';
 import { currentDate } from '../lib/clock.ts';
 import { runCli } from './cli.ts';
@@ -1109,7 +1110,7 @@ describe('motion-kit CLI', () => {
   it('lists docs in the leading help and exits 0 for docs --help', async () => {
     const leading = await run(['--help'], undefined, { envelope: false });
     expect(leading.code).toBe(0);
-    expect(leading.stdout).toContain('docs [topic]');
+    expect(leading.stdout).toContain('docs [options] [topic]');
     expect(leading.stdout).toContain('npx @kimuson/motion-kit docs getting-started');
     expect(leading.stdout).toContain('npx @kimuson/motion-kit docs` to print the guide');
 
@@ -3213,6 +3214,24 @@ export const compositions = defineCompositions([
       expect(result.stderr).toContain('Usage: npx @kimuson/motion-kit <command> [args]');
     },
   );
+
+  // The version and the description are package.json's, through the top-level commander program:
+  // a leading `--version`/`-V` is a request for documentation like `--help`, so it prints on stdout,
+  // exits 0 and emits no envelope, with or without `--json`.
+  it.each([{ argv: ['--version'] }, { argv: ['-V'] }, { argv: ['--version', '--json'] }])(
+    'prints the package version and exits 0 for $argv',
+    async ({ argv }) => {
+      const result = await run(argv, undefined, { envelope: false });
+      expect(result.code).toBe(0);
+      expect(result.stdout).toBe(`${packageJson.version}\n`);
+    },
+  );
+
+  it('describes the package in the leading help', async () => {
+    const leading = await run(['--help'], undefined, { envelope: false });
+    expect(leading.stdout).toContain(packageJson.description);
+    expect(leading.stdout).toContain('-V, --version');
+  });
 
   // The help is read by someone who may not have the package installed, so every usage line names
   // the invocation that works either way: `npx` runs the package's one bin, installed or not.

@@ -41,7 +41,7 @@ import {
   type PreviewArgs,
   type RenderArgs,
 } from './args.ts';
-import { cliInvocation, commands } from './commands.ts';
+import { cliInvocation, commands, program } from './commands.ts';
 import { resolveRendererConfig, type RendererConfig } from './config.ts';
 import { docsTopics, docsTopicsHint, isDocsTopic, readDocsFile } from './docs.ts';
 import { resolveCommand } from './invocation.ts';
@@ -90,6 +90,7 @@ type ParseOutcome =
   | { readonly kind: 'no-command'; readonly command: EnvelopeCommand | null }
   | { readonly kind: 'help' }
   | { readonly kind: 'usage' }
+  | { readonly kind: 'version' }
   | {
       readonly kind: 'invalid';
       readonly command: CommandName;
@@ -134,6 +135,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
 const parseRaw = (argv: readonly string[]): ParseOutcome => {
   const name = argv[0];
   if (name === 'help' || name === '--help' || name === '-h') return { kind: 'usage' };
+  if (name === '--version' || name === '-V') return { kind: 'version' };
   // Only an implemented subcommand in the leading position can be parsed: the CLI has no global
   // flags, so a name anywhere else, a reserved name and an unknown one all fail here with the
   // command argv named — the first positional argument, past any flag and its value — and the
@@ -1272,29 +1274,6 @@ const runDecided = async (
   }
 };
 
-const usageText = `${[
-  `Usage: ${cliInvocation} <command> [args]`,
-  '',
-  'Commands:',
-  '  check          sample frames for determinism (requires --frame <n>)',
-  '  contact-sheet  one PNG grid of representative frames (--every <n> or --frame <n>)',
-  '  docs [topic]   print a shipped guide; --list names the topics',
-  '  frame          capture one or more frames to PNG',
-  "  preview        serve a browser preview with playback, scrubbing and the clips' audio",
-  '  render         render a Composition to an MP4 (--out file.mp4), PNG frames (--out dir) or',
-  '                 the mixed audio alone (--out audio.wav), with --concurrency <n> renderers',
-  '                 capturing at once (default: half the cores)',
-  '',
-  'Examples:',
-  `  ${cliInvocation} render entry.tsx --out out.mp4`,
-  `  ${cliInvocation} contact-sheet entry.tsx --every 150 --out sheet.png --json`,
-  `  ${cliInvocation} check entry.tsx --frame 1,4 --history pool --json`,
-  `  ${cliInvocation} preview entry.tsx --composition intro`,
-  `  ${cliInvocation} docs getting-started`,
-  '',
-  `Run \`${cliInvocation} docs\` to print the guide, or \`${cliInvocation} <command> --help\` for command options.`,
-].join('\n')}\n`;
-
 export const runCli = async (
   argv: readonly string[],
   options: RunCliOptions = {},
@@ -1306,13 +1285,17 @@ export const runCli = async (
 
   if (parsed.kind === 'help') return 0;
   if (parsed.kind === 'usage') {
-    process.stdout.write(usageText);
+    program.outputHelp();
+    return 0;
+  }
+  if (parsed.kind === 'version') {
+    process.stdout.write(`${program.version() ?? ''}\n`);
     return 0;
   }
   if (parsed.kind === 'no-command') {
     // Without `--json` the human route is unchanged: a usage line on stderr and nothing on stdout.
     if (!argv.includes('--json')) {
-      process.stderr.write(usageText);
+      program.outputHelp({ error: true });
       return 2;
     }
     // With it, the caller still gets the one document it was promised, naming `command: null` when
