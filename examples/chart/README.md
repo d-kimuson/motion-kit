@@ -98,14 +98,13 @@ node dist/cli.js render examples/chart/entry.tsx --composition chart \
 the extension, and under `--json` the envelope carries `width`, `height`, `fps`, `frameCount` and
 `durationSeconds`, which is how the smoke test asserts its own output.
 
-**A still is a frames render, not `frame`.** `series` has no schema default, so the Composition always
-needs `--props`, and `frame` has no `--props` flag (`src/cli/commands.ts`). Render PNG frames instead
-and take the one you want:
+**A still is `frame` with `--props`.** `series` has no schema default, so the Composition always
+needs `--props`, and `frame` takes it exactly as `render` does. Frame 599 is the held final frame:
 
 ```bash
-node dist/cli.js render examples/chart/entry.tsx --composition chart \
-  --props "$(cat examples/chart/data/index-30y.json)" --out out/chart-frames --json
-# out/chart-frames/frame-00599.png is the held final frame; every frame and manifest.json are there
+node dist/cli.js frame examples/chart/entry.tsx --composition chart \
+  --props "$(cat examples/chart/data/index-30y.json)" --frame 599 --out out/chart-30y-599.png --json
+# out/chart-30y-599.png is 1920x1080; swap in index-20y.json for the second dataset
 
 # A contact sheet: one frame every 50, tiled 4x3
 ffmpeg -y -i out/chart-30y.mp4 -vf "select='not(mod(n\,50))',scale=480:-1,tile=4x3" \
@@ -190,8 +189,6 @@ file under `data/` and no code change.
   Composition ids and the acceptance look do not change.
 - **No `Intl`.** `formatNumber` groups thousands by hand: ICU data differs between a developer machine
   and the CI runner, and the gate compares PNG bytes.
-- **`frame` cannot render this example.** A still is a frames render (above); `--props` on `frame` is a
-  CLI follow-up, not this example's.
 
 ## Assets and credit
 

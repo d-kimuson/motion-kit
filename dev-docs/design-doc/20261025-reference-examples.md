@@ -119,7 +119,7 @@ Available today:
 | `@kimuson/motion-kit/agent`                  | the CLI output envelope schemas                                                                                                                                                                                                                      |
 | `@kimuson/motion-kit/motion`                 | `interpolate`, `keyframes`, `easing`, `spring`, `springState`, `springSettleTime`, `retarget` and their types; values only, no component (_Amended 2026-11-02 (TASK-238)_)                                                                           |
 | `@kimuson/motion-kit/three`                  | `ThreeCanvas`, `CameraRig` and their types, with `three` and `@react-three/fiber` as optional peers; a Three.js reference example itself stays deferred to Phase 3 (_Amended 2026-11-03 (PR #95):_ the promo showcase uses both)                     |
-| CLI                                          | `motion-kit render <entry> [--composition <id>] --out <file.mp4 \| dir> [--props <json>] [--json]` and `motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png \| dir> [--json]`                                                |
+| CLI                                          | `motion-kit render <entry> [--composition <id>] --out <file.mp4 \| dir> [--props <json>] [--json]` and `motion-kit frame <entry> [--composition <id>] --frame <n[,n...]> --out <png \| dir> [--props <json>] [--json]`                               |
 
 Not available yet, so no example may use them:
 
@@ -150,8 +150,12 @@ mkdir -p out                                 # gitignored, so a clean checkout h
 # Full render (needs FFmpeg 6.0+ with libx264 on PATH for the .mp4 route)
 node dist/cli.js render examples/teaser/entry.tsx --composition teaser --out out/teaser.mp4 --json
 
-# A still frame for visual review (teaser has no required props; see the chart note below)
+# A still frame for visual review
 node dist/cli.js frame examples/teaser/entry.tsx --composition teaser --frame 42 --out out/teaser-42.png
+
+# A still of an example with required props (the chart's series is passed like `render` does)
+node dist/cli.js frame examples/chart/entry.tsx --composition chart \
+  --props "$(cat examples/chart/data/index-30y.json)" --frame 599 --out out/chart-599.png
 
 # Same Composition, different data (the chart axis)
 node dist/cli.js render examples/chart/entry.tsx --composition chart \
@@ -166,7 +170,7 @@ node dist/cli.js render examples/explainer/entry.tsx --composition explainer \
 - `motion-kit` is the same bin (`bin.motion-kit` → `dist/cli.js`); a reader with an installed package writes `motion-kit render …`. Under `--json` the envelope carries `data.format`, `width`, `height`, `fps`, `frameCount` and `durationSeconds`, which is how an example's smoke test asserts its own output.
 - `--out` picks the format from the extension: `.mp4` encodes H.264, anything else writes PNG frames plus `manifest.json`. There is no `--format` flag.
 - `render` and `frame` create the directories their output paths need; the block's `mkdir -p out` only makes the gitignored directory visible in a fresh checkout.
-- `frame` has no `--props` (only `render` declares one, `src/cli/commands.ts`). An example whose schema has a required prop therefore has no still route: `chart`'s `series` has no default, so its still is a frames render (`render … --out out/chart-frames`, which writes every frame plus `manifest.json`) rather than `frame`. A `--props` on `frame` is a CLI follow-up, not this document's.
+- `frame` accepts `--props` like `render` (`src/cli/commands.ts`), so an example whose schema has a required prop still has a still route: `chart`'s `series` has no default, so its still is `frame … --props "$(cat examples/chart/data/index-30y.json)" --frame 599` (_Amended 2026-11-09 (TASK-285):_ the document said `frame` had no `--props` and made the still a frames render; the PNG `frame` writes is byte-identical to that render's `frame-00599.png`, and no gate renders a still, so none changed).
 - A missing entry is `cli.entry-not-found` (exit 2), an unknown `--composition` id is `cli.composition-not-found`, `--props` that is not a JSON object string is `cli.invalid-arguments`, and valid JSON that fails the Composition's schema is `composition.props-invalid`. All four are what an example README tells the reader to expect when they get the command wrong.
 - Every render writes under `out/` at the repository root. `assets.local/` is the only other generated location.
 
@@ -266,7 +270,7 @@ const chartProps = z.object({
 });
 ```
 
-- `series` has no schema default, so the entry's own `data/index-30y.json` is passed as `--props` in the documented command; a reader who omits `--props` gets `composition.props-invalid` with the failing path, which is the schema-first behaviour the example exists to demonstrate. The example README documents both commands, and the still route is a frames render rather than `frame` (see [Running an example](#running-an-example)).
+- `series` has no schema default, so the entry's own `data/index-30y.json` is passed as `--props` in the documented command; a reader who omits `--props` gets `composition.props-invalid` with the failing path, which is the schema-first behaviour the example exists to demonstrate. The example README documents both commands and the still, which is `frame --props` (see [Running an example](#running-an-example)).
 - Each file under `examples/chart/data/` is a complete props object (`{ "title": …, "source": …, "series": […] }`), not a bare array, so `--props "$(cat examples/chart/data/index-30y.json)"` works verbatim and the from/to year range is derived from the points rather than declared twice.
 - Rendering is inline `<svg>` written as JSX: axes, gridlines, a polyline per series, a marker per point, and a value label that counts up from 0 to the final value over the last 1.5 s. No chart library, so no dependency and no nondeterminism.
 - Number formatting is a small local function, not `Intl.NumberFormat`: ICU data differs between a developer machine and the CI runner, and the determinism suite compares PNG bytes.
