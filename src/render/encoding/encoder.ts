@@ -1,7 +1,7 @@
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type AudioTrack } from '../../lib/loading-protocol.ts';
 import { type Result } from '../../lib/result.ts';
-import { type CaptureFormat, type FrameCaptureResult } from '../capture/frame.ts';
+import { type FrameCaptureResult, type ImageFormat } from '../capture/frame.ts';
 
 /** Not a new type: exactly the stream `renderFrames` already yields, re-aliased so it cannot
  * drift from the public `FrameCaptureResult` (exported from the `./render` subpath).
@@ -38,7 +38,7 @@ export type EncodeRequest = VideoEncodingOptions & {
   /** The encoding every frame of `frames` arrives in; PNG when omitted. A frame in another
    * encoding is a contract violation (`internal.unexpected`).
    */
-  readonly imageFormat?: CaptureFormat['type'];
+  readonly imageFormat?: ImageFormat;
   /** The output rational rate; never a rounded float. */
   readonly fps: { readonly numerator: number; readonly denominator: number };
   /** The total output frames expected from `frames`; bounds progress and the receipt. Zero is legal. */

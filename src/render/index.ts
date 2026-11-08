@@ -14,7 +14,19 @@ export {
   type RendererPoolOptions,
   type RenderFrameListOptions,
 } from './pool.ts';
-export { pngCapture, type CaptureFormat, type FrameCaptureResult } from './capture/frame.ts';
+export {
+  observeCapture,
+  pngCapture,
+  type CaptureFormat,
+  type FrameCaptureResult,
+} from './capture/frame.ts';
+export {
+  inspectComposition,
+  type InspectCompositionOptions,
+  type InspectOutcome,
+  type InspectReport,
+} from './inspect/inspect.ts';
+export { type AudioEntry, type SequenceEntry } from './inspect/timeline.ts';
 export {
   defaultCheckComparison,
   type CheckComparison,

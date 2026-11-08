@@ -8,8 +8,8 @@ import { checkRangeOrder, parseRangeBound } from './range.ts';
 
 // The argument contract is schema-first: commander only tokenizes argv, and
 // these schemas validate and normalize every command invocation. The closed
-// command enum matches the TASK-164 envelope (`inspect`/`validate` are later
-// tasks and are not accepted here yet).
+// command enum matches the TASK-164 envelope (`validate` is a later task and
+// is not accepted here yet).
 
 const jsonObject = z.record(z.string(), z.json());
 
@@ -290,6 +290,18 @@ export const ContactSheetArgsSchema = z
       });
   });
 
+export const InspectArgsSchema = z.strictObject({
+  command: z.literal('inspect'),
+  ...rendererConfig,
+  ...log,
+  entry,
+  composition,
+  props: propsText.optional(),
+  /** Renderers observing at once; half the machine's parallelism when omitted. */
+  concurrency: z.coerce.number().int().positive().optional(),
+  json,
+});
+
 export const CheckArgsSchema = z
   .strictObject({
     command: z.literal('check'),
@@ -368,6 +380,7 @@ export const CliArgsSchema = z.discriminatedUnion('command', [
   ContactSheetArgsSchema,
   DocsArgsSchema,
   CheckArgsSchema,
+  InspectArgsSchema,
   PreviewArgsSchema,
 ]);
 
@@ -376,5 +389,6 @@ export type FrameArgs = z.infer<typeof FrameArgsSchema>;
 export type ContactSheetArgs = z.infer<typeof ContactSheetArgsSchema>;
 export type DocsArgs = z.infer<typeof DocsArgsSchema>;
 export type CheckArgs = z.infer<typeof CheckArgsSchema>;
+export type InspectArgs = z.infer<typeof InspectArgsSchema>;
 export type PreviewArgs = z.infer<typeof PreviewArgsSchema>;
 export type CliArgs = z.infer<typeof CliArgsSchema>;

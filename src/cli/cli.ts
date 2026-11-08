@@ -11,6 +11,7 @@ import {
   type DocsData,
   type Envelope,
   type FrameData,
+  type InspectData,
   type PreviewData,
   type RenderData,
 } from '../agent/cli-output.ts';
@@ -28,6 +29,7 @@ import { renderContactSheet } from '../render/contact-sheet/sheet.ts';
 import { exportAudio } from '../render/encoding/audio-export.ts';
 import { audioRangeFor } from '../render/encoding/audio.ts';
 import { outputInvalidDiagnostic } from '../render/encoding/diagnostics.ts';
+import { inspectComposition } from '../render/inspect/inspect.ts';
 import { openPreviewSession } from '../render/loading/preview-session.ts';
 import { createRendererPool, defaultConcurrency } from '../render/pool.ts';
 import { renderVideo } from '../render/render-video.ts';
@@ -38,6 +40,7 @@ import {
   type ContactSheetArgs,
   type DocsArgs,
   type FrameArgs,
+  type InspectArgs,
   type PreviewArgs,
   type RenderArgs,
 } from './args.ts';
@@ -79,12 +82,9 @@ const entryNotFound = (entry: string): Diagnostic =>
     `Check the path ${entry}; it must export a Composition registry.`,
   );
 
-const internalUnexpected = (): Diagnostic =>
-  diagnostic(
-    'internal.unexpected',
-    'The command failed unexpectedly.',
-    'The stack trace was written to stderr; report it as a bug.',
-  );
+const internalUnexpected = (
+  hint = 'The stack trace was written to stderr; report it as a bug.',
+): Diagnostic => diagnostic('internal.unexpected', 'The command failed unexpectedly.', hint);
 
 type ParseOutcome =
   | { readonly kind: 'no-command'; readonly command: EnvelopeCommand | null }
@@ -99,27 +99,28 @@ type ParseOutcome =
     }
   | { readonly kind: 'args'; readonly value: Record<string, unknown> };
 
-type CommandName = 'render' | 'frame' | 'contact-sheet' | 'docs' | 'check' | 'preview';
+type CommandName = 'render' | 'frame' | 'contact-sheet' | 'docs' | 'check' | 'inspect' | 'preview';
 const isCommandName = (value: unknown): value is CommandName =>
   value === 'render' ||
   value === 'frame' ||
   value === 'contact-sheet' ||
   value === 'docs' ||
   value === 'check' ||
+  value === 'inspect' ||
   value === 'preview';
 
 /**
  * Why argv named no command the CLI can run. Each hint says what the caller can do next: `--json`
  * alone has to be told which subcommands exist, a reserved one which ones ship, and a subcommand
  * written after a flag where it belongs. The list is the contract's enum, not a copy of it, so it
- * names `inspect` and `validate` too: they are known names, not shipped ones.
+ * names `validate` too: it is a known name, not a shipped one.
  */
 const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
   if (command === null)
     return invalidArguments(
       `Pass one of the known subcommands: ${CommandSchema.options.join(', ')}.`,
     );
-  // `inspect` and `validate` are reserved, not misspelled: argv is well-formed and asks for a
+  // `validate` is reserved, not misspelled: argv is well-formed and asks for a
   // command this CLI does not ship yet, so the message must not call its arguments invalid. The
   // code stays `cli.invalid-arguments` (the contract's invocation-error code) — only the sentence
   // differs (agent ADR: invocation without a known subcommand).
@@ -127,7 +128,7 @@ const noCommandDiagnostic = (command: EnvelopeCommand | null): Diagnostic => {
     return diagnostic(
       'cli.invalid-arguments',
       `The ${command} subcommand is not implemented yet.`,
-      `${command} is not implemented yet; use render, frame, contact-sheet, docs, check or preview.`,
+      `${command} is not implemented yet; use render, frame, contact-sheet, docs, check, inspect or preview.`,
     );
   return invalidArguments(`Put the subcommand first: ${cliInvocation} ${command} [options].`);
 };
@@ -224,6 +225,23 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
         json,
       },
     };
+  if (command === 'inspect')
+    return {
+      kind: 'args',
+      value: {
+        command,
+        entry: parsable.processedArgs[0],
+        composition: options['composition'],
+        projectRoot: options['projectRoot'],
+        viteConfig: options['viteConfig'],
+        softwareWebgl: options['softwareWebgl'],
+        disableSandbox: options['disableSandbox'],
+        log: logFlagsOf(options),
+        props: options['props'],
+        concurrency: options['concurrency'],
+        json,
+      },
+    };
   if (command === 'contact-sheet')
     return {
       kind: 'args',
@@ -274,7 +292,14 @@ const parseRaw = (argv: readonly string[]): ParseOutcome => {
 };
 
 /** Every outcome that becomes an envelope: a result, or a failure carrying Diagnostics. */
-type EnvelopeData = RenderData | FrameData | ContactSheetData | DocsData | CheckData | PreviewData;
+type EnvelopeData =
+  | RenderData
+  | FrameData
+  | ContactSheetData
+  | DocsData
+  | CheckData
+  | InspectData
+  | PreviewData;
 type EnvelopeOutcome =
   | {
       readonly ok: true;
@@ -418,14 +443,18 @@ const prepareFramesManifest = (outAbsolute: string): Result<boolean> => {
  * (agent CONTEXT.md): the frames route has created its directory and written each captured PNG
  * as it arrived, while the mp4 and wav routes remove their temporary sibling and leave no target.
  */
-const abortedLine = (args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs): string =>
+const abortedLine = (
+  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs | InspectArgs,
+): string =>
   args.command === 'check'
     ? 'check aborted; no evidence was produced'
-    : args.command === 'render' && !isVideoOutput(args.out) && !isAudioOutput(args.out)
-      ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
-      : args.command === 'frame' && args.frame.length > 1
-        ? `frame aborted; any PNG frames already written remain in ${args.out}`
-        : `${args.command} aborted; no output was produced`;
+    : args.command === 'inspect'
+      ? 'inspect aborted; no timeline was produced'
+      : args.command === 'render' && !isVideoOutput(args.out) && !isAudioOutput(args.out)
+        ? `render aborted; any PNG frames already written remain in ${args.out}; no manifest.json was written`
+        : args.command === 'frame' && args.frame.length > 1
+          ? `frame aborted; any PNG frames already written remain in ${args.out}`
+          : `${args.command} aborted; no output was produced`;
 
 const isFile = (path: string): boolean => {
   try {
@@ -480,7 +509,7 @@ const frameTarget = (outAbsolute: string, frameCount: number): Result<FrameTarge
 };
 
 const rendererOptions = (
-  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs,
+  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs | InspectArgs,
   config: RendererConfig,
   signal: AbortSignal,
 ) => {
@@ -1039,19 +1068,73 @@ const runCheck = async (
   );
 };
 
+/**
+ * Reports the Composition's declared timeline. The frames are observed under the renderer's
+ * ownership protocol and released without a screenshot, so nothing is captured and nothing is
+ * written (agent ADR: inspect).
+ */
+const runInspect = async (
+  args: InspectArgs,
+  config: RendererConfig,
+  signal: AbortSignal,
+  decide: Decide,
+): Promise<CommandOutcome> => {
+  if (signal.aborted) return abortedOutcome;
+  const options = rendererOptions(args, config, signal);
+  if (options === undefined) return decide(failure([entryNotFound(args.entry)]));
+  const result = await inspectComposition({
+    ...options,
+    concurrency: args.concurrency ?? defaultConcurrency(),
+  });
+  if ('aborted' in result) return abortedOutcome;
+  if (!result.ok) return decide(failure([...result.error]));
+  const { composition, sequences, audio } = result.value;
+  const data: InspectData = {
+    format: 'inspect',
+    composition: composition.id,
+    width: composition.width,
+    height: composition.height,
+    fps: composition.fps,
+    durationInFrames: composition.durationInFrames,
+    durationSeconds: composition.durationSeconds,
+    sequences: sequences.map((sequence) => ({ ...sequence, path: [...sequence.path] })),
+    audio: audio.map((clip) => ({ ...clip })),
+  };
+  return decide({ ok: true, data, diagnostics: [] });
+};
+
 const buildEnvelope = (
   command: EnvelopeCommand | null,
   outcome: EnvelopeOutcome,
   durationMs: number,
-): Envelope =>
-  EnvelopeSchema.parse({
+): Envelope => {
+  const candidate = {
     schemaVersion: 1,
     command,
     ok: outcome.ok,
     data: outcome.data,
     diagnostics: [...outcome.diagnostics],
     durationMs,
+  };
+  const checked = EnvelopeSchema.safeParse(candidate);
+  if (checked.success) return checked.data;
+  // A command produced data its own contract rejects: a bug in the CLI, not in the caller's input.
+  // The caller is still owed one document, so it reports internal.unexpected and the issues go to
+  // stderr, like any other unexpected failure.
+  process.stderr.write(
+    `The ${command ?? 'command'} output broke the envelope contract:\n${checked.error.message}\n`,
+  );
+  return EnvelopeSchema.parse({
+    ...candidate,
+    ok: false,
+    data: null,
+    diagnostics: [
+      internalUnexpected(
+        'The validation issues were written to stderr; the command produced data its own contract rejects. Report it as a bug.',
+      ),
+    ],
   });
+};
 
 const exitCodeFor = (envelope: Envelope): number => {
   if (envelope.ok) return 0;
@@ -1095,6 +1178,10 @@ const summarize = (envelope: Envelope): string => {
       const verb = data.format === 'mp4' ? 'encoded' : 'rendered';
       const manifest = data.format === 'frames' ? `; manifest ${data.manifest}` : '';
       return `${verb} ${data.frameCount} frames to ${data.output} (${data.width}x${data.height})${manifest}`;
+    }
+    if (envelope.command === 'inspect') {
+      const data = envelope.data;
+      return `found ${String(data.sequences.length)} named sequences and ${String(data.audio.length)} audio clips in ${data.composition} (${String(data.durationInFrames)} frames, ${data.durationSeconds.toFixed(3)}s)`;
     }
     if (envelope.command === 'preview')
       return `serving ${envelope.data.url} (Ctrl-C to stop); ready`;
@@ -1253,7 +1340,7 @@ export type RunCliOptions = {
  * owns its own refusal order and its own envelope data.
  */
 const runDecided = async (
-  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs,
+  args: RenderArgs | FrameArgs | ContactSheetArgs | CheckArgs | InspectArgs,
   config: RendererConfig,
   signal: AbortSignal,
   decide: Decide,
@@ -1267,6 +1354,8 @@ const runDecided = async (
       return runContactSheet(args, config, signal, decide);
     case 'check':
       return runCheck(args, config, signal, decide);
+    case 'inspect':
+      return runInspect(args, config, signal, decide);
     default:
       // Unreachable: `docs` and `preview` return before this point and the union has no other
       // member, so a route missing here is a programmer error rather than a caller's failure.

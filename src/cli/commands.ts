@@ -137,6 +137,24 @@ const checkCommand = cliCommand('check')
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 
+const inspectCommand = cliCommand('inspect')
+  .description(
+    "print the Composition's named Sequences and audio clips as a timeline in frames and seconds; frames are observed, never captured (--concurrency <n> realms at once)",
+  )
+  .argument('<entry>')
+  .option('--composition <id>')
+  .option('--props <json>')
+  .option('--concurrency <n>')
+  .option('--project-root <dir>')
+  .option('--vite-config <path>')
+  .option('--software-webgl')
+  .option('--disable-sandbox')
+  .option('--verbose', 'stream the page and loading-service output instead of holding it back')
+  .option('--quiet', 'hide the renderer log')
+  .option('--json')
+  .exitOverride()
+  .configureOutput({ outputError: () => {} });
+
 const previewCommand = cliCommand('preview')
   .description("serve a browser preview with playback, scrubbing and the clips' audio")
   .argument('<entry>')
@@ -159,13 +177,14 @@ const docsCommand = cliCommand('docs')
   .configureOutput({ outputError: () => {} });
 
 export const commands: Readonly<
-  Record<'render' | 'frame' | 'contact-sheet' | 'docs' | 'check' | 'preview', Command>
+  Record<'render' | 'frame' | 'contact-sheet' | 'docs' | 'check' | 'inspect' | 'preview', Command>
 > = {
   render: renderCommand,
   frame: frameCommand,
   'contact-sheet': contactSheetCommand,
   docs: docsCommand,
   check: checkCommand,
+  inspect: inspectCommand,
   preview: previewCommand,
 };
 
@@ -216,6 +235,7 @@ export const program = new Command('motion-kit')
       `  ${cliInvocation} render entry.tsx --out out.mp4`,
       `  ${cliInvocation} contact-sheet entry.tsx --every 150 --out sheet.png --json`,
       `  ${cliInvocation} check entry.tsx --frame 1,4 --history pool --json`,
+      `  ${cliInvocation} inspect entry.tsx --json`,
       `  ${cliInvocation} preview entry.tsx --composition intro`,
       `  ${cliInvocation} docs getting-started`,
       '',

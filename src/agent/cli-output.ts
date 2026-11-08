@@ -185,6 +185,56 @@ export const ContactSheetDataSchema = z.strictObject({
   ),
 });
 
+/**
+ * `motion-kit inspect` reports the Composition's declared timeline: the named Sequences its frames
+ * mount and the audio clips its descriptor declares. Frames are observed, never captured.
+ */
+export const InspectDataSchema = z.strictObject({
+  format: z.literal('inspect'),
+  composition: z.string().min(1),
+  ...dimensions,
+  fps: z.strictObject({ numerator: z.int().positive(), denominator: z.int().positive() }),
+  durationInFrames: z.int().nonnegative(),
+  durationSeconds: z.number().nonnegative(),
+  /** Every named Sequence any frame mounted, by start frame, then path (outer first), then end. */
+  sequences: z.array(
+    z.strictObject({
+      /** The Sequence's own name: the last segment of `path`. */
+      name: z.string(),
+      /** Named ancestors outer to inner, ending with `name`; unnamed Sequences add no segment. */
+      path: z.array(z.string()).min(1),
+      /**
+       * Frames the Sequence shows: `startFrame` inclusive, `endFrame` exclusive. A top-level
+       * Sequence is not clamped to the Composition, so one that starts before frame 0 has a
+       * negative start (and negative seconds) and one that runs past the end has an end beyond it;
+       * a nested one is intersected with what its ancestors show.
+       */
+      startFrame: z.int(),
+      endFrame: z.int(),
+      startSeconds: z.number(),
+      endSeconds: z.number(),
+    }),
+  ),
+  /** The declared clips in declaration order, defaults applied and clipped to the Composition. */
+  audio: z.array(
+    z.strictObject({
+      src: z.string().min(1),
+      startInFrames: z.int().nonnegative(),
+      /** Exclusive; the declared end or the Composition's end, cut at the latter; equal to the start for a clip that starts at or past it. */
+      endInFrames: z.int().nonnegative(),
+      startSeconds: z.number().nonnegative(),
+      endSeconds: z.number().nonnegative(),
+      /**
+       * False when the clip plays to its source's natural end, which `inspect` does not measure:
+       * `endInFrames` is then the latest the clip can still be heard.
+       */
+      endDeclared: z.boolean(),
+      offsetInFrames: z.int().nonnegative(),
+      volume: z.number().nonnegative(),
+    }),
+  ),
+});
+
 const common = {
   schemaVersion: z.literal(1),
   ok: z.boolean(),
@@ -192,7 +242,7 @@ const common = {
   durationMs: z.number().nonnegative(),
 };
 
-// Inspect and validate own their future data contracts; only JSON objects are reserved here.
+// Validate owns its future data contract; only JSON objects are reserved here.
 const deferredData = z.record(z.string(), z.json());
 
 /** The known subcommands. `command` is this enum or null, never a sentinel member. */
@@ -227,7 +277,11 @@ export const EnvelopeSchema = z
       command: z.literal('contact-sheet'),
       data: ContactSheetDataSchema.nullable(),
     }),
-    z.strictObject({ ...common, command: z.literal('inspect'), data: deferredData.nullable() }),
+    z.strictObject({
+      ...common,
+      command: z.literal('inspect'),
+      data: InspectDataSchema.nullable(),
+    }),
     z.strictObject({ ...common, command: z.literal('validate'), data: deferredData.nullable() }),
     // No subcommand could be identified from argv (`motion-kit --json`, `motion-kit unknown --json`).
     // A discriminated union needs a literal per member, so this is `z.null()` rather than
@@ -259,5 +313,6 @@ export type FrameData = z.infer<typeof FrameDataSchema>;
 export type DocsData = z.infer<typeof DocsDataSchema>;
 export type CheckData = z.infer<typeof CheckDataSchema>;
 export type PreviewData = z.infer<typeof PreviewDataSchema>;
+export type InspectData = z.infer<typeof InspectDataSchema>;
 export type ContactSheetData = z.infer<typeof ContactSheetDataSchema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;

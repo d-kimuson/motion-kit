@@ -179,7 +179,7 @@ the directory you run the command in, and `render` creates the directories its o
 
 - [Getting started](guide/getting-started.md) — requirements, install, a first entry and render,
   props overrides, and the frames output.
-- [CLI](guide/cli.md) — `render`, `frame`, `contact-sheet`, `check`, `preview` and `docs`, every flag, the
+- [CLI](guide/cli.md) — `render`, `frame`, `contact-sheet`, `check`, `inspect`, `preview` and `docs`, every flag, the
   `--json` envelope, diagnostic codes, exit codes and cancellation.
 - [Authoring](guide/authoring.md) — Composition fields, props, the time hooks, `Sequence`,
   `TransitionSeries`, `useAsset` and audio.
@@ -214,7 +214,7 @@ Only five subpaths are exported today:
   `@react-three/fiber` are optional peer dependencies you install.
 
 Not available yet: audio-reactive visuals, video assets, the `/theme` and `/presets` subpaths, the
-`Animate`/`Reveal`/`Stagger` components, and the `inspect`/`validate` commands. Until those land, a
+`Animate`/`Reveal`/`Stagger` components, and the `validate` command. Until those land, a
 component writes its own motion over `useTime()`/`useSequence()` and the
 [motion values](guide/authoring.md#motion-values), which is what the reference examples do.
 

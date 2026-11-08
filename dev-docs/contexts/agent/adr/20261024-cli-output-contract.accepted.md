@@ -99,6 +99,8 @@ TASK-152 adds `motion.invalid-input` for invalid Pure Motion inputs (including n
 - `preview`: `data` is `{ format: "preview", url }`, written once the preview host page listens; see the 2026-11-01 (TASK-246) amendment below for the lifecycle and exit semantics.
 - `inspect` and `validate`: reserve a JSON object for usable data. Their tasks define the contents later without changing the envelope or Diagnostic. This placeholder is not a claim that an empty object is a complete implementation of either command.
 
+  _Amended 2026-11-09 (TASK-250):_ `inspect` ships and is no longer reserved: its `data` is a strict `format: "inspect"` object (the Composition, its `sequences` and its `audio`) defined by the [inspect ADR](20261109-inspect.accepted.md), and `CommandSchema` keeps `inspect` as a known name that now runs. `validate` stays reserved. The member is added to the discriminated union without changing another, so `schemaVersion` stays `1`.
+
 Schemas accept POSIX, Windows drive-rooted, and Windows UNC absolute output paths without importing Node.js. Numeric integer fields use JavaScript safe integers. Objects with fixed fields reject unknown keys; `details` and deferred command data allow JSON keys. Frame/time and frame-count/duration consistency remain the Time Module's responsibility; the contract schemas do not perform time arithmetic.
 
 ### Module placement and generation

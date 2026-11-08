@@ -38,7 +38,7 @@ in the project; run the version it reports rather than the latest.
 
 An `.mp4` target also needs FFmpeg 6.0+ with `libx264` on `PATH`, which motion-kit does not install
 (`ffmpeg -version`); a Composition that declares audio also needs its companion `ffprobe`. `frame`,
-`contact-sheet` and `preview` work without FFmpeg. `docs getting-started` has the full requirements
+`contact-sheet`, `inspect` and `preview` work without FFmpeg. `docs getting-started` has the full requirements
 and `docs troubleshooting` the per-OS FFmpeg installs.
 
 ## Read the docs before writing code
