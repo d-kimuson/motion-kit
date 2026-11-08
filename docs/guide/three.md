@@ -180,8 +180,13 @@ failure is `render.page-error` and carries the Composition id, the output frame 
   the Diagnostic can say which one. Load images with `useLoader` or `useTexture`: they suspend, so the
   canvas waits for the image, and a loader error fails the frame as a Composition error.
 
-The texture check looks at the textures of visible objects' materials, including `ShaderMaterial`
-uniforms. It does not see an upload three accepts and the GPU rejects, such as a `DataTexture` whose
+The texture check looks at every texture held by a material of an object whose `visible` is true,
+including `ShaderMaterial` uniforms (`Material.visible` is not consulted). It does not depend on what
+the camera draws: a valid texture on an object outside the frustum, on a layer the camera does not
+render, or in a uniform the shader never reads passes, and a broken one on such an object fails the
+frame, the same whether the frame is rendered first or after others. A texture is flagged when it is
+marked for update (`needsUpdate`) but three could not upload it, or when its image has no pixels. A
+texture that was never marked for update is not flagged. It does not see an upload three accepts and the GPU rejects, such as a `DataTexture` whose
 data is shorter than its size or larger than the GPU's maximum texture size; those still render an
 empty texture without a Diagnostic. The
 [qualification ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md)

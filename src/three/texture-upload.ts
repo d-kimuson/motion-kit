@@ -23,8 +23,10 @@ export type TextureUploadFailure = Readonly<{
   reason: TextureUploadFailureReason;
 }>;
 
-/** The version of `texture` three last uploaded, or `undefined` when it never uploaded it. The
- * adapter reads it from `renderer.properties`, three's record of what it put on the GPU. */
+/** Makes three attempt the upload of `texture` if no draw has, then returns the version it recorded
+ * as uploaded, or `undefined` when it recorded none. The adapter does that with
+ * `renderer.initTexture` and `renderer.properties`. The attempt matters: three uploads a texture only
+ * when a draw samples it, so without it a valid texture of a culled object would look not uploaded. */
 export type UploadedVersion = (texture: Texture) => number | undefined;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -81,19 +83,25 @@ const reasonFor = (
 };
 
 /**
- * The textures of visible objects' materials whose upload did not happen or uploaded nothing.
+ * The textures of `Object3D.visible` objects' materials whose upload did not happen or uploaded
+ * nothing.
  *
  * three has no callback for an upload: it warns on the console and renders the material with an
- * empty texture. It does record the version it last uploaded per texture, so after a frame was
- * rendered a texture that was marked for update (`version > 0`) and whose recorded version differs
- * never reached the GPU. That is deterministic: it reads state, not console output. A texture whose
- * image has no pixels is the other observable outcome, because a source that failed to decode
- * reports 0x0 and three uploads that without a warning.
+ * empty texture. It does record the version it last uploaded per texture, so once the upload has
+ * been attempted a texture that was marked for update (`version > 0`) and whose recorded version
+ * differs never reached the GPU. That is deterministic: it reads state, not console output. A
+ * texture whose image has no pixels is the other observable outcome, because a source that failed
+ * to decode reports 0x0 and three uploads that without a warning.
+ *
+ * The verdict is a function of the scene and its textures, never of which draws happened or in
+ * which order: `uploadedVersion` attempts every checked upload itself, so a valid texture that no
+ * draw sampled (a frustum-culled object, `Material.visible = false`, a layer the camera does not
+ * render, a uniform the shader never reads) is uploaded then and passes, and a frame sought fresh
+ * gives the verdict of the same frame sought after others. Objects with `Object3D.visible = false`
+ * are not walked, and neither is a texture the scene does not reference.
  *
  * Not covered: an upload three accepts and the GPU rejects (for example a `DataTexture` whose data
  * is shorter than its size, or one beyond `MAX_TEXTURE_SIZE`), which only `gl.getError()` shows.
- * An object outside the camera frustum is still checked, because it is only the render, not the
- * material, that skips it.
  */
 export const findTextureUploadFailures = (
   scene: Object3D,

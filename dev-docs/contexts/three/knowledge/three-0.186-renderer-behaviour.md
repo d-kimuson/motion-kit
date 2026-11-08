@@ -37,8 +37,15 @@ no upload callback. Nothing reaches the page's `console.error` path the shader c
 material renders with an empty texture. What does persist is `renderer.properties.get(texture).__version`
 (three-internal, typed `unknown`): `uploadTexture` sets it to `texture.version` after a successful call,
 and `setTexture2D` skips `uploadTexture` when `texture.image` is `null` or `image.complete === false`, so
-a texture with `version > 0` whose record differs was never uploaded. An object that is not visible
-(or culled) never reaches `setTexture2D`, so its textures have no record either.
+a texture with `version > 0` whose record differs was never uploaded, once an upload was attempted.
+
+`setTexture2D` is reached only when a draw samples the texture, and the record persists across frames.
+So a valid texture has no record when its object is frustum-culled, its `Material.visible` is false, its
+object is on a layer the camera does not render, or it is a `ShaderMaterial` uniform the shader never
+reads, and it has one after an earlier frame drew it. Reading the record alone therefore flags valid
+textures and depends on the frames before. `renderer.initTexture(texture)` runs the same upload path
+(`setTexture2D`, or the cube, 3D and array variant) without a draw, is idempotent and unbinds afterwards,
+so calling it before the read makes the record a function of the texture alone.
 
 Observed in the `three-dom` project (SwiftShader), after `settle`:
 
@@ -55,7 +62,7 @@ Composition's error boundary fails the frame.
 
 Confirmed by: reading the 0.186 `WebGLTextures` source, and
 `src/three/canvas-failure.browser.test.tsx` ("texture upload failure") for the first two rows and the
-valid one; the GL-error columns come from a probe that is not kept as a test.
+valid one, and for the four unsampled cases and the seek order; the GL-error columns come from a probe that is not kept as a test.
 
 ## `PCFSoftShadowMap` was removed
 

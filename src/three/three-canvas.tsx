@@ -48,8 +48,11 @@ const adapter = (state: RootState): CanvasTarget => ({
   useFrameSubscribers: () => state.get().internal.subscribers.length,
   textureUploadFailures: () => {
     const { gl: renderer, scene } = state.get();
-    // three's record of what it uploaded; it is typed `unknown` because it is internal.
     return findTextureUploadFailures(scene, (texture) => {
+      // three uploads a texture only when a draw samples it. Attempting it here makes the verdict
+      // independent of the draws (a culled object, an unread uniform) and of the frames before.
+      renderer.initTexture(texture);
+      // three's record of what it uploaded; it is typed `unknown` because it is internal.
       const recorded: unknown = renderer.properties.get(texture);
       const version =
         typeof recorded === 'object' && recorded !== null && '__version' in recorded

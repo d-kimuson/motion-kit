@@ -1,3 +1,4 @@
+import { useFrame } from '@kimuson/motion-kit';
 import { DataTexture, RGBAFormat, Texture, UnsignedByteType } from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -257,4 +258,127 @@ describe('texture upload failure', () => {
 
     expect((await instance.settle(2)).status).toBe('ready');
   }, 60_000);
+});
+
+/** A texture three accepts without complaint: 1x1 RGBA. */
+const validTexture = (name = 'valid'): DataTexture => {
+  const texture = new DataTexture(
+    new Uint8Array([255, 128, 0, 255]),
+    1,
+    1,
+    RGBAFormat,
+    UnsignedByteType,
+  );
+  texture.name = name;
+  texture.needsUpdate = true;
+  return texture;
+};
+
+const basicVertex =
+  'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+
+describe('texture upload without a draw that samples it', () => {
+  // three uploads a texture only when a draw samples it. A valid texture nothing sampled must still
+  // settle, whatever the reason nothing sampled it.
+  const settles = async (scene: Parameters<typeof canvas>[1]) => {
+    const instance = await open({ scene: (capture) => canvas(capture, scene) });
+    expect((await instance.settle(0)).status).toBe('ready');
+    expect((await instance.settle(3)).status).toBe('ready');
+  };
+
+  it('settles a valid texture on an object outside the camera frustum', async () => {
+    await settles(
+      <mesh position={[100, 0, 0]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial map={validTexture()} />
+      </mesh>,
+    );
+  }, 60_000);
+
+  it('settles a valid texture on a material that is not visible', async () => {
+    await settles(
+      <mesh>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial map={validTexture()} visible={false} />
+      </mesh>,
+    );
+  }, 60_000);
+
+  it('settles a valid texture on an object in a layer the camera does not render', async () => {
+    await settles(
+      <mesh layers-mask={2}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial map={validTexture()} />
+      </mesh>,
+    );
+  }, 60_000);
+
+  it('settles a valid texture in a shader uniform the shader never reads', async () => {
+    await settles(
+      <mesh>
+        <boxGeometry args={[1, 1, 1]} />
+        <shaderMaterial
+          uniforms={{ uUnused: { value: validTexture() } }}
+          vertexShader={basicVertex}
+          fragmentShader="void main() { gl_FragColor = vec4(1.0); }"
+        />
+      </mesh>,
+    );
+  }, 60_000);
+
+  it('still fails a broken texture on an object outside the camera frustum', async () => {
+    const texture = new Texture();
+    texture.name = 'offscreen-broken';
+    texture.needsUpdate = true;
+    const instance = await open({
+      scene: (capture) =>
+        canvas(
+          capture,
+          <mesh position={[100, 0, 0]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshBasicMaterial map={texture} />
+          </mesh>,
+        ),
+    });
+
+    const outcome = await instance.settle(1);
+
+    if (outcome.status !== 'failed') throw new Error('expected the frame to fail');
+    expect(outcome.diagnostics[0]).toMatchObject({
+      details: { textures: [{ texture: 'offscreen-broken', reason: 'no-image' }] },
+    });
+  }, 60_000);
+
+  describe('the verdict of a frame does not depend on the frames settled before it', () => {
+    /** On screen before frame 3, far outside the camera frustum from frame 3 on. */
+    const LeavesTheScreen = ({ texture }: { texture: Texture }) => (
+      <mesh position={[useFrame() < 3 ? 0 : 100, 0, 0]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial map={texture} />
+      </mesh>
+    );
+    const outcomeOffScreen = async (texture: Texture, drawnOnScreenFirst: boolean) => {
+      const instance = await open({
+        scene: (capture) => canvas(capture, <LeavesTheScreen texture={texture} />),
+      });
+      if (drawnOnScreenFirst) await instance.settle(0);
+      return (await instance.settle(4)).status;
+    };
+
+    it('settles a valid texture the same whether it was drawn on screen first or not', async () => {
+      expect(await outcomeOffScreen(validTexture('a'), true)).toBe('ready');
+      expect(await outcomeOffScreen(validTexture('b'), false)).toBe('ready');
+    }, 60_000);
+
+    it('fails a broken texture the same whether it was drawn on screen first or not', async () => {
+      const broken = (name: string) => {
+        const texture = new Texture();
+        texture.name = name;
+        texture.needsUpdate = true;
+        return texture;
+      };
+      expect(await outcomeOffScreen(broken('a'), true)).toBe('failed');
+      expect(await outcomeOffScreen(broken('b'), false)).toBe('failed');
+    }, 60_000);
+  });
 });
