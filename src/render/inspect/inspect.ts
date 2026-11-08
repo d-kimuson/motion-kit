@@ -53,7 +53,10 @@ export const inspectComposition = async (
     if (!rate.ok) return { ok: false, error: [rate.error] };
     // A span equal in every field to another is a sibling of the same name and frames, which is a
     // different Sequence; a frame lists each of them, so the most any one frame listed is how many
-    // exist. Taking the union of distinct spans alone would merge them.
+    // exist. Taking the union of distinct spans alone would merge them. Known exception: equal
+    // spans that no single frame mounts together (empty spans left at the same edge by parents shown
+    // on disjoint frames, or ones mounted conditionally on disjoint frames) are counted once,
+    // because the page reports spans and not identities.
     const seen = new Map<string, { readonly span: SequenceSpan; count: number }>();
     for await (const frame of pool.renderFrames({
       from: 0,

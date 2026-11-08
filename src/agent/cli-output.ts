@@ -204,9 +204,10 @@ export const InspectDataSchema = z.strictObject({
       /** Named ancestors outer to inner, ending with `name`; unnamed Sequences add no segment. */
       path: z.array(z.string()).min(1),
       /**
-       * Frames the Sequence shows: `startFrame` inclusive, `endFrame` exclusive, as it is placed.
-       * Not clamped to the Composition, so a Sequence that starts before frame 0 has a negative
-       * start (and negative seconds) and one that runs past the end has an end beyond it.
+       * Frames the Sequence shows: `startFrame` inclusive, `endFrame` exclusive. A top-level
+       * Sequence is not clamped to the Composition, so one that starts before frame 0 has a
+       * negative start (and negative seconds) and one that runs past the end has an end beyond it;
+       * a nested one is intersected with what its ancestors show.
        */
       startFrame: z.int(),
       endFrame: z.int(),

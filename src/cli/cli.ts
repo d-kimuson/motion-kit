@@ -82,12 +82,9 @@ const entryNotFound = (entry: string): Diagnostic =>
     `Check the path ${entry}; it must export a Composition registry.`,
   );
 
-const internalUnexpected = (): Diagnostic =>
-  diagnostic(
-    'internal.unexpected',
-    'The command failed unexpectedly.',
-    'The stack trace was written to stderr; report it as a bug.',
-  );
+const internalUnexpected = (
+  hint = 'The stack trace was written to stderr; report it as a bug.',
+): Diagnostic => diagnostic('internal.unexpected', 'The command failed unexpectedly.', hint);
 
 type ParseOutcome =
   | { readonly kind: 'no-command'; readonly command: EnvelopeCommand | null }
@@ -1131,7 +1128,11 @@ const buildEnvelope = (
     ...candidate,
     ok: false,
     data: null,
-    diagnostics: [internalUnexpected()],
+    diagnostics: [
+      internalUnexpected(
+        'The validation issues were written to stderr; the command produced data its own contract rejects. Report it as a bug.',
+      ),
+    ],
   });
 };
 
