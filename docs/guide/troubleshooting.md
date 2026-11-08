@@ -114,15 +114,15 @@ motion-kit frame entry.tsx --frame 60 --out out/still.png
 ```
 
 The Playwright browser is missing or cannot start. The hint names the Playwright version motion-kit
-pins (the version above is an example). Install that build once per machine:
+pins (`1.64.1` above is an example). Install that build once per machine:
 
 ```bash
 pnpm dlx playwright@<version> install chromium      # or: npx playwright@<version> install chromium
 ```
 
-Playwright is a dependency of motion-kit, not of your project, so `pnpm exec playwright` fails with
-`Command "playwright" not found`. Look the version up with `pnpm why playwright` (`npm ls playwright`,
-`yarn why playwright`) when the hint does not show it.
+Look the version up with `pnpm why playwright` (`npm ls playwright`, `yarn why playwright`) when
+the hint does not show it. Use `dlx` or `npx` rather than `pnpm exec playwright`: the reason is in
+[Install](getting-started.md#install).
 
 If the browser is installed and still will not launch:
 

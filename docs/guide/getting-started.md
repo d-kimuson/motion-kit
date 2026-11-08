@@ -10,13 +10,13 @@ override. It assumes no other motion-kit context: every command below is complet
 
 ## Requirements
 
-| Requirement              | Why                                                                                      | Check                        |
-| ------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------- |
-| Node.js                  | Runs the CLI and the renderer's Node side. ESM only; the repository develops on Node 26. | `node --version`             |
-| React 19, ReactDOM 19    | Peer dependencies of the package; the Composition is your React tree.                    | `npm ls react`               |
-| Zod                      | Composition props are validated by a Zod schema that lives in your project.              | covered by the install below |
-| FFmpeg 6.0+ with libx264 | Encodes MP4 and provides `ffprobe`, which a Composition that declares audio also needs.  | `ffmpeg -version`            |
-| Chromium for Playwright  | Captures the frames.                                                                     | `pnpm why playwright`        |
+| Requirement              | Why                                                                                      | Check                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------- |
+| Node.js                  | Runs the CLI and the renderer's Node side. ESM only; the repository develops on Node 26. | `node --version`                        |
+| React 19, ReactDOM 19    | Peer dependencies of the package; the Composition is your React tree.                    | `npm ls react`                          |
+| Zod                      | Composition props are validated by a Zod schema that lives in your project.              | covered by the install below            |
+| FFmpeg 6.0+ with libx264 | Encodes MP4 and provides `ffprobe`, which a Composition that declares audio also needs.  | `ffmpeg -version`                       |
+| Chromium for Playwright  | Captures the frames.                                                                     | missing: `render.browser-launch-failed` |
 
 FFmpeg is the one prerequisite motion-kit does not install for you: it ships and downloads no binary.
 The PNG frame route and `frame` need no FFmpeg at all, so you can start without it and install it

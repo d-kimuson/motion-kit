@@ -52,10 +52,7 @@ pnpm why playwright                          # the Playwright version motion-kit
 pnpm dlx playwright@<version> install chromium   # once per machine; use the version printed above
 ```
 
-Playwright is a dependency of motion-kit, not of your project, so your project has no `playwright`
-bin: `pnpm exec playwright` fails with `Command "playwright" not found`. Run the pinned version
-through `pnpm dlx` instead. The Chromium download is a one-time setup per machine rather than part
-of every install. The same three packages with npm or yarn:
+The same three packages with npm or yarn:
 
 ```bash
 npm install @kimuson/motion-kit react react-dom zod
@@ -66,6 +63,10 @@ yarn add @kimuson/motion-kit react react-dom zod
 yarn why playwright                          # the pinned version
 yarn dlx playwright@<version> install chromium   # Yarn 2+; with Yarn 1 use npx playwright@<version>
 ```
+
+The Chromium download is a one-time setup per machine rather than part of every install. Run the
+pinned version rather than `pnpm exec playwright`, which your project does not have
+([why](guide/getting-started.md#install)).
 
 Write an entry file that exports a `compositions` registry — a React component plus an id, a size,
 a frame rate and a duration in frames:
