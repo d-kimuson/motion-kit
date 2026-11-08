@@ -58,7 +58,7 @@ node dist/cli.js frame examples/explainer/entry.tsx --composition explainer --fr
 node dist/cli.js render examples/explainer/entry.tsx --composition explainer --out out/explainer.mp4 --json
 ```
 
-**chart** — its props are always supplied, so the still route is a frames render rather than `frame`:
+**chart** — its props are always supplied, to `render` and to `frame` alike:
 
 ```bash
 node dist/cli.js render examples/chart/entry.tsx --composition chart \
@@ -68,9 +68,9 @@ node dist/cli.js render examples/chart/entry.tsx --composition chart \
 node dist/cli.js render examples/chart/entry.tsx --composition chart \
   --props "$(cat examples/chart/data/index-20y.json)" --out out/chart-20y.mp4 --json
 
-# A still: render PNG frames and take the one you want
-node dist/cli.js render examples/chart/entry.tsx --composition chart \
-  --props "$(cat examples/chart/data/index-30y.json)" --out out/chart-frames --json
+# A still: frame 599 is the held final frame
+node dist/cli.js frame examples/chart/entry.tsx --composition chart \
+  --props "$(cat examples/chart/data/index-30y.json)" --frame 599 --out out/chart-30y-599.png --json
 ```
 
 **slideshow** — generates its placeholders first, and renders at both aspects:
