@@ -233,6 +233,31 @@ describe('CLI output v1', () => {
     expect(InspectDataSchema.parse(inspectData)).toEqual(inspectData);
   });
 
+  it('accepts a Sequence placed before frame 0 and one past the end, as placed', () => {
+    const placed = {
+      ...inspectData,
+      sequences: [
+        {
+          name: 'early',
+          path: ['early'],
+          startFrame: -15,
+          endFrame: 15,
+          startSeconds: -0.5,
+          endSeconds: 0.5,
+        },
+        {
+          name: 'late',
+          path: ['late'],
+          startFrame: 120,
+          endFrame: 150,
+          startSeconds: 4,
+          endSeconds: 5,
+        },
+      ],
+    };
+    expect(InspectDataSchema.parse(placed)).toEqual(placed);
+  });
+
   it('requires ok to agree with every generated diagnostic list', () => {
     fc.assert(
       fc.property(fc.array(diagnosticArbitrary), (diagnostics) => {

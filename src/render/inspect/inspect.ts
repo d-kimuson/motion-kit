@@ -51,7 +51,10 @@ export const inspectComposition = async (
     const descriptor = pool.descriptor();
     const rate = createFrameRate(descriptor.fps);
     if (!rate.ok) return { ok: false, error: [rate.error] };
-    const seen = new Map<string, SequenceSpan>();
+    // A span equal in every field to another is a sibling of the same name and frames, which is a
+    // different Sequence; a frame lists each of them, so the most any one frame listed is how many
+    // exist. Taking the union of distinct spans alone would merge them.
+    const seen = new Map<string, { readonly span: SequenceSpan; count: number }>();
     for await (const frame of pool.renderFrames({
       from: 0,
       to: descriptor.durationInFrames,
@@ -59,7 +62,18 @@ export const inspectComposition = async (
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })) {
       if (!frame.ok) return 'aborted' in frame ? frame : { ok: false, error: frame.error };
-      for (const span of frame.value.sequences ?? []) seen.set(spanKey(span), span);
+      const inFrame = new Map<string, { readonly span: SequenceSpan; count: number }>();
+      for (const span of frame.value.sequences ?? []) {
+        const key = spanKey(span);
+        const entry = inFrame.get(key) ?? { span, count: 0 };
+        entry.count += 1;
+        inFrame.set(key, entry);
+      }
+      for (const [key, { span, count }] of inFrame) {
+        const known = seen.get(key);
+        if (known === undefined) seen.set(key, { span, count });
+        else known.count = Math.max(known.count, count);
+      }
     }
     return {
       ok: true,
@@ -72,7 +86,12 @@ export const inspectComposition = async (
           durationInFrames: descriptor.durationInFrames,
           durationSeconds: toSeconds(frameToTime(BigInt(descriptor.durationInFrames), rate.value)),
         },
-        sequences: sequenceEntries([...seen.values()].sort(compareSequenceSpans), rate.value),
+        sequences: sequenceEntries(
+          [...seen.values()]
+            .flatMap(({ span, count }) => Array.from({ length: count }, () => span))
+            .sort(compareSequenceSpans),
+          rate.value,
+        ),
         audio: audioEntries(descriptor.audio ?? [], descriptor.durationInFrames, rate.value),
       },
     };

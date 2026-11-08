@@ -152,8 +152,19 @@ const Scene = () => (
     <Sequence name="outro" from={2} duration={1}><span>outro</span></Sequence>
   </div>
 );
+// Placements the Composition does not contain: before frame 0, past the end, and two siblings that
+// share a name and frames.
+const Edges = () => (
+  <div style={{ width: 32, height: 32, background: '#333333' }}>
+    <Sequence name="early" from={-0.5} duration={1}><span>early</span></Sequence>
+    <Sequence name="late" from={2} duration={1}><span>late</span></Sequence>
+    <Sequence name="twin" from={0.2} duration={0.3}><span>a</span></Sequence>
+    <Sequence name="twin" from={0.2} duration={0.3}><span>b</span></Sequence>
+  </div>
+);
 const schema = z.object({});
 export const compositions = defineCompositions([
+  defineComposition({ id: 'edges', schema, component: Edges, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 30 }),
   defineComposition({ id: 'timeline', schema, component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 90,
     audio: [
       { src: 'audio/clip-1.wav' },
@@ -2221,6 +2232,47 @@ describe('motion-kit CLI', () => {
       }
       expect(readdirSync(projectRoot).sort()).toEqual(before);
     }, 120_000);
+
+    it('reports Sequences as placed: before frame 0, past the end, and same-named siblings apart', async () => {
+      const result = await run([
+        'inspect',
+        'entry-inspect.tsx',
+        '--composition',
+        'edges',
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        command: 'inspect',
+        ok: true,
+        diagnostics: [],
+        data: {
+          composition: 'edges',
+          durationInFrames: 30,
+          sequences: [
+            {
+              name: 'early',
+              path: ['early'],
+              startFrame: -15,
+              endFrame: 15,
+              startSeconds: -0.5,
+              endSeconds: 0.5,
+            },
+            { name: 'twin', path: ['twin'], startFrame: 6, endFrame: 15 },
+            { name: 'twin', path: ['twin'], startFrame: 6, endFrame: 15 },
+            {
+              name: 'late',
+              path: ['late'],
+              startFrame: 60,
+              endFrame: 90,
+              startSeconds: 2,
+              endSeconds: 3,
+            },
+          ],
+        },
+      });
+    });
 
     it('reports a Composition with no Sequence or audio as empty lists', async () => {
       const result = await run(['inspect', 'entry-inspect.tsx', '--composition', 'bare', '--json']);

@@ -203,11 +203,15 @@ export const InspectDataSchema = z.strictObject({
       name: z.string(),
       /** Named ancestors outer to inner, ending with `name`; unnamed Sequences add no segment. */
       path: z.array(z.string()).min(1),
-      /** Frames the Sequence shows: `startFrame` inclusive, `endFrame` exclusive. Not clamped. */
-      startFrame: z.int().nonnegative(),
-      endFrame: z.int().nonnegative(),
-      startSeconds: z.number().nonnegative(),
-      endSeconds: z.number().nonnegative(),
+      /**
+       * Frames the Sequence shows: `startFrame` inclusive, `endFrame` exclusive, as it is placed.
+       * Not clamped to the Composition, so a Sequence that starts before frame 0 has a negative
+       * start (and negative seconds) and one that runs past the end has an end beyond it.
+       */
+      startFrame: z.int(),
+      endFrame: z.int(),
+      startSeconds: z.number(),
+      endSeconds: z.number(),
     }),
   ),
   /** The declared clips in declaration order, defaults applied and clipped to the Composition. */

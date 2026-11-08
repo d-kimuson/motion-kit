@@ -1110,15 +1110,30 @@ const buildEnvelope = (
   command: EnvelopeCommand | null,
   outcome: EnvelopeOutcome,
   durationMs: number,
-): Envelope =>
-  EnvelopeSchema.parse({
+): Envelope => {
+  const candidate = {
     schemaVersion: 1,
     command,
     ok: outcome.ok,
     data: outcome.data,
     diagnostics: [...outcome.diagnostics],
     durationMs,
+  };
+  const checked = EnvelopeSchema.safeParse(candidate);
+  if (checked.success) return checked.data;
+  // A command produced data its own contract rejects: a bug in the CLI, not in the caller's input.
+  // The caller is still owed one document, so it reports internal.unexpected and the issues go to
+  // stderr, like any other unexpected failure.
+  process.stderr.write(
+    `The ${command ?? 'command'} output broke the envelope contract:\n${checked.error.message}\n`,
+  );
+  return EnvelopeSchema.parse({
+    ...candidate,
+    ok: false,
+    data: null,
+    diagnostics: [internalUnexpected()],
   });
+};
 
 const exitCodeFor = (envelope: Envelope): number => {
   if (envelope.ok) return 0;

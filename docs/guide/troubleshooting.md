@@ -260,11 +260,11 @@ Props did not validate, or a requested frame is outside the Composition:
 
 ## `cli.*` — the command line itself
 
-| Code                        | Usual cause                                                                                                                                                                                                                                                                   |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli.entry-not-found`       | The `<entry>` path does not exist relative to the directory you ran the command in.                                                                                                                                                                                           |
-| `cli.composition-not-found` | `--composition` names an id the registry does not export; ids are case-sensitive.                                                                                                                                                                                             |
-| `cli.invalid-arguments`     | A missing required flag (`--out`, `--frame`), an unknown flag, `--props` that is not a JSON object string, `--concurrency` that is not a positive integer, the subcommand written after a flag, or a reserved subcommand (`inspect`, `validate`) that is not implemented yet. |
+| Code                        | Usual cause                                                                                                                                                                                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli.entry-not-found`       | The `<entry>` path does not exist relative to the directory you ran the command in.                                                                                                                                                                                  |
+| `cli.composition-not-found` | `--composition` names an id the registry does not export; ids are case-sensitive.                                                                                                                                                                                    |
+| `cli.invalid-arguments`     | A missing required flag (`--out`, `--frame`), an unknown flag, `--props` that is not a JSON object string, `--concurrency` that is not a positive integer, the subcommand written after a flag, or the reserved subcommand `validate`, which is not implemented yet. |
 
 The hint says which of those applies. Without `--json` the same text goes to stderr; the exit code is
 `2` either way.

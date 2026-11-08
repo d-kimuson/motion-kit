@@ -603,15 +603,23 @@ motion-kit inspect entry.tsx --composition promo --json
   `["intro", "title"]`. `startFrame` is the first frame it shows and `endFrame` the first frame after
   it, both on the Composition's timeline; the seconds come from the same Time Module as every other
   command. A `Sequence` with no name does not appear, though its named children do.
+- A Sequence is reported as placed, not clipped to the Composition: one written with `from={-0.5}`
+  has a negative `startFrame` and `startSeconds`, and one placed past the end has an `endFrame`
+  beyond `durationInFrames`. Intersect it with `[0, durationInFrames)` for the part a video shows.
+  A top-level Sequence is found wherever it is placed; a nested one is found when some frame shows
+  its parent. A Sequence that no frame mounts, for example inside a branch your props never take,
+  is not reported.
 - A Sequence that shows more than one range (for example a conditionally mounted child) is one entry
-  per range. Entries are ordered by start frame, then by path.
+  per range, and two siblings with the same name and frames are two entries. Entries are ordered by
+  start frame, then by path.
 - An audio entry holds the clip's effective values. `endInFrames` is the declared end clipped to the
   Composition. When the clip declares no end, `endDeclared` is `false` and the end is the
   Composition's, not the source file's: `inspect` reads the declaration and never opens the media.
-  A clip that starts at or after the Composition's end has an empty span.
+  Unlike a Sequence, an audio span is clipped to the Composition, because that is what the mix
+  contains; a clip that starts at or after the end has an empty span.
 - `inspect` observes every frame of the Composition, so its cost grows with the duration. It accepts
   `--concurrency` like `render`. A Sequence that is mounted only on some frames is still found.
-- It never fails because of what it finds. A failure is the Composition failing to load or to
+- It does not fail because of what it finds. A failure is the Composition failing to load or to
   settle, reported as an ordinary Diagnostic. Declaring markers of your own is not part of
   `inspect`.
 

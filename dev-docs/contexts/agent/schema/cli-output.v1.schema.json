@@ -1271,21 +1271,19 @@
                       },
                       "startFrame": {
                         "type": "integer",
-                        "minimum": 0,
+                        "minimum": -9007199254740991,
                         "maximum": 9007199254740991
                       },
                       "endFrame": {
                         "type": "integer",
-                        "minimum": 0,
+                        "minimum": -9007199254740991,
                         "maximum": 9007199254740991
                       },
                       "startSeconds": {
-                        "type": "number",
-                        "minimum": 0
+                        "type": "number"
                       },
                       "endSeconds": {
-                        "type": "number",
-                        "minimum": 0
+                        "type": "number"
                       }
                     },
                     "required": [
