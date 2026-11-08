@@ -20,7 +20,7 @@ export type CanvasTarget = Readonly<{
   context: () => CanvasGlContext;
   /** Live `useFrame` subscriber count, the input to `classifyCanvas`. */
   useFrameSubscribers: () => number;
-  /** Textures of visible materials whose upload did not happen, read after the frame rendered. */
+  /** Textures of materials of visible objects whose upload did not happen, after the adapter attempted it. */
   textureUploadFailures: () => readonly TextureUploadFailure[];
 }>;
 

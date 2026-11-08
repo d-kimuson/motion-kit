@@ -1,6 +1,6 @@
 import { type Material, type Object3D, type Texture } from 'three';
 
-/** Why a texture a visible material samples holds no image on the GPU. */
+/** Why a texture held by a material of a visible object holds no image on the GPU. */
 export type TextureUploadFailureReason =
   /** Marked for upload, but it has no image (three warns "no image data found"). */
   | 'no-image'
