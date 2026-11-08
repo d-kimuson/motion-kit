@@ -24,6 +24,7 @@ import packageJson from '../../package.json' with { type: 'json' };
 import { EnvelopeSchema, DocsTopicSchema, type Envelope } from '../agent/cli-output.ts';
 import { currentDate } from '../lib/clock.ts';
 import { runCli } from './cli.ts';
+import { commands } from './commands.ts';
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -3124,6 +3125,12 @@ export const compositions = defineCompositions([
     { argv: ['frame', '--json', '-h'] },
     { argv: ['docs', '--help', '--json'] },
     { argv: ['docs', '-h', '--json'] },
+    // Every implemented subcommand answers its own help. The list is the CLI's command table, so a
+    // new command is covered without touching this test.
+    ...Object.keys(commands).flatMap((command) => [
+      { argv: [command, '--help', '--json'] },
+      { argv: [command, '-h'] },
+    ]),
   ])('prints usage and exits 0 for $argv', async ({ argv }) => {
     const result = await run(argv, undefined, { envelope: false });
     expect(result.code).toBe(0);
