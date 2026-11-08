@@ -160,21 +160,32 @@ These render, but they are Tier C or unsupported, so do not claim determinism fo
 | `WebGPURenderer`                                                                                 | a canvas takes renderer parameters, not a renderer factory                  | WebGL, which is also what the capture fences |
 | WebXR                                                                                            | no presentation clock motion-kit controls                                   | —                                            |
 | recovering a lost WebGL context                                                                  | no restored frame is qualified                                              | restart the render                           |
-| a texture upload that fails (a corrupt image, a decode error)                                    | three reports an upload failure nowhere a canvas can observe                | fix the source; nothing fails the frame      |
 
 ## Failures that are reported rather than published
 
-A frame is never captured when the canvas could not draw it and three reports the failure:
+A frame is never captured when the canvas could not draw it and three, or the canvas, can tell. Each
+failure is `render.page-error` and carries the Composition id, the output frame and its time in
+`location`, so it names the frame that failed:
 
-- A shader program that does not compile or link fails the frame with `render.page-error` instead of
-  publishing a scene with the material missing, and every later frame fails with it. The Diagnostic
-  message is generic: the page console gets a reprint of the program and shader info logs, without
-  the material name, so it does not say which of several shader materials failed.
-- A lost WebGL context fails the frame the same way, with `render.page-error`.
+- A shader program that does not compile or link fails the frame instead of publishing a scene with
+  the material missing, and every later frame fails with it. The Diagnostic message is generic: the
+  page console gets a reprint of the program and shader info logs, without the material name, so it
+  does not say which of several shader materials failed.
+- A lost WebGL context fails the frame the same way.
+- A texture that was not uploaded fails the frame, naming the texture, the material property
+  (`map`, or `uniforms.<name>` on a `ShaderMaterial`), the object and the reason in `details.textures`.
+  The reasons are `no-image` (marked for update without an image), `image-incomplete` (marked for
+  update while its image was still loading), `not-uploaded` and `empty-image` (uploaded, but the image
+  has no pixels, which is what a source that failed to decode looks like). Set `name` on a texture so
+  the Diagnostic can say which one. Load images with `useLoader` or `useTexture`: they suspend, so the
+  canvas waits for the image, and a loader error fails the frame as a Composition error.
 
-A texture upload that fails is the gap in that rule: three reports it nowhere a canvas can observe,
-so the frame is not guaranteed to fail and the case is excluded rather than claimed (see the
-[qualification ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md)).
+The texture check looks at the textures of visible objects' materials, including `ShaderMaterial`
+uniforms. It does not see an upload three accepts and the GPU rejects, such as a `DataTexture` whose
+data is shorter than its size or larger than the GPU's maximum texture size; those still render an
+empty texture without a Diagnostic. The
+[qualification ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/three/adr/20261031-three-advanced-qualification.accepted.md)
+records the decision.
 
 ## Software rendering
 

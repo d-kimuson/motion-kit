@@ -28,15 +28,34 @@ replaces the report can reprint the program and shader info logs and nothing mor
 Confirmed by: `three/src/renderers/webgl/WebGLProgram.js` (0.186) and the page console of
 `src/three/canvas-failure.browser.test.tsx`.
 
-## Nothing fails a frame for a failed texture upload
+## three reports a failed texture upload only on the console, but records what it uploaded
 
 `WebGLTextures` warns about some upload problems through the console (`Texture marked for update but
-no image data found.`, `... but image is incomplete`, an unsupported compressed format) and never
-checks `gl.getError()` after an upload, and `renderer.debug` has no upload callback. A failed upload
-therefore reaches neither the page's `console.error` path the shader check uses nor the canvas
-settlement; the material renders with an incomplete texture.
+no image data found.`, `... but image is incomplete`, an unsupported compressed format, `Image in
+DataTexture is too big`) and never checks `gl.getError()` after an upload, and `renderer.debug` has
+no upload callback. Nothing reaches the page's `console.error` path the shader check uses; the
+material renders with an empty texture. What does persist is `renderer.properties.get(texture).__version`
+(three-internal, typed `unknown`): `uploadTexture` sets it to `texture.version` after a successful call,
+and `setTexture2D` skips `uploadTexture` when `texture.image` is `null` or `image.complete === false`, so
+a texture with `version > 0` whose record differs was never uploaded. An object that is not visible
+(or culled) never reaches `setTexture2D`, so its textures have no record either.
 
-Confirmed by: reading the 0.186 `WebGLTextures` source; no test claims it.
+Observed in the `three-dom` project (SwiftShader), after `settle`:
+
+| Texture                                      | recorded `__version` | console warning                   | `gl.getError()`     |
+| -------------------------------------------- | -------------------- | --------------------------------- | ------------------- |
+| `new Texture()` marked for update (no image) | missing              | `no image data found`             | `NO_ERROR`          |
+| `HTMLImageElement` that failed to load (404) | equal (uploaded)     | none; image is `complete`, 0x0    | `INVALID_VALUE`     |
+| `DataTexture` 4x4 with 4 bytes of data       | equal                | none                              | `INVALID_OPERATION` |
+| `DataTexture` 1000000x1                      | equal                | `Image in DataTexture is too big` | `INVALID_VALUE`     |
+| `DataTexture` 2x2 with 16 bytes (valid)      | equal                | none                              | `NO_ERROR`          |
+
+A `useLoader(TextureLoader, url)` with a 404 does not reach the renderer: the loader throws and the
+Composition's error boundary fails the frame.
+
+Confirmed by: reading the 0.186 `WebGLTextures` source, and
+`src/three/canvas-failure.browser.test.tsx` ("texture upload failure") for the first two rows and the
+valid one; the GL-error columns come from a probe that is not kept as a test.
 
 ## `PCFSoftShadowMap` was removed
 

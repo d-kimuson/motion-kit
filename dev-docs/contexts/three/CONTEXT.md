@@ -25,6 +25,8 @@
 - An `AnimationMixer` is Tier B when the scene calls `mixer.setTime` from `useTime()`, and Tier C when a `useFrame` callback integrates `mixer.update(delta)`.
 - Shadows are Tier B with the canvas's own shadow map, which stays enabled with `shadowMap.autoUpdate` at its default: every advance re-renders it.
 - A shader program that fails to compile or link fails the frame as `render.page-error`, and every later frame of that canvas with it. A canvas never publishes a frame whose program three could not link.
+- A texture of a visible material that was marked for upload and never uploaded, or uploaded with no pixels, fails the frame as `render.page-error` naming the texture. The check reads three's record of uploads (`renderer.properties`) after the render, not its console warnings; it is not latched, because the record keeps failing until the texture is fixed.
+- Every Diagnostic the canvas returns (lost context, shader program, texture upload) carries `location` with the `compositionId`, the `frame` and the `timeSeconds` of the frame it fails.
 - The canvas owns `renderer.debug.onShaderError` and `preserveDrawingBuffer`; both exist to make a frame observable rather than silently wrong or empty.
 - The tier is read through `IntegrationRegistration['seekability']` as a getter, evaluated when a host asks for warnings, not when the integration registers.
 - A lost WebGL context fails the frame as `render.page-error`; recovery is excluded, so no frame rendered after a restored context is qualified.

@@ -117,6 +117,15 @@ type Request = {
   boundaryFailures?: Diagnostic[];
 };
 
+/** The location every Diagnostic about one frame request carries: its Composition, output frame
+ * and presentation time. An integration that fails a frame uses it too, so a host reads the same
+ * location from every Diagnostic of that frame. */
+export const frameLocation = (compositionId: string, snapshot: FrameSnapshot): Location => ({
+  compositionId,
+  frame: snapshot.globalFrame,
+  timeSeconds: toSeconds(snapshot.presentationTime),
+});
+
 const failed = (
   message: string,
   code: 'render.page-error' | 'render.frame-timeout' = 'render.page-error',
@@ -188,11 +197,8 @@ export const createCompositionRuntime = (options: CompositionRuntimeOptions) => 
     signalChange();
   };
   notifyAssetChange = changed;
-  const locationFor = (request: Request): Location => ({
-    compositionId: definition.descriptor.id,
-    frame: request.snapshot.globalFrame,
-    timeSeconds: toSeconds(request.snapshot.presentationTime),
-  });
+  const locationFor = (request: Request): Location =>
+    frameLocation(definition.descriptor.id, request.snapshot);
   const currentPending = (): PendingAsset[] => [
     ...registry.pending(),
     ...[...integrations.values()].flatMap((entry) => [...(entry.pendingAssets?.() ?? [])]),

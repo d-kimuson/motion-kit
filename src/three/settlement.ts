@@ -1,7 +1,8 @@
-import { type FrameSnapshot } from '../core/runtime/composition-runtime.ts';
+import { frameLocation, type FrameSnapshot } from '../core/runtime/composition-runtime.ts';
 import { toSeconds } from '../core/timeline/time.ts';
-import { type Diagnostic } from '../lib/diagnostic.ts';
+import { type Diagnostic, type Location } from '../lib/diagnostic.ts';
 import { type Result } from '../lib/result.ts';
+import { type TextureUploadFailure } from './texture-upload.ts';
 
 /** The parts of the WebGL context settlement fences and checks. */
 export type CanvasGlContext = Readonly<{
@@ -19,23 +20,60 @@ export type CanvasTarget = Readonly<{
   context: () => CanvasGlContext;
   /** Live `useFrame` subscriber count, the input to `classifyCanvas`. */
   useFrameSubscribers: () => number;
+  /** Textures of visible materials whose upload did not happen, read after the frame rendered. */
+  textureUploadFailures: () => readonly TextureUploadFailure[];
 }>;
 
-const contextLost = (): Diagnostic => ({
+const contextLost = (location: Location): Diagnostic => ({
   code: 'render.page-error',
   severity: 'error',
   message: 'The WebGL context was lost while settling the frame.',
   hint: 'Restart the renderer; frames rendered after a lost context are not qualified.',
+  location,
 });
 
 /** A program that does not compile or link is silently skipped by the renderer, so the frame it
  * produced is wrong without being reported anywhere else. It is sticky: three only checks the
- * program on first use, and a frame after that first frame would otherwise be believed. */
-const shaderFailed = (): Diagnostic => ({
+ * program on first use, and a frame after that first frame would otherwise be believed. The
+ * location is the frame being failed, not the frame whose render first hit the program. */
+const shaderFailed = (location: Location): Diagnostic => ({
   code: 'render.page-error',
   severity: 'error',
   message: 'A shader program failed to compile or link while settling the frame.',
   hint: 'Fix the shader material; a program that does not link renders nothing, so the frame cannot be captured.',
+  location,
+});
+
+const describeTexture = (failure: TextureUploadFailure): string => {
+  const name = failure.texture === '' ? 'unnamed texture' : `texture "${failure.texture}"`;
+  const owner =
+    failure.object === '' ? failure.material : `"${failure.object}" (${failure.material})`;
+  return `${name} in ${failure.slot} of ${owner}`;
+};
+
+/** three warns about a failed upload on the console and renders the material with an empty
+ * texture, so the frame is wrong without being reported anywhere else. */
+const textureNotUploaded = (
+  failures: readonly [TextureUploadFailure, ...TextureUploadFailure[]],
+  location: Location,
+): Diagnostic => ({
+  code: 'render.page-error',
+  severity: 'error',
+  message:
+    failures.length === 1
+      ? `A texture was not uploaded while settling the frame: ${describeTexture(failures[0])}.`
+      : `${failures.length} textures were not uploaded while settling the frame, the first being ${describeTexture(failures[0])}.`,
+  hint: 'Load the image before the canvas renders it (useLoader or useTexture suspend until it is ready) and fix a source that cannot be decoded; a texture that was not uploaded renders empty, so the frame cannot be captured.',
+  location,
+  details: {
+    textures: failures.map((failure) => ({
+      texture: failure.texture,
+      slot: failure.slot,
+      object: failure.object,
+      material: failure.material,
+      reason: failure.reason,
+    })),
+  },
 });
 
 const settled = { ok: true, value: undefined } as const;
@@ -56,10 +94,10 @@ export type CanvasSettlement = Readonly<{
   settle: (snapshot: FrameSnapshot, signal: AbortSignal) => Promise<Result<undefined>>;
 }>;
 
-export const createCanvasSettlement = (): CanvasSettlement => {
+export const createCanvasSettlement = (compositionId: string): CanvasSettlement => {
   let target: CanvasTarget | undefined;
   let generation: number | undefined;
-  let shaderFailure: Diagnostic | undefined;
+  let shaderLatched = false;
   const listeners = new Set<() => void>();
   const announce = () => {
     for (const listener of listeners) listener();
@@ -84,8 +122,13 @@ export const createCanvasSettlement = (): CanvasSettlement => {
     current.advance(toSeconds(snapshot.presentationTime));
     const context = current.context();
     context.finish();
-    if (context.isContextLost()) return { ok: false, error: contextLost() };
-    return shaderFailure === undefined ? settled : { ok: false, error: shaderFailure };
+    const location = frameLocation(compositionId, snapshot);
+    if (context.isContextLost()) return { ok: false, error: contextLost(location) };
+    if (shaderLatched) return { ok: false, error: shaderFailed(location) };
+    const [first, ...rest] = current.textureUploadFailures();
+    return first === undefined
+      ? settled
+      : { ok: false, error: textureNotUploaded([first, ...rest], location) };
   };
   return Object.freeze({
     target: () => target,
@@ -99,7 +142,7 @@ export const createCanvasSettlement = (): CanvasSettlement => {
       announce();
     },
     reportShaderError: () => {
-      shaderFailure ??= shaderFailed();
+      shaderLatched = true;
     },
     when,
     // Aborting resolves with ok: the runtime has already terminated the request and only
