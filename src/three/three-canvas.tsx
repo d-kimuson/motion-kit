@@ -13,6 +13,7 @@ import { type WebGLRendererParameters } from 'three';
 import { useCompositionFrame, useCompositionRuntime } from '../core/composition/composition.tsx';
 import { classifyCanvas } from './seekability.ts';
 import { createCanvasSettlement, type CanvasTarget } from './settlement.ts';
+import { findTextureUploadFailures } from './texture-upload.ts';
 
 export type ThreeCanvasProps = Omit<CanvasProps, 'frameloop' | 'gl' | 'dpr'> & {
   /** WebGLRenderer parameters. `preserveDrawingBuffer` is forced to true: the capture reads
@@ -45,6 +46,21 @@ const adapter = (state: RootState): CanvasTarget => ({
   advance: (seconds: number) => state.advance(seconds, false),
   context: () => state.gl.getContext(),
   useFrameSubscribers: () => state.get().internal.subscribers.length,
+  textureUploadFailures: () => {
+    const { gl: renderer, scene } = state.get();
+    return findTextureUploadFailures(scene, (texture) => {
+      // three uploads a texture only when a draw samples it. Attempting it here makes the verdict
+      // independent of the draws (a culled object, an unread uniform) and of the frames before.
+      renderer.initTexture(texture);
+      // three's record of what it uploaded; it is typed `unknown` because it is internal.
+      const recorded: unknown = renderer.properties.get(texture);
+      const version =
+        typeof recorded === 'object' && recorded !== null && '__version' in recorded
+          ? recorded.__version
+          : undefined;
+      return typeof version === 'number' ? version : undefined;
+    });
+  },
 });
 
 /** three reports a failed program only through `debug.onShaderError`, and assigning that callback
@@ -76,7 +92,8 @@ export const ThreeCanvas = ({
   ...canvasProps
 }: ThreeCanvasProps): ReactElement => {
   const runtime = useCompositionRuntime();
-  const [settlement] = useState(createCanvasSettlement);
+  const compositionId = runtime.definition.descriptor.id;
+  const [settlement] = useState(() => createCanvasSettlement(compositionId));
   const integrationId = `three-canvas:${useId()}`;
   const reportGeneration = useCallback(
     (generation: number) => settlement.reportGeneration(generation),
