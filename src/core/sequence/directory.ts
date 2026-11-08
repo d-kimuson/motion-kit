@@ -46,6 +46,10 @@ const comparePath = (a: readonly string[], b: readonly string[]): number => {
   return 0;
 };
 
+/** The order spans are reported in: start frame, then path (outer first), then end frame. */
+export const compareSequenceSpans = (a: SequenceSpan, b: SequenceSpan): number =>
+  a.startFrame - b.startFrame || comparePath(a.path, b.path) || a.endFrame - b.endFrame;
+
 /**
  * Frame f shows the Sequence when start <= f / fps < end, so both endpoints round up through the
  * Time Module. Spans are not clamped to the Composition duration, matching Sequence placement.
@@ -62,10 +66,7 @@ export const sequenceSpans = (
     }))
     // A total order on the reported values, so registration (effect) order never shows. Siblings
     // may share a name; spans equal in every field are indistinguishable.
-    .sort(
-      (a, b) =>
-        a.startFrame - b.startFrame || comparePath(a.path, b.path) || a.endFrame - b.endFrame,
-    );
+    .sort(compareSequenceSpans);
 
 /** Named Sequences showing at a frame, outer before inner, in `sequenceSpans` order. */
 export const activeSequences = (

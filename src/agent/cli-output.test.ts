@@ -6,6 +6,7 @@ import {
   EnvelopeCommandSchema,
   EnvelopeSchema,
   FrameDataSchema,
+  InspectDataSchema,
   RenderDataSchema,
   type Envelope,
 } from '@kimuson/motion-kit/agent';
@@ -76,6 +77,38 @@ const contactSheetData = {
   frames: [
     { frame: 0, timeSeconds: 0, column: 0, row: 0 },
     { frame: 150, timeSeconds: 5, column: 1, row: 0 },
+  ],
+};
+const inspectData = {
+  format: 'inspect',
+  composition: 'intro',
+  width: 64,
+  height: 64,
+  fps: { numerator: 30, denominator: 1 },
+  durationInFrames: 90,
+  durationSeconds: 3,
+  sequences: [
+    { name: 'title', path: ['title'], startFrame: 0, endFrame: 30, startSeconds: 0, endSeconds: 1 },
+    {
+      name: 'subtitle',
+      path: ['title', 'subtitle'],
+      startFrame: 10,
+      endFrame: 30,
+      startSeconds: 1 / 3,
+      endSeconds: 1,
+    },
+  ],
+  audio: [
+    {
+      src: 'music.wav',
+      startInFrames: 15,
+      endInFrames: 90,
+      startSeconds: 0.5,
+      endSeconds: 3,
+      endDeclared: false,
+      offsetInFrames: 0,
+      volume: 1,
+    },
   ],
 };
 const docsData = {
@@ -168,7 +201,7 @@ describe('CLI output v1', () => {
     ['docs', docsData],
     ['docs', docsList],
     ['check', checkData],
-    ['inspect', {}],
+    ['inspect', inspectData],
     ['validate', { future: ['data'] }],
   ])('accepts the %s command data', (command, data) => {
     const payload = { ...base, command, data };
@@ -197,6 +230,7 @@ describe('CLI output v1', () => {
     expect(DocsDataSchema.parse(docsList)).toEqual(docsList);
     expect(CheckDataSchema.parse(checkData)).toEqual(checkData);
     expect(ContactSheetDataSchema.parse(contactSheetData)).toEqual(contactSheetData);
+    expect(InspectDataSchema.parse(inspectData)).toEqual(inspectData);
   });
 
   it('requires ok to agree with every generated diagnostic list', () => {
@@ -243,6 +277,14 @@ describe('CLI output v1', () => {
     { ...base, data: frameData },
     { ...base, command: 'frame' },
     { ...base, command: 'inspect', data: [] },
+    { ...base, command: 'inspect', data: {} },
+    { ...base, command: 'inspect', data: { ...inspectData, sequences: [{ name: 'a' }] } },
+    { ...base, command: 'inspect', data: { ...inspectData, extra: true } },
+    {
+      ...base,
+      command: 'inspect',
+      data: { ...inspectData, audio: [{ ...inspectData.audio[0], volume: -1 }] },
+    },
     { ...base, command: 'contact-sheet' },
     { ...base, command: 'contact-sheet', data: { ...contactSheetData, frames: [], width: 0 } },
     { ...base, command: 'contact-sheet', data: { ...contactSheetData, columns: 0 } },

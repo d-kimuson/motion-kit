@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createAssetRegistry } from '../../core/assets/registry.ts';
 import { type CaptureLease, type Ownership } from '../../lib/frame-protocol.ts';
-import { createFrameJob, pngCapture } from './frame.ts';
+import { createFrameJob, observeCapture, pngCapture, type CaptureFormat } from './frame.ts';
 import { type FrameTransport } from './transport.ts';
 
 const lease: CaptureLease = {
@@ -17,13 +17,13 @@ const lease: CaptureLease = {
   resourceVersions: [],
 };
 const ownership: Ownership = { ...lease, source: 'renderer', requestId: 'request' };
-const make = (frameTimeoutMs = 100, queueTimeoutMs = 1000) => {
+const make = (frameTimeoutMs = 100, queueTimeoutMs = 1000, format: CaptureFormat = pngCapture) => {
   const controller = new AbortController();
   const dispose = vi.fn(async () => {});
   const job = createFrameJob({
     requestId: 'request',
     frame: 2,
-    format: pngCapture,
+    format,
     receipt: {
       instance: 'instance',
       revision: 'revision',
@@ -50,12 +50,40 @@ const make = (frameTimeoutMs = 100, queueTimeoutMs = 1000) => {
     resettle: vi.fn<FrameTransport['resettle']>().mockResolvedValue({ status: 'ready', lease }),
     capture: vi.fn<FrameTransport['capture']>().mockResolvedValue(Buffer.from('frame')),
     pendingAssets: vi.fn<FrameTransport['pendingAssets']>().mockResolvedValue([]),
+    sequences: vi.fn<FrameTransport['sequences']>().mockResolvedValue([]),
     warnings: vi.fn<FrameTransport['warnings']>().mockResolvedValue([]),
   };
   return { job, driver, dispose, controller };
 };
 afterEach(() => vi.useRealTimers());
 describe('host frame lease', () => {
+  it('observes a frame under the same lease without taking a screenshot', async () => {
+    const { job, driver } = make(100, 1000, observeCapture);
+    const spans = [{ path: ['intro'], startFrame: 0, endFrame: 4 }];
+    driver.sequences = vi.fn<FrameTransport['sequences']>().mockResolvedValue(spans);
+    const result = await job.run(driver);
+    expect(result).toMatchObject({
+      ok: true,
+      value: { frame: 2, format: 'none', sequences: spans },
+    });
+    if (!result.ok || 'aborted' in result) throw new Error('expected an observed frame');
+    expect(result.value.image.length).toBe(0);
+    expect(driver.capture).not.toHaveBeenCalled();
+    expect(driver.validate).toHaveBeenCalledOnce();
+    expect(driver.complete).toHaveBeenCalledOnce();
+    expect(vi.mocked(driver.complete).mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(driver.sequences).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('reads no Sequences when it captures a picture', async () => {
+    const { job, driver } = make();
+    const result = await job.run(driver);
+    expect(result).toMatchObject({ ok: true, value: { format: 'png' } });
+    expect(result).not.toHaveProperty('value.sequences');
+    expect(driver.sequences).not.toHaveBeenCalled();
+  });
+
   it('awaits readiness and validates both sides of dimensioned capture', async () => {
     const { job, driver } = make();
     const ready = Promise.withResolvers<void>();

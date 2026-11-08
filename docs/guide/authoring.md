@@ -418,7 +418,7 @@ bootstrap's own API: an entry never renders `Composition` itself.
 
 `Animate`, `Reveal` and `Stagger` — the components that apply values to a wrapper element, which
 `/motion` does not ship; `defineTheme` and tokens (`/theme`); the scene presets (`/presets`);
-`inspect` and `validate`. Until those land, a component writes its own motion over the
+`validate`. Until those land, a component writes its own motion over the
 [motion values](#motion-values), which is what the [reference examples](examples.md) do.
 
 ## Related

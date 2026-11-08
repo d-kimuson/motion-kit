@@ -2,25 +2,35 @@ import { assetNotReadyDiagnostic } from '../../core/assets/diagnostics.ts';
 import { createFrameRate, frameToTime, toSeconds } from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { type Ownership } from '../../lib/frame-protocol.ts';
-import { type MountReceipt } from '../../lib/loading-protocol.ts';
+import { type MountReceipt, type SequenceSpan } from '../../lib/loading-protocol.ts';
 import { pageErrorDiagnostic } from './page-error.ts';
 import { type FrameTransport } from './transport.ts';
 
 /** How a captured frame's pixels are encoded. PNG is lossless and is the identity the determinism
  * suite compares; JPEG is for video, whose encoder discards more than a high-quality JPEG does.
- * `quality` is an integer from 0 to 100.
+ * `quality` is an integer from 0 to 100. `none` is an observation: the frame is settled and
+ * committed like any other but no screenshot is taken, and the result carries the page's named
+ * Sequences instead of an image (agent ADR: inspect).
  */
 export type CaptureFormat =
   | { readonly type: 'png' }
-  | { readonly type: 'jpeg'; readonly quality: number };
+  | { readonly type: 'jpeg'; readonly quality: number }
+  | { readonly type: 'none' };
+/** The encodings of an image; `none` is the observation that takes no picture. */
+export type ImageCapture = Exclude<CaptureFormat, { readonly type: 'none' }>;
+export type ImageFormat = ImageCapture['type'];
 export const pngCapture: CaptureFormat = { type: 'png' };
+export const observeCapture: CaptureFormat = { type: 'none' };
 export type RenderedFrame = Readonly<{
   frame: number;
   width: number;
   height: number;
   /** The encoding of `image`, as requested by the capture. */
   format: CaptureFormat['type'];
+  /** The encoded picture; empty for an observation (`format: 'none'`). */
   image: Buffer;
+  /** The named Sequences mounted at this frame; read only by an observation, absent otherwise. */
+  sequences?: readonly SequenceSpan[];
   diagnostics: readonly Diagnostic[];
 }>;
 /** Failure carries every diagnostic. Codes are not dropped or merged. */
@@ -202,11 +212,14 @@ export const createFrameJob = (options: {
             }
             const diagnostics = await driver.warnings();
             if (expired()) return;
-            const image = await driver.capture(
-              receipt.descriptor.width,
-              receipt.descriptor.height,
-              options.format,
-            );
+            // An observation reads the Sequences the committed frame mounted instead of taking a
+            // picture; it sits where the capture does, while the lease is still held.
+            const { format } = options;
+            const image =
+              format.type === 'none'
+                ? Buffer.alloc(0)
+                : await driver.capture(receipt.descriptor.width, receipt.descriptor.height, format);
+            const sequences = format.type === 'none' ? await driver.sequences() : undefined;
             if (expired()) return;
             const completion = await driver.complete(lease);
             if (expired()) return;
@@ -230,6 +243,7 @@ export const createFrameJob = (options: {
                 height: receipt.descriptor.height,
                 format: options.format.type,
                 image,
+                ...(sequences === undefined ? {} : { sequences }),
                 diagnostics: diagnostics.map((item) => ({
                   ...item,
                   location: { ...item.location, ...location },

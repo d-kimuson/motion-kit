@@ -17,6 +17,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import committedSchema from '../../dev-docs/contexts/agent/schema/cli-output.v1.schema.json' with { type: 'json' };
@@ -125,6 +126,41 @@ export const compositions = defineCompositions([
   defineComposition({ id: 'audio-missing', schema, component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 6,
     audio: [{ src: 'audio/absent.wav' }] }),
   defineComposition({ id: 'silent', schema, component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 6 }),
+]);`,
+  );
+  // A 3 s Composition at 30 fps with nested named Sequences (an unnamed one adds no path segment)
+  // and three clips, one of them running past the end, for `inspect`.
+  writeFileSync(
+    join(projectRoot, 'entry-inspect.tsx'),
+    `import { z } from 'zod';
+import { defineComposition, defineCompositions } from ${JSON.stringify(
+      new URL('../core/composition/registry.ts', import.meta.url).pathname,
+    )};
+import { Sequence } from ${JSON.stringify(
+      new URL('../core/sequence/sequence.tsx', import.meta.url).pathname,
+    )};
+const Scene = () => (
+  <div style={{ width: 32, height: 32, background: '#333333' }}>
+    <Sequence name="intro" from={0} duration={1}>
+      <Sequence name="title" from={0.2} duration={0.5}>
+        <Sequence name="glow" from={0.1} duration={0.2}><span>glow</span></Sequence>
+      </Sequence>
+    </Sequence>
+    <Sequence from={1} duration={1}>
+      <Sequence name="middle" from={0} duration={0.5}><span>middle</span></Sequence>
+    </Sequence>
+    <Sequence name="outro" from={2} duration={1}><span>outro</span></Sequence>
+  </div>
+);
+const schema = z.object({});
+export const compositions = defineCompositions([
+  defineComposition({ id: 'timeline', schema, component: Scene, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 90,
+    audio: [
+      { src: 'audio/clip-1.wav' },
+      { src: 'audio/clip-2.wav', startInFrames: 15, endInFrames: 45, offsetInFrames: 3, volume: 0.5 },
+      { src: 'audio/clip-1.wav', startInFrames: 80, endInFrames: 200 },
+    ] }),
+  defineComposition({ id: 'bare', schema, component: () => <div />, width: 32, height: 32, fps: { numerator: 30, denominator: 1 }, durationInFrames: 4 }),
 ]);`,
   );
   // Two stationary tones, so a decoded MP4's priming offset cannot change the mixed level.
@@ -248,6 +284,12 @@ const run = async (
       : undefined;
   return { code, envelope, stdout, stderr };
 };
+
+const hasScreenshot = (value: unknown): value is { screenshot: () => Promise<Buffer> } =>
+  typeof value === 'object' &&
+  value !== null &&
+  'screenshot' in value &&
+  typeof value.screenshot === 'function';
 
 const assertValidEnvelope = (result: RunResult): Envelope => {
   const envelope = result.envelope;
@@ -2028,6 +2070,197 @@ describe('motion-kit CLI', () => {
     expect(probed).toContain('duration=0.200200');
   }, 120_000);
 
+  describe('inspect', () => {
+    const timeline = {
+      format: 'inspect',
+      composition: 'timeline',
+      width: 32,
+      height: 32,
+      fps: { numerator: 30, denominator: 1 },
+      durationInFrames: 90,
+      durationSeconds: 3,
+      // By start frame, then path outer first. The unnamed Sequence adds no segment to `middle`.
+      sequences: [
+        {
+          name: 'intro',
+          path: ['intro'],
+          startFrame: 0,
+          endFrame: 30,
+          startSeconds: 0,
+          endSeconds: 1,
+        },
+        {
+          name: 'title',
+          path: ['intro', 'title'],
+          startFrame: 6,
+          endFrame: 21,
+          startSeconds: 0.2,
+          endSeconds: 0.7,
+        },
+        {
+          name: 'glow',
+          path: ['intro', 'title', 'glow'],
+          startFrame: 9,
+          endFrame: 15,
+          startSeconds: 0.3,
+          endSeconds: 0.5,
+        },
+        {
+          name: 'middle',
+          path: ['middle'],
+          startFrame: 30,
+          endFrame: 45,
+          startSeconds: 1,
+          endSeconds: 1.5,
+        },
+        {
+          name: 'outro',
+          path: ['outro'],
+          startFrame: 60,
+          endFrame: 90,
+          startSeconds: 2,
+          endSeconds: 3,
+        },
+      ],
+      audio: [
+        {
+          src: 'audio/clip-1.wav',
+          startInFrames: 0,
+          endInFrames: 90,
+          startSeconds: 0,
+          endSeconds: 3,
+          endDeclared: false,
+          offsetInFrames: 0,
+          volume: 1,
+        },
+        {
+          src: 'audio/clip-2.wav',
+          startInFrames: 15,
+          endInFrames: 45,
+          startSeconds: 0.5,
+          endSeconds: 1.5,
+          endDeclared: true,
+          offsetInFrames: 3,
+          volume: 0.5,
+        },
+        {
+          src: 'audio/clip-1.wav',
+          startInFrames: 80,
+          endInFrames: 90,
+          startSeconds: 80 / 30,
+          endSeconds: 3,
+          endDeclared: true,
+          offsetInFrames: 0,
+          volume: 1,
+        },
+      ],
+    };
+
+    it('prints the named Sequences and the audio clips as one JSON timeline', async () => {
+      const result = await run([
+        'inspect',
+        'entry-inspect.tsx',
+        '--composition',
+        'timeline',
+        '--json',
+      ]);
+      expect(result.code).toBe(0);
+      const envelope = assertValidEnvelope(result);
+      expect(envelope).toMatchObject({
+        schemaVersion: 1,
+        command: 'inspect',
+        ok: true,
+        diagnostics: [],
+        data: timeline,
+      });
+      expect(result.stdout.trim().split('\n')).toHaveLength(1);
+    });
+
+    it('captures no frame and writes nothing', async () => {
+      const before = readdirSync(projectRoot).sort();
+      // The page class every renderer drives; its `screenshot` is the only way a frame is captured.
+      const browser = await chromium.launch();
+      const probe = await browser.newPage();
+      const pageClass: unknown = Object.getPrototypeOf(probe);
+      await browser.close();
+      if (!hasScreenshot(pageClass)) throw new Error('the page class has no screenshot');
+      const screenshot = vi.spyOn(pageClass, 'screenshot');
+      try {
+        const result = await runDirect([
+          'inspect',
+          'entry-inspect.tsx',
+          '--project-root',
+          projectRoot,
+          '--composition',
+          'timeline',
+          '--concurrency',
+          '2',
+          '--json',
+        ]);
+        expect(result.code).toBe(0);
+        expect(assertValidEnvelope(result)).toMatchObject({ ok: true, data: timeline });
+        expect(screenshot).not.toHaveBeenCalled();
+        // The control: the same spy sees the screenshot a real capture takes, so silence means none.
+        const captured = await runDirect([
+          'frame',
+          'entry-inspect.tsx',
+          '--project-root',
+          projectRoot,
+          '--composition',
+          'timeline',
+          '--frame',
+          '0',
+          '--out',
+          join(outputRoot, 'inspect-control.png'),
+          '--json',
+        ]);
+        expect(captured.code).toBe(0);
+        expect(screenshot).toHaveBeenCalled();
+      } finally {
+        screenshot.mockRestore();
+      }
+      expect(readdirSync(projectRoot).sort()).toEqual(before);
+    }, 120_000);
+
+    it('reports a Composition with no Sequence or audio as empty lists', async () => {
+      const result = await run(['inspect', 'entry-inspect.tsx', '--composition', 'bare', '--json']);
+      expect(result.code).toBe(0);
+      expect(assertValidEnvelope(result)).toMatchObject({
+        ok: true,
+        data: { composition: 'bare', durationInFrames: 4, sequences: [], audio: [] },
+      });
+    });
+
+    it('prints a one-line summary without --json', async () => {
+      const result = await run(['inspect', 'entry-inspect.tsx', '--composition', 'timeline']);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toMatch(
+        /^found 5 named sequences and 3 audio clips in timeline \(90 frames, 3\.000s\) in [\d.]+ms\n$/u,
+      );
+    });
+
+    it('exits 2 with cli.entry-not-found for a missing entry', async () => {
+      const result = await run(['inspect', 'absent.tsx', '--json']);
+      expect(result.code).toBe(2);
+      expect(assertValidEnvelope(result)).toMatchObject({
+        command: 'inspect',
+        ok: false,
+        data: null,
+        diagnostics: [{ code: 'cli.entry-not-found' }],
+      });
+    });
+
+    it('exits 2 for an invalid --concurrency', async () => {
+      const result = await run(['inspect', 'entry-inspect.tsx', '--concurrency', '0', '--json']);
+      expect(result.code).toBe(2);
+      expect(assertValidEnvelope(result)).toMatchObject({
+        command: 'inspect',
+        ok: false,
+        diagnostics: [{ code: 'cli.invalid-arguments' }],
+      });
+    });
+  });
+
   describe('render --out *.wav', () => {
     it('mixes the declared audio into a WAV without capturing a frame', async () => {
       const output = join(outputRoot, 'audio.wav');
@@ -3162,16 +3395,10 @@ export const compositions = defineCompositions([
       hint: 'Pass one of the known subcommands: render, frame, contact-sheet, docs, check, preview, inspect, validate.',
     },
     {
-      argv: ['inspect', '--json'],
-      command: 'inspect',
-      message: 'The inspect subcommand is not implemented yet.',
-      hint: 'inspect is not implemented yet; use render, frame, contact-sheet, docs, check or preview.',
-    },
-    {
       argv: ['validate', '--json'],
       command: 'validate',
       message: 'The validate subcommand is not implemented yet.',
-      hint: 'validate is not implemented yet; use render, frame, contact-sheet, docs, check or preview.',
+      hint: 'validate is not implemented yet; use render, frame, contact-sheet, docs, check, inspect or preview.',
     },
     {
       argv: ['render', '--bogus', '--json'],

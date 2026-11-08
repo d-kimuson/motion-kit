@@ -132,7 +132,7 @@ describe('resolveCommand', () => {
     { argv: ['--json'] },
     { argv: ['unknown', '--json'] },
     { argv: ['docs', '--json'] },
-    { argv: ['inspect', '--json'] },
+    { argv: ['validate', '--json'] },
     { argv: ['--out', '/tmp/a.png', 'render', 'entry.tsx', '--json'] },
   ])('produces an envelope both validators accept for $argv', ({ argv }) => {
     const envelope = invocationEnvelope(argv);

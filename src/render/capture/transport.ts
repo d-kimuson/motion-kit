@@ -10,7 +10,8 @@ import {
   type CaptureLease,
   type PendingAsset,
 } from '../../lib/frame-protocol.ts';
-import { type CaptureFormat } from './frame.ts';
+import { sequenceSpanSchema, type SequenceSpan } from '../../lib/loading-protocol.ts';
+import { type ImageCapture } from './frame.ts';
 
 /** Internal driver seam. Every remote value is checked before host use. */
 export type FrameTransport = {
@@ -18,8 +19,10 @@ export type FrameTransport = {
   resettle: (lease: CaptureLease) => Promise<z.infer<typeof frameOutcomeSchema>>;
   validate: (lease: CaptureLease) => Promise<z.infer<typeof captureValidationSchema>>;
   complete: (lease: CaptureLease) => Promise<z.infer<typeof captureCompletionSchema>>;
-  capture: (width: number, height: number, format: CaptureFormat) => Promise<Buffer>;
+  capture: (width: number, height: number, format: ImageCapture) => Promise<Buffer>;
   pendingAssets: (requestId: string) => Promise<PendingAsset[]>;
+  /** The named Sequences the page has mounted at the committed frame. */
+  sequences: () => Promise<SequenceSpan[]>;
   warnings: () => Promise<Diagnostic[]>;
 };
 export const pageTransport = (page: Page): FrameTransport => ({
@@ -56,6 +59,8 @@ export const pageTransport = (page: Page): FrameTransport => ({
     z
       .array(pendingAssetSchema)
       .parse(await page.evaluate((id) => window.__motionKit?.pendingAssets(id), requestId)),
+  sequences: async () =>
+    z.array(sequenceSpanSchema).parse(await page.evaluate(() => window.__motionKit?.sequences())),
   warnings: async () =>
     z.array(DiagnosticSchema).parse(await page.evaluate(() => window.__motionKit?.warnings())),
 });

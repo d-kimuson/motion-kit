@@ -9,7 +9,7 @@ import {
 } from '../../core/timeline/time.ts';
 import { type Diagnostic } from '../../lib/diagnostic.ts';
 import { coverOnExit } from '../../lib/exit.ts';
-import { type CaptureFormat, type FrameCaptureResult } from '../capture/frame.ts';
+import { type FrameCaptureResult, type ImageFormat } from '../capture/frame.ts';
 import {
   audioInputArguments,
   audioOutputArguments,
@@ -102,7 +102,7 @@ type PumpResult = {
 };
 
 /** FFmpeg's decoder for each capture encoding piped through `image2pipe`. */
-const inputCodec: Readonly<Record<CaptureFormat['type'], string>> = { png: 'png', jpeg: 'mjpeg' };
+const inputCodec: Readonly<Record<ImageFormat, string>> = { png: 'png', jpeg: 'mjpeg' };
 
 /** mjpeg decodes to full-range `yuvj420p`, which `-pix_fmt` alone carries into the MP4 as
  * full range; scaling to the limited range gives the same output format a PNG input gets.

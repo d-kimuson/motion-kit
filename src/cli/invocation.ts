@@ -32,7 +32,7 @@ const firstPositional = (argv: readonly string[]): string | undefined => {
  * subcommand written after a flag is still named truthfully (the CLI reports it as misplaced) and
  * a flag's value never takes its place. An invocation that never reaches a positional (`--json`)
  * and one that names something else (`unknown`, or a typo) both resolve to null, because argv then
- * names no command the CLI knows. A reserved subcommand (`inspect`, `validate`) resolves to itself:
+ * names no command the CLI knows. A reserved subcommand (`validate`) resolves to itself:
  * the enum is the contract's, not the implementation's.
  */
 export const resolveCommand = (argv: readonly string[]): Command | null => {

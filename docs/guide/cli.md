@@ -1,7 +1,7 @@
 # CLI
 
-`motion-kit` renders Compositions out of an entry file. It ships six commands today, `render`,
-`frame`, `contact-sheet`, `check`, `preview` and `docs`, and all speak the same output contract:
+`motion-kit` renders Compositions out of an entry file. It ships seven commands today, `render`,
+`frame`, `contact-sheet`, `check`, `inspect`, `preview` and `docs`, and all speak the same output contract:
 without `--json` they print their
 result as text, and with it exactly one versioned JSON envelope on stdout.
 
@@ -9,7 +9,7 @@ result as text, and with it exactly one versioned JSON envelope on stdout.
 motion-kit <command> [args]
 ```
 
-For `render`, `frame`, `contact-sheet`, `check` and `preview`, the first argument is an entry file relative to the project root
+For `render`, `frame`, `contact-sheet`, `check`, `inspect` and `preview`, the first argument is an entry file relative to the project root
 (the directory you run the command in by default): a `.tsx`/`.ts` module that exports `compositions`
 (see [authoring](authoring.md#the-registry)).
 
@@ -34,6 +34,10 @@ motion-kit contact-sheet <entry> [--composition <id>] (--every <n> | --frame <n[
 motion-kit check <entry> [--composition <id>] --frame <n[,n...]> \
   [--predecessor <n[,n...]>] [--history <name[,name...]>] [--exact] \
   [--channel-tolerance <0-255>] [--changed-ratio <0..1>] [--props <json>] [--verbose | --quiet] [--json]
+
+# The named Sequences and the audio clips as a timeline in frames and seconds; no frame is captured.
+motion-kit inspect <entry> [--composition <id>] [--props <json>] [--concurrency <n>] \
+  [--verbose | --quiet] [--json]
 
 # A browser page to scrub, step and play a Composition with its audio; runs until stopped.
 motion-kit preview <entry> [--composition <id>] [--props <json>] [--preview-fps <n>] [--port <n>] [--json]
@@ -60,7 +64,7 @@ directory of the repository are written.
 
 ## Renderer configuration
 
-`render`, `frame`, `contact-sheet` and `check` accept these options. `preview` accepts only `--project-root` and `--vite-config` of them (see [`preview`](#preview)).
+`render`, `frame`, `contact-sheet`, `check` and `inspect` accept these options. `preview` accepts only `--project-root` and `--vite-config` of them (see [`preview`](#preview)).
 
 | Flag                   | Environment override         | Meaning                                                                                           |
 | ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -81,7 +85,7 @@ Only disable the sandbox when the CI environment requires that explicit security
 
 ## Progress and logs
 
-`render`, `frame`, `contact-sheet` and `check` run a Composition in a browser, and everything those
+`render`, `frame`, `contact-sheet`, `check` and `inspect` run a Composition in a browser, and everything those
 processes print is
 stderr's business — stdout carries only your result. A run therefore reports three separate things
 there: its Diagnostics, the progress of a long `render`, and — only when something goes wrong — the
@@ -543,6 +547,77 @@ The three diagnostics `check` adds are errors:
 | `check.history-not-run`   | A requested history could not run, or the sample had no comparable capture. `details` carries `frame`, `history` and `reason`.      |
 | `check.uncontrolled-time` | A capture emitted `seek.uncontrolled`, so the check refuses to certify it; the forwarded warning stays in `diagnostics`.            |
 
+## `inspect`
+
+`inspect` reads a Composition's timeline: its named `Sequence`s and its declared audio clips, in
+frames and in seconds. It takes no screenshot and writes no file, and it needs no FFmpeg. It still
+mounts the Composition in Chromium and settles every frame, because a `Sequence` is only known once
+it has been mounted; a frame is observed, not captured.
+
+```bash
+motion-kit inspect entry.tsx --composition promo --json
+```
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "inspect",
+  "ok": true,
+  "data": {
+    "format": "inspect",
+    "composition": "promo",
+    "width": 1920,
+    "height": 1080,
+    "fps": { "numerator": 30, "denominator": 1 },
+    "durationInFrames": 90,
+    "durationSeconds": 3,
+    "sequences": [
+      {
+        "name": "intro",
+        "path": ["intro"],
+        "startFrame": 0,
+        "endFrame": 30,
+        "startSeconds": 0,
+        "endSeconds": 1
+      }
+    ],
+    "audio": [
+      {
+        "src": "assets/music.wav",
+        "startInFrames": 0,
+        "endInFrames": 90,
+        "startSeconds": 0,
+        "endSeconds": 3,
+        "endDeclared": false,
+        "offsetInFrames": 0,
+        "volume": 1
+      }
+    ]
+  },
+  "diagnostics": [],
+  "durationMs": 1830.4
+}
+```
+
+- A Sequence's `path` is the names from the outermost named `Sequence` to it, so a nested one reads
+  `["intro", "title"]`. `startFrame` is the first frame it shows and `endFrame` the first frame after
+  it, both on the Composition's timeline; the seconds come from the same Time Module as every other
+  command. A `Sequence` with no name does not appear, though its named children do.
+- A Sequence that shows more than one range (for example a conditionally mounted child) is one entry
+  per range. Entries are ordered by start frame, then by path.
+- An audio entry holds the clip's effective values. `endInFrames` is the declared end clipped to the
+  Composition. When the clip declares no end, `endDeclared` is `false` and the end is the
+  Composition's, not the source file's: `inspect` reads the declaration and never opens the media.
+  A clip that starts at or after the Composition's end has an empty span.
+- `inspect` observes every frame of the Composition, so its cost grows with the duration. It accepts
+  `--concurrency` like `render`. A Sequence that is mounted only on some frames is still found.
+- It never fails because of what it finds. A failure is the Composition failing to load or to
+  settle, reported as an ordinary Diagnostic. Declaring markers of your own is not part of
+  `inspect`.
+
+The reasoning is in the
+[inspect ADR](https://github.com/d-kimuson/motion-kit/blob/main/dev-docs/contexts/agent/adr/20261109-inspect.accepted.md).
+
 ## `preview`
 
 `preview` serves a browser page where you scrub, step and play a Composition with its declared audio and
@@ -618,14 +693,14 @@ the line `serving <url> (Ctrl-C to stop); ready` is. Then the process serves unt
 `--json` writes exactly one JSON document to stdout, for successes and failures alike, and moves
 human-facing logs to stderr. Every document has these fields:
 
-| Field           | Type             | Meaning                                                                                                                                           |
-| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                                               |
-| `command`       | string, nullable | `render`, `frame`, `contact-sheet`, `check`, `preview`, `docs`, the reserved `inspect`/`validate`, or `null` when argv named no known subcommand. |
-| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                                                           |
-| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                                                         |
-| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                                                |
-| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                                                         |
+| Field           | Type             | Meaning                                                                                                                                            |
+| --------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | `1`              | Bumped only for a breaking change to this contract.                                                                                                |
+| `command`       | string, nullable | `render`, `frame`, `contact-sheet`, `check`, `inspect`, `preview`, `docs`, the reserved `validate`, or `null` when argv named no known subcommand. |
+| `ok`            | boolean          | True if and only if no Diagnostic has severity `error`.                                                                                            |
+| `data`          | object, nullable | Command-specific result; `null` when the command produced nothing usable.                                                                          |
+| `diagnostics`   | array            | Zero or more Diagnostics, including warnings and infos on success.                                                                                 |
+| `durationMs`    | number           | Wall time of the command in milliseconds.                                                                                                          |
 
 `render`'s `data` is a union on `format`:
 
@@ -783,7 +858,7 @@ report today:
 | `internal`    | `internal.unexpected`                                                                                                      |
 
 `layout.*` (`layout.overflow`, `layout.out-of-frame`, `layout.unexpected-scroll`,
-`layout.font-not-loaded`) is reserved for the later `inspect`/`validate` work and no command emits it
+`layout.font-not-loaded`) is reserved for the later `validate` work and no command emits it
 yet. Adding a code is a compatible change; consumers must tolerate codes they do not know.
 
 `render.output-unwritable` is the one domain code about your disk rather than your Composition: a PNG
@@ -823,14 +898,14 @@ motion-kit --json
 # {"schemaVersion":1,"command":null,"ok":false,"data":null,"diagnostics":[…],"durationMs":0.17}
 # exit 2
 
-motion-kit inspect entry.tsx --json
-# command: "inspect"; message: "The inspect subcommand is not implemented yet."; exit 2
+motion-kit validate entry.tsx --json
+# command: "validate"; message: "The validate subcommand is not implemented yet."; exit 2
 ```
 
 `command` is the first positional argument of argv, past any flag and that flag's value, so
 `motion-kit --out out/a.mp4 render entry.tsx --json` reports `command: "render"` with a hint that the
-subcommand goes first. `inspect` and `validate` are known names the CLI does not ship yet; they
-report that, not "unknown command".
+subcommand goes first. `validate` is a known name the CLI does not ship yet; it
+reports that, not "unknown command".
 
 ## Cancellation
 
