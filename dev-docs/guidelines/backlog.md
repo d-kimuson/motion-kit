@@ -6,7 +6,9 @@ Tasks live in the taskroom project `motion-kit`, operated through the taskroom M
 
 - List: `taskroom_list_projects` to find the project, `taskroom_list_tasks` filtered by its `projectId`; `taskroom_get_task` for one task.
 - Create: `taskroom_create_task` with a new UUID as a top-level `id` and `value: { projectId, title, description, status, priority, links, blocks }`. A `blocks` entry that names a task that does not exist yet fails with NOT_FOUND, so create tasks in dependency order (blockers first).
-- Update: `taskroom_update_task` with `task` (`TASK-n`), the task's current `revision` (read it right before updating; a stale revision is rejected), and `changes: { ... }`. `taskroom_get_task` takes `task` (`TASK-n`) too.
+- Update: `taskroom_update_task` with `task` (`TASK-n`), the task's current `revision` (read it right before updating), and `changes: { ... }`. `taskroom_get_task` takes `task` (`TASK-n`) too.
+- The `revision` belongs to the whole board, not to the task, so any other agent's update to any task makes yours stale. A stale revision is rejected with `CONFLICT`: read the task again (`taskroom_get_task`) for the new `revision` and the current field values, then retry the update with the same `changes`.
+- `links` is a list of plain URL strings (`["https://github.com/d-kimuson/motion-kit/pull/114"]`), not objects. Like `blocks` and `labels`, an array in `changes` replaces the whole list: send the existing entries together with the new one.
 - There are no comments on tasks; progress and findings go in the task `description`. For questions and answers, follow Questions on the Backlog in `dev-docs/guidelines/team-channel.md`; its waiting-status rule overrides the status list below.
 
 ## State and priority
