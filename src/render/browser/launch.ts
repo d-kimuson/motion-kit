@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { chromium, type Browser, type BrowserServer, type LaunchOptions } from 'playwright';
 
 import { type Result } from '../../lib/result.ts';
@@ -29,6 +30,27 @@ export const chromiumOptions = (options: BrowserOptions = {}): LaunchOptions => 
       : [],
   ...(options.executablePath === undefined ? {} : { executablePath: options.executablePath }),
 });
+/** The Playwright version this package launches Chromium with. The browser build is pinned to it, so
+ * the install command must name it: a project that depends on motion-kit has no `playwright` bin of
+ * its own, and the latest Playwright would download a build this one cannot use. */
+const installedPlaywrightVersion = (): string | undefined => {
+  try {
+    const manifest: unknown = createRequire(import.meta.url)('playwright/package.json');
+    if (typeof manifest === 'object' && manifest !== null && 'version' in manifest) {
+      return typeof manifest.version === 'string' ? manifest.version : undefined;
+    }
+  } catch {
+    // Falls through to the lookup instruction below.
+  }
+  return undefined;
+};
+export const browserLaunchHint = (version: string | undefined) => {
+  const install =
+    version === undefined
+      ? 'Install the matching browser with pnpm dlx playwright@<version> install chromium (npx playwright@<version> with npm), where <version> is the Playwright version pnpm why playwright (npm ls playwright) reports'
+      : `Install the matching browser with pnpm dlx playwright@${version} install chromium (npx playwright@${version} with npm)`;
+  return `${install}; check sandbox support and the explicit launch options.`;
+};
 export type OwnedBrowser = { browser: Browser; server: BrowserServer };
 export const launchBrowser = async (
   options: BrowserOptions = {},
@@ -47,7 +69,7 @@ export const launchBrowser = async (
         code: 'render.browser-launch-failed',
         severity: 'error',
         message: 'Chromium could not be launched.',
-        hint: 'Install the matching browser with pnpm exec playwright install chromium; check sandbox support and the explicit launch options.',
+        hint: browserLaunchHint(installedPlaywrightVersion()),
       },
     };
   }

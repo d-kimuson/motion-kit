@@ -25,8 +25,8 @@ package too, so an installed copy reads the same from
   `@kimuson/motion-kit/three` ([Three.js](guide/three.md)).
 - **Zod** — Composition props are validated by a schema in your project, so you install it
   explicitly.
-- **Chromium for Playwright** — captures the frames; `pnpm exec playwright install chromium`
-  installs it once per machine.
+- **Chromium for Playwright** — captures the frames; install the build of the Playwright version
+  motion-kit pins, once per machine ([the quickstart](#five-minute-quickstart) has the commands).
 - **FFmpeg 6.0+ with libx264** — encodes MP4 and provides `ffprobe` for a Composition that
   declares audio (`ffmpeg -version`).
 
@@ -48,15 +48,23 @@ ffmpeg -hide_banner -encoders | grep libx264
 mkdir hello-video && cd hello-video
 pnpm init
 pnpm add @kimuson/motion-kit react react-dom zod
-pnpm exec playwright install chromium        # once per machine
+pnpm why playwright                          # the Playwright version motion-kit pins
+pnpm dlx playwright@<version> install chromium   # once per machine; use the version printed above
 ```
 
-The same three packages with npm or yarn, and the browser download that is a one-time setup per
-machine rather than part of every install:
+Playwright is a dependency of motion-kit, not of your project, so your project has no `playwright`
+bin: `pnpm exec playwright` fails with `Command "playwright" not found`. Run the pinned version
+through `pnpm dlx` instead. The Chromium download is a one-time setup per machine rather than part
+of every install. The same three packages with npm or yarn:
 
 ```bash
-npm install @kimuson/motion-kit react react-dom zod && npx playwright install chromium
-yarn add @kimuson/motion-kit react react-dom zod && yarn playwright install chromium
+npm install @kimuson/motion-kit react react-dom zod
+npm ls playwright                            # the pinned version
+npx playwright@<version> install chromium
+
+yarn add @kimuson/motion-kit react react-dom zod
+yarn why playwright                          # the pinned version
+yarn dlx playwright@<version> install chromium   # Yarn 2+; with Yarn 1 use npx playwright@<version>
 ```
 
 Write an entry file that exports a `compositions` registry — a React component plus an id, a size,

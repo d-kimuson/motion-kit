@@ -109,15 +109,20 @@ motion-kit frame entry.tsx --frame 60 --out out/still.png
 {
   "code": "render.browser-launch-failed",
   "message": "Chromium could not be launched.",
-  "hint": "Install the matching browser with pnpm exec playwright install chromium; check sandbox support and the explicit launch options."
+  "hint": "Install the matching browser with pnpm dlx playwright@1.64.1 install chromium (npx playwright@1.64.1 with npm); check sandbox support and the explicit launch options."
 }
 ```
 
-The Playwright browser is missing or cannot start. Install it once per machine:
+The Playwright browser is missing or cannot start. The hint names the Playwright version motion-kit
+pins (the version above is an example). Install that build once per machine:
 
 ```bash
-pnpm exec playwright install chromium      # or: npx playwright install chromium
+pnpm dlx playwright@<version> install chromium      # or: npx playwright@<version> install chromium
 ```
+
+Playwright is a dependency of motion-kit, not of your project, so `pnpm exec playwright` fails with
+`Command "playwright" not found`. Look the version up with `pnpm why playwright` (`npm ls playwright`,
+`yarn why playwright`) when the hint does not show it.
 
 If the browser is installed and still will not launch:
 
@@ -128,7 +133,8 @@ If the browser is installed and still will not launch:
   (`--software-webgl` or `softwareWebGL: true` on `createRenderer`) is likewise an explicit choice,
   not something a render needs for ordinary DOM/SVG/Canvas work.
 - **A Linux machine without Chromium's system libraries** needs the dependency step instead:
-  `pnpm exec playwright install --with-deps chromium` (it installs packages, so it needs `sudo`).
+  `pnpm dlx playwright@<version> install --with-deps chromium` (it installs packages, so it needs
+  `sudo`).
   The launch error names the missing library.
 
 ### Automatic fallback to software WebGL has been deprecated

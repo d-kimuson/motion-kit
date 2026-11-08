@@ -1,7 +1,13 @@
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { chromiumOptions, launchBrowser } from './launch.ts';
+import { browserLaunchHint, chromiumOptions, launchBrowser } from './launch.ts';
+
+const playwrightVersion = z
+  .object({ version: z.string() })
+  .parse(createRequire(import.meta.url)('playwright/package.json')).version;
 
 describe('Chromium launch policy', () => {
   it('keeps sandbox enabled and unsafe software rendering opt-in', () => {
@@ -50,6 +56,14 @@ describe('Chromium launch policy', () => {
       ).toBe(true);
     },
   );
+  it('names the Playwright version in the install hint, or how to look it up', () => {
+    expect(browserLaunchHint('9.8.7')).toBe(
+      'Install the matching browser with pnpm dlx playwright@9.8.7 install chromium (npx playwright@9.8.7 with npm); check sandbox support and the explicit launch options.',
+    );
+    expect(browserLaunchHint(undefined)).toBe(
+      'Install the matching browser with pnpm dlx playwright@<version> install chromium (npx playwright@<version> with npm), where <version> is the Playwright version pnpm why playwright (npm ls playwright) reports; check sandbox support and the explicit launch options.',
+    );
+  });
   it('returns the exact install Diagnostic without retries when the browser is missing', async () => {
     expect(await launchBrowser({ executablePath: '/motion-kit-missing-browser/chromium' })).toEqual(
       {
@@ -58,7 +72,7 @@ describe('Chromium launch policy', () => {
           code: 'render.browser-launch-failed',
           severity: 'error',
           message: 'Chromium could not be launched.',
-          hint: 'Install the matching browser with pnpm exec playwright install chromium; check sandbox support and the explicit launch options.',
+          hint: `Install the matching browser with pnpm dlx playwright@${playwrightVersion} install chromium (npx playwright@${playwrightVersion} with npm); check sandbox support and the explicit launch options.`,
         },
       },
     );

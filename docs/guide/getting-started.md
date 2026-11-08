@@ -10,13 +10,13 @@ override. It assumes no other motion-kit context: every command below is complet
 
 ## Requirements
 
-| Requirement              | Why                                                                                      | Check                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------- |
-| Node.js                  | Runs the CLI and the renderer's Node side. ESM only; the repository develops on Node 26. | `node --version`                        |
-| React 19, ReactDOM 19    | Peer dependencies of the package; the Composition is your React tree.                    | `npm ls react`                          |
-| Zod                      | Composition props are validated by a Zod schema that lives in your project.              | covered by the install below            |
-| FFmpeg 6.0+ with libx264 | Encodes MP4 and provides `ffprobe`, which a Composition that declares audio also needs.  | `ffmpeg -version`                       |
-| Chromium for Playwright  | Captures the frames.                                                                     | `pnpm exec playwright install chromium` |
+| Requirement              | Why                                                                                      | Check                        |
+| ------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------- |
+| Node.js                  | Runs the CLI and the renderer's Node side. ESM only; the repository develops on Node 26. | `node --version`             |
+| React 19, ReactDOM 19    | Peer dependencies of the package; the Composition is your React tree.                    | `npm ls react`               |
+| Zod                      | Composition props are validated by a Zod schema that lives in your project.              | covered by the install below |
+| FFmpeg 6.0+ with libx264 | Encodes MP4 and provides `ffprobe`, which a Composition that declares audio also needs.  | `ffmpeg -version`            |
+| Chromium for Playwright  | Captures the frames.                                                                     | `pnpm why playwright`        |
 
 FFmpeg is the one prerequisite motion-kit does not install for you: it ships and downloads no binary.
 The PNG frame route and `frame` need no FFmpeg at all, so you can start without it and install it
@@ -39,17 +39,24 @@ Install FFmpeg with the package manager of your OS — `brew install ffmpeg` (ma
 mkdir hello-video && cd hello-video
 pnpm init
 pnpm add @kimuson/motion-kit react react-dom zod
-pnpm exec playwright install chromium      # once per machine; downloads the Chromium build
+pnpm why playwright                        # the Playwright version motion-kit pins
+pnpm dlx playwright@<version> install chromium   # once per machine; use the version printed above
 ```
+
+Playwright is a dependency of motion-kit, not of your project, so your project has no `playwright`
+bin: `pnpm exec playwright` fails with `Command "playwright" not found`, and the latest Playwright
+would download a Chromium build that motion-kit's Playwright cannot launch. Run the pinned version.
 
 The same three packages with npm or yarn:
 
 ```bash
 npm install @kimuson/motion-kit react react-dom zod
-npx playwright install chromium
+npm ls playwright                          # the pinned version
+npx playwright@<version> install chromium
 
 yarn add @kimuson/motion-kit react react-dom zod
-yarn playwright install chromium
+yarn why playwright                        # the pinned version
+yarn dlx playwright@<version> install chromium   # Yarn 2+; with Yarn 1 use npx playwright@<version>
 ```
 
 `@kimuson/motion-kit` is ESM only. The Chromium download is per machine rather than per project, so

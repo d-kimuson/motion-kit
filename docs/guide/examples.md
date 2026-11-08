@@ -11,7 +11,7 @@ documentation you are reading. Every command below therefore runs from a checkou
 ```bash
 pnpm install
 pnpm build                                   # the loading session resolves @kimuson/motion-kit to dist/
-pnpm exec playwright install chromium        # once; the renderer launches Chromium
+pnpm exec playwright install chromium        # once; the checkout depends on Playwright, so its bin exists here
 mkdir -p out                                 # gitignored, so a clean checkout has no out/
 ```
 
