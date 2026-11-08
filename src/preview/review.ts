@@ -118,6 +118,12 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
       draft: { anchor: playhead, end: playhead, place, body },
     });
   };
+  /** Leave comment mode, dropping the highlight and any pick still waiting for its answer. */
+  const leavePicking = () => {
+    hovering += 1;
+    picking += 1;
+    update({ picking: false, hovered: null });
+  };
   return {
     state: () => state,
     subscribe: (listener) => {
@@ -125,10 +131,14 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
       return () => listeners.delete(listener);
     },
     togglePicking: () => {
+      if (state.picking) {
+        leavePicking();
+        return;
+      }
       hovering += 1;
       picking += 1;
-      if (!state.picking) deps.preview.pause();
-      update({ picking: !state.picking, hovered: null });
+      deps.preview.pause();
+      update({ picking: true, hovered: null });
     },
     hover: (x, y) => {
       if (!state.picking) return;
@@ -188,11 +198,8 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
     },
     cancel: () => update({ draft: undefined }),
     escape: () => {
-      if (state.picking) {
-        hovering += 1;
-        picking += 1;
-        update({ picking: false, hovered: null });
-      } else if (state.draft?.body.trim() === '') {
+      if (state.picking) leavePicking();
+      else if (state.draft?.body.trim() === '') {
         update({ draft: undefined });
       }
     },
