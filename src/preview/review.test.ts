@@ -214,6 +214,30 @@ describe('createReviewController', () => {
     expect(host.added).toHaveLength(1);
   });
 
+  it('leaves comment mode on escape, and drops a draft only while nothing is written in it', () => {
+    const host = setup();
+    host.review.togglePicking();
+    host.review.escape();
+    expect(host.review.state()).toMatchObject({ picking: false, hovered: null });
+    host.review.commentFrame();
+    host.review.escape();
+    expect(host.review.state().draft).toBeUndefined();
+    host.review.commentFrame();
+    host.review.write('  \n');
+    host.review.escape();
+    expect(host.review.state().draft).toBeUndefined();
+    host.review.commentFrame();
+    host.review.write('Title');
+    host.review.escape();
+    expect(host.review.state().draft?.body).toBe('Title');
+    // Comment mode is left first; the draft survives that too, and cancel still drops it.
+    host.review.togglePicking();
+    host.review.escape();
+    expect(host.review.state()).toMatchObject({ picking: false, draft: { body: 'Title' } });
+    host.review.cancel();
+    expect(host.review.state().draft).toBeUndefined();
+  });
+
   it('drafts a comment on an element picked from the tree, with no click point', () => {
     const host = setup();
     host.review.togglePicking();

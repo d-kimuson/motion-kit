@@ -83,21 +83,35 @@ const Overlay = ({ state, controller }: { state: PreviewState; controller: Previ
 };
 
 /**
- * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field,
- * a select and a tab take every key, the side panel's resize handle the arrows, and Space activates a
- * button or toggles a checkbox. Focus stays on the scrubber, a checkbox or the handle after it is
- * used, so the other keys still reach the shortcuts.
+ * The keys a focused control acts on itself, which the shortcuts then leave alone: a text field and
+ * a select take every key, a tab the arrows and Space (it moves between its siblings with the
+ * arrows and is chosen with Space), the side panel's resize handle the arrows, and Space activates a
+ * button or toggles a checkbox. Focus stays on the scrubber, a checkbox, a tab or the handle after
+ * it is used, so the other keys (C and Escape among them) still reach the shortcuts.
  */
-const nativeKeys = (target: EventTarget | null): 'all' | 'space' | 'arrows' | 'none' => {
-  // A tab moves between its siblings with the arrows and is chosen with Space.
+const nativeKeys = (
+  target: EventTarget | null,
+): 'all' | 'arrows-and-space' | 'space' | 'arrows' | 'none' => {
   const role = target instanceof Element ? target.getAttribute('role') : null;
-  if (role === 'tab') return 'all';
+  if (role === 'tab') return 'arrows-and-space';
   if (role === 'separator') return 'arrows';
   if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return 'all';
   if (target instanceof HTMLButtonElement) return 'space';
   if (!(target instanceof HTMLInputElement)) return 'none';
   if (target.type === 'range') return 'none';
   return target.type === 'checkbox' ? 'space' : 'all';
+};
+
+/** Whether the focused control acts on `key` itself, so the shortcuts leave it alone. */
+const keptByControl = (target: EventTarget | null, key: string) => {
+  const keys = nativeKeys(target);
+  const arrow = key.startsWith('Arrow');
+  return (
+    keys === 'all' ||
+    (keys === 'space' && key === ' ') ||
+    (keys === 'arrows' && arrow) ||
+    (keys === 'arrows-and-space' && (arrow || key === ' '))
+  );
 };
 
 /** The preview host page. The realm iframe is the only element React does not own the contents of. */
@@ -149,13 +163,7 @@ export const PreviewView = ({
     const onKey = (event: KeyboardEvent) => {
       // A modified key belongs to the browser: Alt+Arrow navigates history, Ctrl+Space is the IME.
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-      const keys = nativeKeys(event.target);
-      if (
-        keys === 'all' ||
-        (keys === 'space' && event.key === ' ') ||
-        (keys === 'arrows' && event.key.startsWith('Arrow'))
-      )
-        return;
+      if (keptByControl(event.target, event.key)) return;
       const delta = event.shiftKey ? 10 : 1;
       if (event.key === ' ') {
         event.preventDefault();
@@ -167,8 +175,7 @@ export const PreviewView = ({
       } else if (event.key === 'c' || event.key === 'C') {
         if (controller.state().session.kind === 'ready') review.controller.togglePicking();
       } else if (event.key === 'Escape') {
-        if (review.controller.state().picking) review.controller.togglePicking();
-        else review.controller.cancel();
+        review.controller.escape();
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         // A focused scrubber would move by itself as well, and the page would scroll.
         event.preventDefault();
