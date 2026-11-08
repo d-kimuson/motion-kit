@@ -27,8 +27,17 @@ pueue status | grep Running
 pueue wait   # or wait for the other task ids
 ```
 
+`pueue status` takes no task id: its arguments are a filter query, so `pueue status 790` fails with `Failed to parse query` (pueue 4.0.4). To follow one task, wait for it and read its log:
+
+```sh
+pueue wait <id>
+pueue log <id> --lines 80
+```
+
 If a run fails this way, re-run it alone before investigating the failing tests: no source change is
 needed and the same run passes. A failure that reproduces with nothing else running is a real defect.
+
+A run can also end without any test failure: a full `pnpm test` started with pueue (tasks 790 and 791) was killed by `SIGTERM` partway through, with no failing test in its log and no known sender. Re-running it alone passed. Treat it like the failures above: run it again before looking for a cause, and start looking only if it is killed again with nothing else running.
 
 ## Why Not Fixed
 

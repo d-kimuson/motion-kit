@@ -8,9 +8,11 @@
 error: render.page-error: Loading service exited failed. — Check service exited and the project configuration; the loader uses bundled Vite 7.3.7.
 ```
 
+The same window gives false failures to anything else that reads `dist/` while another process in the same checkout rebuilds it: `pnpm lint` (publint and attw pack `dist/`), `pnpm typecheck`, and the built-artifact tests (`src/cli/built-artifact.test.ts`, `src/motion/built-artifact.test.ts`). `prelint`, `pretypecheck` and `pretest` each run `pnpm build` first, so two of these commands started together in one checkout rebuild `dist/` under each other.
+
 ## Workaround
 
-Wait for the other build to finish (`ls dist/` lists `index.js`, `browser.js` and `preview.js` again), then reload the preview page (for `render` or `frame`, run the same command again). Do not change the example to chase the error. Running the preview from its own worktree avoids sharing `dist/` with other work.
+Do not run `pnpm lint`, `pnpm typecheck`, `pnpm test` or a preview in one checkout at the same time as another command that builds; run them one after the other. When one of them fails with a missing `dist/` file or an unresolved package entry and nothing else is running now, run it again before investigating. Wait for the other build to finish (`ls dist/` lists `index.js`, `browser.js` and `preview.js` again), then reload the preview page (for `render` or `frame`, run the same command again). Do not change the example to chase the error. Running the preview from its own worktree avoids sharing `dist/` with other work.
 
 ## Why Not Fixed
 

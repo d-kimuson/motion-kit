@@ -1,4 +1,4 @@
-# python3 hangs while DEVELOPER_DIR points at a Nix apple-sdk
+# python3 and node-gyp hang while DEVELOPER_DIR points at a Nix apple-sdk
 
 ## Symptom
 
@@ -11,12 +11,26 @@ timeout 20 python3 -c 'print(1)'; echo "exit=$?"
 
 `command -v python3` reports `~/.local/share/mise/shims/python3`, but bypassing the shim does not help: `/usr/bin/python3` hangs the same way. `echo "$DEVELOPER_DIR"` prints a Nix store path ending in `-apple-sdk-14.4`. `node`, `perl` and `pnpm` are not affected.
 
+`npm install` of a package with a native build step hangs the same way, because node-gyp finds Python by running it (`fsevents` is the usual one: `npm install fsevents@2.3.3` in an empty directory):
+
+```sh
+timeout 60 npm install fsevents@2.3.3 --no-audit --no-fund; echo "exit=$?"
+# exit=124 (killed by timeout, no output)
+```
+
 ## Workaround
 
 Unset `DEVELOPER_DIR` for the Python command:
 
 ```sh
 env -u DEVELOPER_DIR python3 -c 'print(1)'   # prints 1
+```
+
+`npm install` (and `npx` or `node-gyp` calls that build) needs the same prefix, or `--ignore-scripts` when the build step is not wanted:
+
+```sh
+env -u DEVELOPER_DIR npm install <package>   # node-gyp finds /Applications/Xcode.app/.../python3 and runs
+npm install <package> --ignore-scripts       # never reaches node-gyp
 ```
 
 For repository edits, `node` (the repository's own runtime), `perl -pi -e` or the editor's replace tool work without it.
