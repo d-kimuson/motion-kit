@@ -18,8 +18,8 @@ Decide by the exit code, not by the output. Write the output to a file and read 
 pnpm lint > <scratchpad>/lint.out 2>&1
 ```
 
-On a nonzero code, run the checks one by one and read only the one that fails: `pnpm lint:oxlint`, `pnpm lint:oxfmt`, `pnpm lint:publint`, `pnpm lint:attw`, `pnpm lint:licenses`, `pnpm lint:third-party`, `pnpm lint:tsconfig`, `pnpm lint:lean-spec`. In oxlint's output only lines with `error` are findings; lines with `warning` are not.
+On a nonzero code, run the checks one by one and read only the one that fails: `pnpm lint:oxlint`, `pnpm lint:oxfmt`, `pnpm lint:publint`, `pnpm lint:attw`, `pnpm lint:licenses`, `pnpm lint:third-party`, `pnpm lint:tsconfig`, `pnpm lint:lean-spec`. Of the oxlint output, the two warnings named above are known and ignorable; read any other warning, because a new one in a file your change touched can be a real finding that the exit code does not report.
 
 ## Why Not Fixed
 
-Quieting attw (`--format ascii`, `--no-summary`, `--quiet`) or adding one result line per check changes the lint script and what a maintainer sees on a failure; that is a decision about the script, not a workaround. The jest warnings come from `oxlint.config.ts` on purpose: its comment explains that matching `*.test.ts` with the jest-rules glob would make `src/render/render-video.test.ts` fail with `jest/no-conditional-expect` errors. Removing the warnings means rewriting those tests, which is a test-design change. Delete this troubleshot once `pnpm lint` ends with one summary line per check.
+Quieting attw (`--format ascii`, `--no-summary`, `--quiet`) or adding one result line per check changes the lint script and what a maintainer sees on a failure; that is a decision about the script, not a workaround. The jest warnings stay because the rules are errors only under the glob in `oxlint.config.ts`; its comment says widening the glob to `*.test.ts` would turn the `jest/no-conditional-expect` findings in `src/render/render-video.test.ts` into errors. Removing the warnings means rewriting those tests, which is a test-design change. Delete this troubleshot once `pnpm lint` ends with one summary line per check.

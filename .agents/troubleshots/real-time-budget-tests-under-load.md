@@ -31,12 +31,6 @@ FAIL |frame-transport| src/render/determinism/examples.determinism.test.ts > ref
 Error: Test timed out in 60000ms.
 ```
 
-Three more were seen on loaded machines, all gone on a quiet re-run:
-
-- An examples smoke test (`examples/*/*.smoke.test.ts`) timed out at its 120 s limit after Vite's dependency scan read a temporary `entry.tsx` while it was still being written.
-- `src/cli/cli.test.ts` > `refuses a unrelated manifest collision before writing any PNG` failed on timing (the `%s` of its `it.each` is `unrelated`).
-- The `three-dom` project once reported `6 passed (7)` with no failure listed. The seventh test was not reported at all, and the cause was not identified. Do not read that line as a pass: re-run the file with `--silent=false` and see that every test is accounted for.
-
 Every one of them passes in isolation on the same machine (`pnpm vitest run <file>`, repeated three
 times for `frame.test.ts`), and a full suite of the same code passed 1088/1088 when the machine was
 quiet. `src/render/loading/loading.test.ts` itself took 100095 ms for 44 tests in the failing run.
@@ -49,8 +43,6 @@ Re-run the failing file in isolation before investigating:
 pnpm vitest run src/render/loading/loading.test.ts
 pnpm vitest run --project frame-transport src/render/capture/frame.test.ts
 pnpm vitest run --project frame-transport src/render/determinism/examples.determinism.test.ts
-pnpm vitest run examples/<name>/<name>.smoke.test.ts
-pnpm vitest run src/cli/cli.test.ts -t "refuses a unrelated manifest collision"
 ```
 
 A pass in isolation, on a code path the change does not touch, means the machine was starved, not that
