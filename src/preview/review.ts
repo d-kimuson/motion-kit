@@ -63,6 +63,11 @@ export type ReviewController = Readonly<{
   /** Add the draft to the book; false when there was no draft or nothing is mounted. */
   save: () => boolean;
   cancel: () => void;
+  /**
+   * Escape outside the comment field: leave comment mode, else drop the draft unless something was
+   * written in it, which only Cancel (or Escape in the field) throws away.
+   */
+  escape: () => void;
 }>;
 
 const nonEmpty = <T>([first, ...rest]: readonly T[]): readonly [T, ...T[]] | undefined =>
@@ -182,5 +187,14 @@ export const createReviewController = (deps: ReviewDependencies): ReviewControll
       return true;
     },
     cancel: () => update({ draft: undefined }),
+    escape: () => {
+      if (state.picking) {
+        hovering += 1;
+        picking += 1;
+        update({ picking: false, hovered: null });
+      } else if (state.draft?.body.trim() === '') {
+        update({ draft: undefined });
+      }
+    },
   };
 };

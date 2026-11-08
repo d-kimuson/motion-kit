@@ -542,6 +542,54 @@ it('leaves the arrow keys to a focused side panel tab', () => {
   expect(calls).toEqual([]);
 });
 
+it('keeps Space and the arrows for a focused side panel tab but takes C and Escape', () => {
+  const { controller, calls } = fakeController({ session: readySession(60) });
+  const { tab, review } = mount(controller);
+  const composition = tab('Info');
+  act(() => composition.focus());
+  const press = (key: string) =>
+    composition.dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+    );
+  // Space chooses the tab and the arrows move between tabs: both are left to it.
+  act(() => void press(' '));
+  act(() => void press('ArrowLeft'));
+  expect(calls).toEqual([]);
+  act(() => void press('c'));
+  expect(review.controller.state().picking).toBe(true);
+  act(() => void press('Escape'));
+  expect(review.controller.state().picking).toBe(false);
+  act(() => void press('C'));
+  expect(review.controller.state().picking).toBe(true);
+  act(() => void press('c'));
+  expect(review.controller.state().picking).toBe(false);
+});
+
+it('keeps a draft with text on Escape outside the field but drops an empty one', () => {
+  const { controller } = fakeController({ session: readySession(60) });
+  const { tab, review } = mount(controller);
+  const press = (key: string, target: EventTarget = document.body) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  act(() => review.controller.commentFrame());
+  // Nothing written: Escape outside the field drops the draft.
+  act(() => void press('Escape', tab('Info')));
+  expect(review.controller.state().draft).toBeUndefined();
+  act(() => review.controller.commentFrame());
+  act(() => review.controller.write('Bigger title'));
+  act(() => void press('Escape', tab('Info')));
+  act(() => void press('Escape'));
+  expect(review.controller.state().draft?.body).toBe('Bigger title');
+  expect(tab('Comments').getAttribute('aria-selected')).toBe('true');
+  // Comment mode is left by Escape, and still keeps the draft.
+  act(() => void press('c'));
+  expect(review.controller.state().picking).toBe(true);
+  act(() => void press('Escape'));
+  expect(review.controller.state()).toMatchObject({
+    picking: false,
+    draft: { body: 'Bigger title' },
+  });
+});
+
 it('comments on the element clicked in comment mode and copies the review as Markdown', async () => {
   const title: InspectedElement = {
     selector: 'h1.title',
