@@ -4,6 +4,44 @@ All notable changes to `@kimuson/motion-kit` are recorded here. The format follo
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project intends to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from `1.0.0`.
 
+## 0.2.3 — 2026-11-10
+
+### Added
+
+- **Read a Composition's timeline without rendering it.** `motion-kit inspect <entry>` reports the
+  named `Sequence`s (`name`, `path` from the outermost named ancestor, start and end in frames and in
+  seconds) and the declared `audio` clips with their effective values, as one JSON `data` with
+  `format: "inspect"`. It takes no screenshot, writes no file and needs no FFmpeg; it still mounts the
+  Composition in Chromium and observes every frame, because a `Sequence` is only known once mounted,
+  so its cost grows with the duration and `--concurrency` applies as in `render`. A top-level
+  Sequence is reported as placed (a negative start, or an end past `durationInFrames`, is kept); a
+  nested one is intersected with what its parents show. An audio span is clipped to the Composition,
+  and `endDeclared: false` marks a clip whose end is the Composition's rather than the source's:
+  `inspect` reads the declaration and never opens the media. `inspect` is no longer a reserved
+  subcommand; `validate` still is. `schemaVersion` stays `1`.
+
+### Fixed
+
+- **A failed texture upload fails the frame.** In `/three`, a texture held by a material of a
+  visible object that three could not upload, or whose image has no pixels, now fails the frame with
+  `render.page-error` instead of publishing an empty texture. `details.textures` names the texture,
+  the material property (`map`, or `uniforms.<name>` on a `ShaderMaterial`), the object and the reason
+  (`no-image`, `image-incomplete`, `not-uploaded`, `empty-image`). The verdict does not depend on
+  what the camera draws or on the order frames are rendered in. An upload three accepts and the GPU
+  rejects is still not detected.
+- **A canvas failure names the frame.** A shader that does not compile, a lost WebGL context and a
+  failed texture upload are `render.page-error` with the Composition id, the output frame and its
+  time in `location`.
+- **The Chromium install hint works in a consumer project.** `render.browser-launch-failed` and the
+  docs now say `pnpm dlx playwright@<version> install chromium` (`npx playwright@<version>` with
+  npm), with the Playwright version motion-kit pins, instead of `pnpm exec playwright`, which does not
+  resolve from a project that depends on motion-kit.
+- **Preview shortcuts work on a focused tab, and Esc keeps a typed draft.** A focused side-panel
+  tab in `motion-kit preview` keeps only the arrows and Space for itself, so `C` and `Esc` reach the
+  comment-mode shortcuts. `Esc` outside the comment field leaves comment mode and drops the draft
+  only when nothing but whitespace is written in it; Cancel, or `Esc` inside the field, still drops
+  it.
+
 ## 0.2.2 — 2026-11-04
 
 ### Added
